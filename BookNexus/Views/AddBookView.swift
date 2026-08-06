@@ -185,7 +185,7 @@ private struct CatalogRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let year = book.publicationYear {
-                    Text("\(year)")
+                    Text(verbatim: "\(year)")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }

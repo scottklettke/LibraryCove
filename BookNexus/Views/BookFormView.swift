@@ -71,6 +71,7 @@ struct BookFormView: View {
             coverSection
             detailsSection
             statusSection
+            descriptionSection
             loanedSection
             saveSection
         }
@@ -157,6 +158,10 @@ struct BookFormView: View {
                         Button(loc) { locationText = loc }
                     }
                     if !locationText.isEmpty {
+                        Button("Add New") {
+                            let added = locationStore.add(locationText)
+                            locationText = added
+                        }
                         Button("Clear") { locationText = "" }
                     }
                 } label: {
@@ -164,8 +169,6 @@ struct BookFormView: View {
                         .font(.callout)
                 }
             }
-            TextEditor(text: $description)
-                .frame(minHeight: 80)
         } header: {
             Text("Status & notes")
         }
@@ -209,6 +212,17 @@ struct BookFormView: View {
                 Text("New location…").tag("__new__")
             }
             TextField("Or type a new location", text: $locationText)
+        }
+    }
+
+    private var descriptionSection: some View {
+        Section {
+            TextEditor(text: $description)
+                .frame(minHeight: 120)
+        } header: {
+            Text("Description")
+        } footer: {
+            Text("A short summary of the book. If not available from the ISBN lookup, it is fetched from the catalog when available.")
         }
     }
 

@@ -44,7 +44,7 @@ struct BookDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if let year = book.publicationYear {
-                        Text("\(year)")
+                        Text(verbatim: "\(year)")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }

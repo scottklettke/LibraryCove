@@ -212,7 +212,68 @@ final class OpenLibraryService: CatalogService {
             )
         }
 
+        if catalog.description == nil, let workDesc = await fetchWorkDescription(for: catalog.title, authors: catalog.authors) {
+            catalog = CatalogBook(
+                id: catalog.id,
+                title: catalog.title,
+                authors: catalog.authors,
+                isbn: catalog.isbn,
+                publicationYear: catalog.publicationYear,
+                genres: catalog.genres,
+                publisher: catalog.publisher,
+                pageCount: catalog.pageCount,
+                description: workDesc,
+                language: catalog.language,
+                coverURLs: catalog.coverURLs,
+                source: catalog.source
+            )
+        }
+
         return catalog.title.isEmpty ? nil : catalog
+    }
+
+    /// Fallback: fetch a book's description from its OpenLibrary work record
+    /// when ISBN/Google lookups returned none.
+    private func fetchWorkDescription(for title: String, authors: [String]) async -> String? {
+        guard !title.isEmpty else { return nil }
+
+        var searchComponents = URLComponents(string: "https://openlibrary.org/search.json")!
+        var query = title
+        if let first = authors.first {
+            query += " " + first
+        }
+        searchComponents.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "limit", value: "1"),
+            URLQueryItem(name: "fields", value: "key")
+        ]
+        guard let searchURL = searchComponents.url else { return nil }
+
+        do {
+            let (data, response) = try await session.data(from: searchURL)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let docs = json["docs"] as? [[String: Any]],
+                  let key = docs.first?["key"] as? String else { return nil }
+
+            let workURL = URL(string: "https://openlibrary.org\(key).json")!
+            let (workData, workResponse) = try await session.data(from: workURL)
+            guard let workHTTP = workResponse as? HTTPURLResponse, workHTTP.statusCode == 200,
+                  let workJSON = try? JSONSerialization.jsonObject(with: workData) as? [String: Any],
+                  let rawDesc = workJSON["description"] else { return nil }
+
+            let desc: String?
+            if let s = rawDesc as? String {
+                desc = s
+            } else if let dict = rawDesc as? [String: Any], let value = dict["value"] as? String {
+                desc = value
+            } else {
+                desc = nil
+            }
+            return desc.map { Self.truncate($0) }
+        } catch {
+            return nil
+        }
     }
 
     // MARK: - Google Books helpers

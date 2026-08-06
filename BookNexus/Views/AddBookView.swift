@@ -12,6 +12,7 @@ struct AddBookView: View {
     @State private var selectedResult: CatalogBook?
     @State private var scannedCode: String?
     @State private var showScanner = false
+    @State private var descriptionSource: DescriptionSource = .openlibrary
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,17 @@ struct AddBookView: View {
             .navigationTitle("Add a book")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItemGroup(placement: .navigation) {
+                    Menu {
+                        Picker("Source", selection: $descriptionSource) {
+                            ForEach(DescriptionSource.allCases) { source in
+                                Text(source.displayName).tag(source)
+                            }
+                        }
+                    } label: {
+                        Label("Source", systemImage: "book.closed")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showScanner = true
@@ -111,7 +123,7 @@ struct AddBookView: View {
         errorMessage = nil
         defer { isSearching = false }
         do {
-            results = try await catalog.search(query: query)
+            results = try await catalog.search(query: query, preferred: descriptionSource)
         } catch {
             errorMessage = "Search failed: \(error.localizedDescription)"
         }
@@ -122,7 +134,7 @@ struct AddBookView: View {
         errorMessage = nil
         defer { isSearching = false }
         do {
-            if let book = try await catalog.lookup(isbn: code) {
+            if let book = try await catalog.lookup(isbn: code, preferred: descriptionSource) {
                 selectedResult = book
             } else {
                 errorMessage = "No book found for ISBN \(code)."

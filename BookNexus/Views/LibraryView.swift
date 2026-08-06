@@ -19,6 +19,23 @@ enum LibraryViewMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// How the list view should group books.
+enum LibraryGrouping: String, CaseIterable, Identifiable {
+    case none = "none"
+    case author = "author"
+    case genre = "genre"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .author: return "Author"
+        case .genre: return "Genre"
+        }
+    }
+}
+
 /// Main library screen: all books with cover grid, list, by-location, and dashboard views.
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -28,24 +45,57 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var showAdd = false
     @State private var showingDonated = false
+    @State private var grouping: LibraryGrouping = .none
+    @State private var filterAuthor: String?
+    @State private var filterGenre: String?
 
     private var filteredBooks: [Book] {
         let visible = showingDonated
             ? books.filter { $0.status == BookStatus.donated.rawValue }
             : books.filter { $0.status != BookStatus.donated.rawValue }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return visible }
-        return visible.filter { book in
-            let haystack = [
-                book.title,
-                book.authorsText,
-                book.genres.joined(separator: " "),
-                book.physicalLocation ?? "",
-                book.bookDescription ?? "",
-                book.notes.map(\.content).joined(separator: " ")
-            ].joined(separator: " ").lowercased()
-            return haystack.contains(query.lowercased())
+        let searched: [Book]
+        if query.isEmpty {
+            searched = visible
+        } else {
+            searched = visible.filter { book in
+                let haystack = [
+                    book.title,
+                    book.authorsText,
+                    book.genres.joined(separator: " "),
+                    book.physicalLocation ?? "",
+                    book.bookDescription ?? "",
+                    book.notes.map(\.content).joined(separator: " ")
+                ].joined(separator: " ").lowercased()
+                return haystack.contains(query.lowercased())
+            }
         }
+        var result = searched
+        if let filterAuthor {
+            result = result.filter { book in
+                book.authors.contains { $0.localizedCaseInsensitiveCompare(filterAuthor) == .orderedSame }
+            }
+        }
+        if let filterGenre {
+            result = result.filter { book in
+                book.genres.contains { $0.localizedCaseInsensitiveCompare(filterGenre) == .orderedSame }
+            }
+        }
+        return result
+    }
+
+    private var visibleBooks: [Book] {
+        showingDonated
+            ? books.filter { $0.status == BookStatus.donated.rawValue }
+            : books.filter { $0.status != BookStatus.donated.rawValue }
+    }
+
+    private var allAuthors: [String] {
+        Set(visibleBooks.flatMap(\.authors)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private var allGenres: [String] {
+        Set(visibleBooks.flatMap(\.genres)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     var body: some View {
@@ -61,6 +111,37 @@ struct LibraryView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 modePicker
+                Menu {
+                    Picker("Group by", selection: $grouping) {
+                        ForEach(LibraryGrouping.allCases) { group in
+                            Text(group.displayName).tag(group)
+                        }
+                    }
+                } label: {
+                    Label("Group", systemImage: "rectangle.3.group")
+                }
+                Menu {
+                    Picker("Author", selection: $filterAuthor) {
+                        Text("All").tag(String?.none)
+                        ForEach(allAuthors, id: \.self) { author in
+                            Text(author).tag(String?.some(author))
+                        }
+                    }
+                    Button("Clear author") { filterAuthor = nil }
+                } label: {
+                    Label("Author", systemImage: "person")
+                }
+                Menu {
+                    Picker("Genre", selection: $filterGenre) {
+                        Text("All").tag(String?.none)
+                        ForEach(allGenres, id: \.self) { genre in
+                            Text(genre).tag(String?.some(genre))
+                        }
+                    }
+                    Button("Clear genre") { filterGenre = nil }
+                } label: {
+                    Label("Genre", systemImage: "tag")
+                }
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 donatedToggle
@@ -146,12 +227,42 @@ struct LibraryView: View {
     // MARK: - List
 
     private var listView: some View {
-        List(filteredBooks) { book in
-            NavigationLink {
-                BookDetailView(book: book)
-            } label: {
-                BookListRow(book: book)
+        if grouping == .none {
+            return AnyView(List(filteredBooks) { book in
+                NavigationLink {
+                    BookDetailView(book: book)
+                } label: {
+                    BookListRow(book: book)
+                }
+            })
+        } else {
+            let grouped = Dictionary(grouping: filteredBooks) { book in
+                groupKey(for: book)
             }
+            let keys = grouped.keys.sorted {
+                ($0 ?? "") < ($1 ?? "")
+            }
+            return AnyView(List {
+                ForEach(keys, id: \.self) { key in
+                    Section(key ?? "Unknown") {
+                        ForEach(grouped[key] ?? []) { book in
+                            NavigationLink {
+                                BookDetailView(book: book)
+                            } label: {
+                                BookListRow(book: book)
+                            }
+                        }
+                    }
+                }
+            })
+        }
+    }
+
+    private func groupKey(for book: Book) -> String? {
+        switch grouping {
+        case .author: return book.authors.first
+        case .genre: return book.genres.first
+        case .none: return nil
         }
     }
 

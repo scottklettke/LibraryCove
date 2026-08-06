@@ -21,10 +21,25 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable {
     var primaryCoverURL: String? { coverURLs.first }
 }
 
+/// Where a book description should be fetched from.
+enum DescriptionSource: String, CaseIterable, Identifiable {
+    case openlibrary
+    case wikipedia
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .openlibrary: return "Open Library"
+        case .wikipedia: return "Wikipedia"
+        }
+    }
+}
+
 /// Protocol for external catalog providers.
 protocol CatalogService: Sendable {
-    func search(query: String) async throws -> [CatalogBook]
-    func lookup(isbn: String) async throws -> CatalogBook?
+    func search(query: String, preferred: DescriptionSource) async throws -> [CatalogBook]
+    func lookup(isbn: String, preferred: DescriptionSource) async throws -> CatalogBook?
 }
 
 /// OpenLibrary search + Google Books cover enrichment.
@@ -38,7 +53,7 @@ final class OpenLibraryService: CatalogService {
     }
 
     /// Search by title/author. Combines OpenLibrary results with Google Books covers.
-    func search(query: String) async throws -> [CatalogBook] {
+    func search(query: String, preferred: DescriptionSource = .openlibrary) async throws -> [CatalogBook] {
         var components = URLComponents(string: "https://openlibrary.org/search.json")!
         components.queryItems = [
             URLQueryItem(name: "q", value: query),
@@ -129,11 +144,18 @@ final class OpenLibraryService: CatalogService {
             )
         }
 
+        // Fill in missing descriptions using the preferred source.
+        for i in books.indices where books[i].description == nil {
+            if let desc = await fetchDescription(for: books[i].title, authors: books[i].authors, preferred: preferred) {
+                books[i].description = desc
+                books[i].descriptionSource = preferred.rawValue
+            }
+        }
         return books
     }
 
     /// Look up a book by ISBN via OpenLibrary, then enrich with Google Books.
-    func lookup(isbn: String) async throws -> CatalogBook? {
+    func lookup(isbn: String, preferred: DescriptionSource = .openlibrary) async throws -> CatalogBook? {
         let cleaned = isbn.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
         var components = URLComponents(string: "https://openlibrary.org/api/books")!
         components.queryItems = [
@@ -218,34 +240,39 @@ final class OpenLibraryService: CatalogService {
             )
         }
 
-        if catalog.description == nil, let workDesc = await fetchWorkDescription(for: catalog.title, authors: catalog.authors) {
+        if catalog.description == nil, let fetchedDesc = await fetchDescription(for: catalog.title, authors: catalog.authors, preferred: preferred) {
             catalog = CatalogBook(
-                id: catalog.id,
-                title: catalog.title,
-                authors: catalog.authors,
-                isbn: catalog.isbn,
-                publicationYear: catalog.publicationYear,
-                genres: catalog.genres,
-                publisher: catalog.publisher,
-                pageCount: catalog.pageCount,
-                description: workDesc,
-                language: catalog.language,
-                coverURLs: catalog.coverURLs,
-                descriptionSource: "openlibrary",
-                source: catalog.source
+                id: catalog.id, title: catalog.title, authors: catalog.authors, isbn: catalog.isbn,
+                publicationYear: catalog.publicationYear, genres: catalog.genres, publisher: catalog.publisher,
+                pageCount: catalog.pageCount, description: fetchedDesc, language: catalog.language,
+                coverURLs: catalog.coverURLs, descriptionSource: preferred.rawValue, source: catalog.source
             )
         }
-
-            if catalog.description == nil, let wikiDesc = await fetchWikipediaDescription(for: catalog.title, authors: catalog.authors) {
-                catalog.description = wikiDesc
-                catalog.descriptionSource = "wikipedia"
-            }
 
         return catalog.title.isEmpty ? nil : catalog
     }
 
+    /// Fetch a book description from the preferred source, falling back to the other.
+    private func fetchDescription(for title: String, authors: [String], preferred: DescriptionSource) async -> String? {
+        let sources: [DescriptionSource] = preferred == .wikipedia
+            ? [.wikipedia, .openlibrary]
+            : [.openlibrary, .wikipedia]
+
+        for source in sources {
+            let desc: String?
+            if source == .openlibrary {
+                desc = await fetchWorkDescription(for: title, authors: authors)
+            } else {
+                desc = await fetchWikipediaDescription(for: title, authors: authors)
+            }
+            if let desc { return desc }
+        }
+
+        return nil
+    }
+
     /// Fallback: fetch a book's description from its OpenLibrary work record
-    /// when ISBN/Google lookups returned none.
+    /// when the ISBN record has none.
     private func fetchWorkDescription(for title: String, authors: [String]) async -> String? {
         guard !title.isEmpty else { return nil }
 

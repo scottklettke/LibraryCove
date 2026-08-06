@@ -10,6 +10,7 @@ struct BookDetailView: View {
     @State private var newNoteText = ""
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
+    @State private var descriptionSource: DescriptionSource = .openlibrary
 
     var body: some View {
         List {
@@ -20,6 +21,17 @@ struct BookDetailView: View {
         .navigationTitle(book.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Menu {
+                    Picker("Source", selection: $descriptionSource) {
+                        ForEach(DescriptionSource.allCases) { source in
+                            Text(source.displayName).tag(source)
+                        }
+                    }
+                } label: {
+                    Label("Source", systemImage: "book.closed")
+                }
+            }
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     showEdit = true
@@ -88,6 +100,11 @@ struct BookDetailView: View {
                     LabeledContent("Source", value: sourceLabel(source))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+                Button(role: .destructive) {
+                    deleteDescription()
+                } label: {
+                    Text("Delete description")
                 }
             } else {
                 HStack {
@@ -160,9 +177,9 @@ struct BookDetailView: View {
         let catalog = OpenLibraryService()
         let result: CatalogBook?
         if let isbn = book.isbn {
-            result = try? await catalog.lookup(isbn: isbn)
+            result = try? await catalog.lookup(isbn: isbn, preferred: descriptionSource)
         } else {
-            let results = (try? await catalog.search(query: book.title)) ?? []
+            let results = (try? await catalog.search(query: book.title, preferred: descriptionSource)) ?? []
             result = results.first
         }
 
@@ -173,6 +190,13 @@ struct BookDetailView: View {
 
         book.bookDescription = description
         book.descriptionSource = found.descriptionSource
+        book.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func deleteDescription() {
+        book.bookDescription = nil
+        book.descriptionSource = nil
         book.updatedAt = Date()
         try? modelContext.save()
     }

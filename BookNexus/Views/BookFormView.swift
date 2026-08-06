@@ -35,6 +35,9 @@ struct BookFormView: View {
     @State private var locationStore = LocationStore()
     @State private var loanedToText = ""
     @State private var loanedDate: Date?
+    @State private var descriptionSource: DescriptionSource = .openlibrary
+    @State private var isFetchingDescription = false
+    @State private var fetchError: String?
 
     init(catalog: CatalogBook? = nil, existing: Book? = nil) {
         self.catalog = catalog
@@ -74,6 +77,11 @@ struct BookFormView: View {
             descriptionSection
             loanedSection
             saveSection
+        }
+        .task {
+            if catalog != nil && description.isEmpty {
+                await fetchDescription()
+            }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -217,12 +225,45 @@ struct BookFormView: View {
 
     private var descriptionSection: some View {
         Section {
+            Picker("Source", selection: $descriptionSource) {
+                ForEach(DescriptionSource.allCases) { source in
+                    Text(source.displayName).tag(source)
+                }
+            }
             TextEditor(text: $description)
                 .frame(minHeight: 120)
+            if isFetchingDescription {
+                HStack {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Fetching description…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack {
+                Button {
+                    Task { await fetchDescription() }
+                } label: {
+                    Text(isFetchingDescription ? "Fetching…" : "Fetch description")
+                }
+                .disabled(isFetchingDescription)
+                if !description.isEmpty {
+                    Button(role: .destructive) {
+                        description = ""
+                    } label: {
+                        Text("Delete description")
+                    }
+                }
+            }
+            if let fetchError {
+                Text(fetchError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
         } header: {
             Text("Description")
         } footer: {
-            Text("A short summary of the book. If not available from the ISBN lookup, it is fetched from the catalog when available.")
+            Text("A short summary of the book. Fetched automatically from the ISBN lookup when available.")
         }
     }
 
@@ -239,6 +280,36 @@ struct BookFormView: View {
                 }
             }
         }
+    }
+
+    private func fetchDescription() async {
+        isFetchingDescription = true
+        fetchError = nil
+        defer { isFetchingDescription = false }
+
+        let catalog = OpenLibraryService()
+        let result: CatalogBook?
+        let isbn = catalogISBN
+        if let isbn {
+            result = try? await catalog.lookup(isbn: isbn, preferred: descriptionSource)
+        } else if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let results = (try? await catalog.search(query: title, preferred: descriptionSource)) ?? []
+            result = results.first
+        } else {
+            result = nil
+        }
+
+        guard let found = result, let newDescription = found.description, !newDescription.isEmpty else {
+            fetchError = "No description found for this book."
+            return
+        }
+
+        description = newDescription
+    }
+
+    private var catalogISBN: String? {
+        if let isbn = catalog?.isbn { return isbn }
+        return existing?.isbn
     }
 
     private func save() {

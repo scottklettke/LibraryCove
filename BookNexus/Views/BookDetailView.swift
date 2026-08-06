@@ -82,8 +82,8 @@ struct BookDetailView: View {
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)
-                if book.descriptionSource != "none" {
-                    LabeledContent("Source", value: sourceLabel(book.descriptionSource))
+                if let source = book.descriptionSource, source != "none" {
+                    LabeledContent("Source", value: sourceLabel(source))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

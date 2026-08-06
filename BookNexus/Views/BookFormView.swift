@@ -263,7 +263,7 @@ struct BookFormView: View {
             existing.publisher = publisherText.isEmpty ? nil : publisherText
             existing.pageCount = pageCount
             existing.bookDescription = description.isEmpty ? nil : description
-            existing.descriptionSource = description.isEmpty ? "none" : (catalog?.descriptionSource ?? existing.descriptionSource)
+            existing.descriptionSource = description.isEmpty ? nil : (catalog?.descriptionSource ?? existing.descriptionSource)
             existing.physicalLocation = location.isEmpty ? nil : location
             existing.status = status.rawValue
             existing.rating = rating
@@ -284,7 +284,7 @@ struct BookFormView: View {
                 publisher: publisherText.isEmpty ? nil : publisherText,
                 pageCount: pageCount,
                 bookDescription: description.isEmpty ? nil : description,
-                descriptionSource: description.isEmpty ? "none" : (catalog?.descriptionSource ?? "none"),
+                descriptionSource: description.isEmpty ? nil : (catalog?.descriptionSource ?? nil),
                 language: catalog?.language,
                 physicalLocation: location.isEmpty ? nil : location,
                 status: status.rawValue,

@@ -36,6 +36,23 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
     }
 }
 
+private struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct ScrollOffsetTracker: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let offset = proxy.frame(in: .named("libraryScroll")).minY
+            Color.clear
+                .preference(key: ScrollOffsetPreferenceKey.self, value: offset)
+        }
+    }
+}
+
 /// Main library screen: all books with cover grid, list, by-location, and dashboard views.
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
@@ -47,6 +64,7 @@ struct LibraryView: View {
     @State private var grouping: LibraryGrouping = .none
     @State private var filterAuthor: String?
     @State private var filterGenre: String?
+    @State private var isScrolled = false
 
     private var filteredBooks: [Book] {
         let visible = books.filter { $0.status != BookStatus.donated.rawValue }
@@ -94,15 +112,19 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        Group {
-            switch viewMode {
-            case .grid: gridView
-            case .list: listView
-            case .byLocation: byLocationView
-            case .dashboard: dashboardView
+        VStack(spacing: 0) {
+            if hasActiveFilters {
+                activeFiltersBar
+            }
+            Group {
+                switch viewMode {
+                case .grid: gridView
+                case .list: listView
+                case .byLocation: byLocationView
+                case .dashboard: dashboardView
+                }
             }
         }
-        .navigationTitle("Library")
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 modePicker
@@ -146,6 +168,9 @@ struct LibraryView: View {
                 }
             }
         }
+        .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
+        .onChange(of: viewMode) { isScrolled = false }
+        .onChange(of: grouping) { isScrolled = false }
         .sheet(isPresented: $showAdd) {
             AddBookView()
         }
@@ -177,19 +202,26 @@ struct LibraryView: View {
 
     private var gridView: some View {
         if grouping == .none {
-            return AnyView(ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
-                    ForEach(filteredBooks) { book in
-                        NavigationLink {
-                            BookDetailView(book: book)
-                        } label: {
-                            BookGridCell(book: book)
+            return AnyView(
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
+                        ForEach(filteredBooks) { book in
+                            NavigationLink {
+                                BookDetailView(book: book)
+                            } label: {
+                                BookGridCell(book: book)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding()
+                    .background(ScrollOffsetTracker())
                 }
-                .padding()
-            })
+                .coordinateSpace(name: "libraryScroll")
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    isScrolled = offset < -30
+                }
+            )
         } else {
             let grouped = Dictionary(grouping: filteredBooks) { book in
                 groupKey(for: book)
@@ -197,33 +229,40 @@ struct LibraryView: View {
             let keys = grouped.keys.sorted {
                 ($0 ?? "") < ($1 ?? "")
             }
-            return AnyView(ScrollView {
-                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                    ForEach(keys, id: \.self) { key in
-                        Section {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
-                                ForEach(grouped[key] ?? []) { book in
-                                    NavigationLink {
-                                        BookDetailView(book: book)
-                                    } label: {
-                                        BookGridCell(book: book)
+            return AnyView(
+                ScrollView {
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        ForEach(keys, id: \.self) { key in
+                            Section {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
+                                    ForEach(grouped[key] ?? []) { book in
+                                        NavigationLink {
+                                            BookDetailView(book: book)
+                                        } label: {
+                                            BookGridCell(book: book)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
                                 }
+                                .padding()
+                            } header: {
+                                Text(key ?? "Unknown")
+                                    .font(.headline)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal)
+                                    .padding(.vertical, 6)
+                                    .background(Color(uiColor: .systemGroupedBackground))
                             }
-                            .padding()
-                        } header: {
-                            Text(key ?? "Unknown")
-                                .font(.headline)
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal)
-                                .padding(.vertical, 6)
-                                .background(Color(uiColor: .systemGroupedBackground))
                         }
                     }
+                    .background(ScrollOffsetTracker())
                 }
-            })
+                .coordinateSpace(name: "libraryScroll")
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    isScrolled = offset < -30
+                }
+            )
         }
     }
 
@@ -267,6 +306,57 @@ struct LibraryView: View {
         case .genre: return book.genres.first
         case .none: return nil
         }
+    }
+
+    private var hasActiveFilters: Bool {
+        grouping != .none || filterAuthor != nil || filterGenre != nil
+    }
+
+    private var activeFiltersBar: some View {
+        HStack(spacing: 10) {
+            if grouping != .none {
+                chip("Grouped by \(grouping.displayName)", systemImage: "rectangle.3.group") {
+                    grouping = .none
+                }
+            }
+            if let filterAuthor {
+                chip("Author: \(filterAuthor)", systemImage: "person") {
+                    self.filterAuthor = nil
+                }
+            }
+            if let filterGenre {
+                chip("Genre: \(filterGenre)", systemImage: "tag") {
+                    self.filterGenre = nil
+                }
+            }
+            Spacer()
+            Button("Clear all") {
+                grouping = .none
+                filterAuthor = nil
+                filterGenre = nil
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    private func chip(_ text: String, systemImage: String, onClear: @escaping () -> Void) -> some View {
+        HStack(spacing: 4) {
+            Label(text, systemImage: systemImage)
+                .font(.caption)
+            Button(action: onClear) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(text)")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color(uiColor: .secondarySystemFill)))
     }
 
     // MARK: - By location

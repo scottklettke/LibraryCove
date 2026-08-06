@@ -113,7 +113,7 @@ struct LibraryView: View {
                         }
                     }
                 } label: {
-                    Label("Group", systemImage: "rectangle.3.group")
+                    Label(grouping == .none ? "Group" : "Group: \(grouping.displayName)", systemImage: "rectangle.3.group")
                 }
                 Menu {
                     Picker("Author", selection: $filterAuthor) {
@@ -124,7 +124,7 @@ struct LibraryView: View {
                     }
                     Button("Clear author") { filterAuthor = nil }
                 } label: {
-                    Label(filterAuthor ?? "Author", systemImage: "person")
+                    Label(filterAuthor.map { "Author: \($0)" } ?? "Author", systemImage: "person")
                 }
                 Menu {
                     Picker("Genre", selection: $filterGenre) {
@@ -135,7 +135,7 @@ struct LibraryView: View {
                     }
                     Button("Clear genre") { filterGenre = nil }
                 } label: {
-                    Label(filterGenre ?? "Genre", systemImage: "tag")
+                    Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -176,20 +176,55 @@ struct LibraryView: View {
     // MARK: - Grid
 
     private var gridView: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
-                ForEach(filteredBooks) { book in
-                    NavigationLink {
-                        BookDetailView(book: book)
-                    } label: {
-                        BookGridCell(book: book)
+        if grouping == .none {
+            return AnyView(ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
+                    ForEach(filteredBooks) { book in
+                        NavigationLink {
+                            BookDetailView(book: book)
+                        } label: {
+                            BookGridCell(book: book)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding()
+            })
+        } else {
+            let grouped = Dictionary(grouping: filteredBooks) { book in
+                groupKey(for: book)
             }
-            .padding()
+            let keys = grouped.keys.sorted {
+                ($0 ?? "") < ($1 ?? "")
+            }
+            return AnyView(ScrollView {
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    ForEach(keys, id: \.self) { key in
+                        Section {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
+                                ForEach(grouped[key] ?? []) { book in
+                                    NavigationLink {
+                                        BookDetailView(book: book)
+                                    } label: {
+                                        BookGridCell(book: book)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding()
+                        } header: {
+                            Text(key ?? "Unknown")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal)
+                                .padding(.vertical, 6)
+                                .background(Color(uiColor: .systemGroupedBackground))
+                        }
+                    }
+                }
+            })
         }
-        .background(Color(uiColor: .systemGroupedBackground))
     }
 
     // MARK: - List

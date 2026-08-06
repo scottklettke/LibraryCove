@@ -27,11 +27,15 @@ struct LibraryView: View {
     @State private var viewMode: LibraryViewMode = .grid
     @State private var searchText = ""
     @State private var showAdd = false
+    @State private var showingDonated = false
 
     private var filteredBooks: [Book] {
+        let visible = showingDonated
+            ? books.filter { $0.status == BookStatus.donated.rawValue }
+            : books.filter { $0.status != BookStatus.donated.rawValue }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return books }
-        return books.filter { book in
+        guard !query.isEmpty else { return visible }
+        return visible.filter { book in
             let haystack = [
                 book.title,
                 book.authorsText,
@@ -56,6 +60,9 @@ struct LibraryView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 modePicker
+            }
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                donatedToggle
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -89,6 +96,31 @@ struct LibraryView: View {
         }
         .pickerStyle(.menu)
         .fixedSize()
+    }
+
+    private var donatedToggle: some View {
+        Menu {
+            Button {
+                showingDonated = false
+            } label: {
+                if !showingDonated {
+                    Label("Library", systemImage: "checkmark")
+                } else {
+                    Label("Library", systemImage: "books.vertical")
+                }
+            }
+            Button {
+                showingDonated = true
+            } label: {
+                if showingDonated {
+                    Label("Donated", systemImage: "checkmark")
+                } else {
+                    Label("Donated", systemImage: "gift")
+                }
+            }
+        } label: {
+            Label(showingDonated ? "Donated" : "Library", systemImage: showingDonated ? "gift" : "books.vertical")
+        }
     }
 
     // MARK: - Grid
@@ -147,16 +179,18 @@ struct LibraryView: View {
     // MARK: - Dashboard
 
     private var dashboardView: some View {
-        List {
+        let libraryBooks = books.filter { $0.status != BookStatus.donated.rawValue }
+        return List {
             Section("Summary") {
-                LabeledContent("Total books", value: "\(books.count)")
+                LabeledContent("Total books", value: "\(libraryBooks.count)")
                 LabeledContent("Reading", value: "\(count(status: .reading))")
                 LabeledContent("To read", value: "\(count(status: .toRead))")
                 LabeledContent("Completed", value: "\(count(status: .completed))")
-                LabeledContent("Owned", value: "\(count(status: .owned))")
+                LabeledContent("Loaned out", value: "\(libraryBooks.filter(\.isLoaned).count)")
+                LabeledContent("Donated", value: "\(count(status: .donated))")
             }
             Section("By location") {
-                let counts = Dictionary(grouping: books, by: \.physicalLocation)
+                let counts = Dictionary(grouping: libraryBooks, by: \.physicalLocation)
                 let locations = counts.keys.sorted {
                     ($0 ?? "") < ($1 ?? "")
                 }
@@ -165,7 +199,7 @@ struct LibraryView: View {
                 }
             }
             Section("Recently added") {
-                let recent = books.sorted { $0.createdAt > $1.createdAt }.prefix(10)
+                let recent = libraryBooks.sorted { $0.createdAt > $1.createdAt }.prefix(10)
                 ForEach(Array(recent)) { book in
                     NavigationLink {
                         BookDetailView(book: book)
@@ -189,11 +223,30 @@ struct BookGridCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             AsyncCoverView(url: book.coverImageURL.flatMap { URL(string: $0) }, width: 92, height: 134)
+                .overlay(alignment: .topLeading) {
+                    if book.isLoaned {
+                        LoanBadge()
+                    }
+                }
             Text(book.title)
                 .font(.caption)
                 .lineLimit(2)
                 .frame(maxWidth: 92, alignment: .leading)
         }
+    }
+}
+
+/// Small badge showing a book is loaned out.
+struct LoanBadge: View {
+    var body: some View {
+        Image(systemName: "person.fill")
+            .font(.caption2)
+            .foregroundStyle(.white)
+            .padding(4)
+            .background(.blue)
+            .clipShape(Circle())
+            .shadow(radius: 1)
+            .padding(3)
     }
 }
 
@@ -214,6 +267,10 @@ struct BookListRow: View {
             Spacer()
             Image(systemName: book.statusEnum.systemImage)
                 .foregroundStyle(.secondary)
+            if book.isLoaned {
+                Image(systemName: "person.fill")
+                    .foregroundStyle(.blue)
+            }
         }
     }
 }
@@ -224,7 +281,6 @@ extension BookStatus {
         case .reading: return "book.open"
         case .toRead: return "bookmark"
         case .completed: return "checkmark.circle"
-        case .owned: return "books.vertical"
         case .donated: return "heart"
         }
     }

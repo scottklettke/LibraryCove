@@ -33,6 +33,8 @@ struct BookFormView: View {
     @State private var coverURLs: [String] = []
     @State private var selectedCover: String?
     @State private var locationStore = LocationStore()
+    @State private var loanedToText = ""
+    @State private var loanedDate: Date?
 
     init(catalog: CatalogBook? = nil, existing: Book? = nil) {
         self.catalog = catalog
@@ -69,6 +71,7 @@ struct BookFormView: View {
             coverSection
             detailsSection
             statusSection
+            loanedSection
             saveSection
         }
         .toolbar {
@@ -114,10 +117,12 @@ struct BookFormView: View {
             TextField("Title *", text: $title)
             TextField("Authors (comma separated)", text: $authorsText)
                 .textInputAutocapitalization(.words)
-            HStack {
-                TextField("Year", text: $yearText)
+            LabeledContent("Published year") {
+                TextField("Published year", text: $yearText)
                     .keyboardType(.numberPad)
-                TextField("Page count", text: $pageCountText)
+            }
+            LabeledContent("Pages in book") {
+                TextField("Pages in book", text: $pageCountText)
                     .keyboardType(.numberPad)
             }
             TextField("Publisher", text: $publisherText)
@@ -144,11 +149,53 @@ struct BookFormView: View {
             LabeledContent("Rating") {
                 RatingPicker(rating: $rating)
             }
-            locationPicker
+            HStack {
+                TextField("Location", text: $locationText)
+                    .textInputAutocapitalization(.words)
+                Menu {
+                    ForEach(locationStore.locations, id: \.self) { loc in
+                        Button(loc) { locationText = loc }
+                    }
+                    if !locationText.isEmpty {
+                        Button("Clear") { locationText = "" }
+                    }
+                } label: {
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.callout)
+                }
+            }
             TextEditor(text: $description)
                 .frame(minHeight: 80)
         } header: {
             Text("Status & notes")
+        }
+    }
+
+    private var loanedSection: some View {
+        Section {
+            TextField("Person loaned to", text: $loanedToText)
+                .textInputAutocapitalization(.words)
+            if let loanedDate {
+                DatePicker("Loaned on", selection: Binding(
+                    get: { loanedDate },
+                    set: { self.loanedDate = $0 }
+                ), displayedComponents: .date)
+            } else {
+                Button("Mark loaned today") {
+                    loanedDate = Date()
+                }
+            }
+            if loanedToText.isEmpty && loanedDate == nil {
+                Text("No book is currently loaned out.")
+                    .foregroundStyle(.secondary)
+            }
+            Button("Returned") {
+                loanedToText = ""
+                loanedDate = nil
+            }
+            .disabled(loanedToText.isEmpty && loanedDate == nil)
+        } header: {
+            Text("Loaned")
         }
     }
 
@@ -205,6 +252,8 @@ struct BookFormView: View {
             existing.physicalLocation = location.isEmpty ? nil : location
             existing.status = status.rawValue
             existing.rating = rating
+            existing.loanedTo = loanedToText.isEmpty ? nil : loanedToText
+            existing.loanedDate = loanedDate
             existing.coverImageURL = cover
             existing.updatedAt = Date()
             try? modelContext.save()
@@ -223,7 +272,9 @@ struct BookFormView: View {
                 language: catalog?.language,
                 physicalLocation: location.isEmpty ? nil : location,
                 status: status.rawValue,
-                rating: rating
+                rating: rating,
+                loanedTo: loanedToText.isEmpty ? nil : loanedToText,
+                loanedDate: loanedDate
             )
             modelContext.insert(book)
             try? modelContext.save()

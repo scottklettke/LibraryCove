@@ -17,10 +17,12 @@ final class Book {
     var bookDescription: String?
     var language: String?
     var physicalLocation: String?
-    var status: String  // owned | reading | to-read | completed | donated
+    var status: String  // reading | to-read | completed | donated
     var acquiredDate: Date?
     var purchasePrice: Double?
     var rating: Int?  // 1–5 stars
+    var loanedTo: String?
+    var loanedDate: Date?
 
     // Ownership for multi-user / family support
     var ownerID: String?
@@ -65,6 +67,8 @@ final class Book {
         acquiredDate: Date? = nil,
         purchasePrice: Double? = nil,
         rating: Int? = nil,
+        loanedTo: String? = nil,
+        loanedDate: Date? = nil,
         ownerID: String? = nil,
         sharedLibraryID: String? = nil,
         isPersonal: Bool = true,
@@ -90,6 +94,8 @@ final class Book {
         self.acquiredDate = acquiredDate
         self.purchasePrice = purchasePrice
         self.rating = rating
+        self.loanedTo = loanedTo
+        self.loanedDate = loanedDate
         self.ownerID = ownerID
         self.sharedLibraryID = sharedLibraryID
         self.isPersonal = isPersonal
@@ -111,6 +117,11 @@ extension Book {
         authors.isEmpty ? "Unknown" : authors.joined(separator: ", ")
     }
 
+    /// Whether this book is currently loaned out.
+    var isLoaned: Bool {
+        loanedTo != nil && !(loanedTo?.isEmpty ?? true)
+    }
+
     /// Reading status stored as `status` string.
     var statusEnum: BookStatus {
         BookStatus(rawValue: status) ?? .toRead
@@ -119,7 +130,6 @@ extension Book {
 
 /// Book status enum mirroring backend `BookStatus`.
 enum BookStatus: String, Codable, CaseIterable, Identifiable {
-    case owned = "owned"
     case reading = "reading"
     case toRead = "to-read"
     case completed = "completed"
@@ -129,7 +139,6 @@ enum BookStatus: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .owned: return "Owned"
         case .reading: return "Reading"
         case .toRead: return "To read"
         case .completed: return "Completed"

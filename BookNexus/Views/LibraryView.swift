@@ -36,6 +36,60 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
     }
 }
 
+/// The sort fields available in the Sort menu.
+enum LibrarySortField: String, CaseIterable, Identifiable {
+    case title = "title"
+    case author = "author"
+    case dateAdded = "dateAdded"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .title: return "Title"
+        case .author: return "Author"
+        case .dateAdded: return "Date added"
+        }
+    }
+}
+
+/// How the library should order books, including direction. The Sort menu
+/// shows one entry per field; selecting a field again toggles its direction.
+enum LibrarySort: String, CaseIterable, Identifiable {
+    case titleAsc = "titleAsc"
+    case titleDesc = "titleDesc"
+    case authorAsc = "authorAsc"
+    case authorDesc = "authorDesc"
+    case dateNewest = "dateNewest"
+    case dateOldest = "dateOldest"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .titleAsc: return "Title (A–Z)"
+        case .titleDesc: return "Title (Z–A)"
+        case .authorAsc: return "Author (A–Z)"
+        case .authorDesc: return "Author (Z–A)"
+        case .dateNewest: return "Date added (newest first)"
+        case .dateOldest: return "Date added (oldest first)"
+        }
+    }
+
+    var field: LibrarySortField {
+        switch self {
+        case .titleAsc, .titleDesc: return .title
+        case .authorAsc, .authorDesc: return .author
+        case .dateNewest, .dateOldest: return .dateAdded
+        }
+    }
+
+    /// Whether the current sort orders by the date the book was added.
+    var sortsByDate: Bool {
+        self == .dateNewest || self == .dateOldest
+    }
+}
+
 private struct ScrollOffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
@@ -64,7 +118,9 @@ struct LibraryView: View {
     @State private var grouping: LibraryGrouping = .none
     @State private var filterAuthor: String?
     @State private var filterGenre: String?
+    @State private var sortOrder: LibrarySort = .titleAsc
     @State private var isScrolled = false
+    @State private var filteredSheet: FilteredSheet?
 
     private var filteredBooks: [Book] {
         let visible = books.filter { $0.status != BookStatus.donated.rawValue }
@@ -96,7 +152,48 @@ struct LibraryView: View {
                 book.genres.contains { $0.localizedCaseInsensitiveCompare(filterGenre) == .orderedSame }
             }
         }
-        return result
+        return result.sorted { lhs, rhs in
+            switch sortOrder {
+            case .titleAsc:
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            case .titleDesc:
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedDescending
+            case .authorAsc:
+                return lastName(of: lhs) < lastName(of: rhs)
+            case .authorDesc:
+                return lastName(of: lhs) > lastName(of: rhs)
+            case .dateNewest:
+                return lhs.createdAt > rhs.createdAt
+            case .dateOldest:
+                return lhs.createdAt < rhs.createdAt
+            }
+        }
+    }
+
+    private func lastName(of book: Book) -> String {
+        guard let first = book.authors.first else { return "" }
+        let parts = first.split(separator: " ")
+        return parts.last.map(String.init) ?? first
+    }
+
+    private func lastName(of author: String) -> String {
+        let parts = author.split(separator: " ")
+        return parts.last.map(String.init) ?? author
+    }
+
+    private func isSortField(_ field: LibrarySortField) -> Bool {
+        sortOrder.field == field
+    }
+
+    private func toggleSortField(_ field: LibrarySortField) {
+        switch field {
+        case .title:
+            sortOrder = (sortOrder == .titleAsc) ? .titleDesc : .titleAsc
+        case .author:
+            sortOrder = (sortOrder == .authorAsc) ? .authorDesc : .authorAsc
+        case .dateAdded:
+            sortOrder = (sortOrder == .dateNewest) ? .dateOldest : .dateNewest
+        }
     }
 
     private var visibleBooks: [Book] {
@@ -128,36 +225,69 @@ struct LibraryView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarLeading) {
                 modePicker
-                Menu {
-                    Picker("Group by", selection: $grouping) {
-                        ForEach(LibraryGrouping.allCases) { group in
-                            Text(group.displayName).tag(group)
+                if viewMode != .dashboard {
+                    Menu {
+                        Picker("Group by", selection: $grouping) {
+                            ForEach(LibraryGrouping.allCases) { group in
+                                Text(group.displayName).tag(group)
+                            }
                         }
+                    } label: {
+                        Label(grouping == .none ? "Group" : "Group: \(grouping.displayName)", systemImage: "rectangle.3.group")
                     }
-                } label: {
-                    Label(grouping == .none ? "Group" : "Group: \(grouping.displayName)", systemImage: "rectangle.3.group")
-                }
-                Menu {
-                    Picker("Author", selection: $filterAuthor) {
-                        Text("All").tag(String?.none)
-                        ForEach(allAuthors, id: \.self) { author in
-                            Text(author).tag(String?.some(author))
+                    Menu {
+                        Picker("Author", selection: $filterAuthor) {
+                            Text("All").tag(String?.none)
+                            ForEach(allAuthors, id: \.self) { author in
+                                Text(author).tag(String?.some(author))
+                            }
                         }
+                        Button("Clear author") { filterAuthor = nil }
+                    } label: {
+                        Label(filterAuthor.map { "Author: \($0)" } ?? "Author", systemImage: "person")
                     }
-                    Button("Clear author") { filterAuthor = nil }
-                } label: {
-                    Label(filterAuthor.map { "Author: \($0)" } ?? "Author", systemImage: "person")
-                }
-                Menu {
-                    Picker("Genre", selection: $filterGenre) {
-                        Text("All").tag(String?.none)
-                        ForEach(allGenres, id: \.self) { genre in
-                            Text(genre).tag(String?.some(genre))
+                    Menu {
+                        Picker("Genre", selection: $filterGenre) {
+                            Text("All").tag(String?.none)
+                            ForEach(allGenres, id: \.self) { genre in
+                                Text(genre).tag(String?.some(genre))
+                            }
                         }
+                        Button("Clear genre") { filterGenre = nil }
+                    } label: {
+                        Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
                     }
-                    Button("Clear genre") { filterGenre = nil }
-                } label: {
-                    Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
+                    Menu {
+                        Button {
+                            toggleSortField(.title)
+                        } label: {
+                            if isSortField(.title) {
+                                Label("Title", systemImage: "checkmark")
+                            } else {
+                                Text("Title")
+                            }
+                        }
+                        Button {
+                            toggleSortField(.author)
+                        } label: {
+                            if isSortField(.author) {
+                                Label("Author", systemImage: "checkmark")
+                            } else {
+                                Text("Author")
+                            }
+                        }
+                        Button {
+                            toggleSortField(.dateAdded)
+                        } label: {
+                            if isSortField(.dateAdded) {
+                                Label("Date added", systemImage: "checkmark")
+                            } else {
+                                Text("Date added")
+                            }
+                        }
+                    } label: {
+                        Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
+                    }
                 }
             }
             ToolbarItem(placement: .primaryAction) {
@@ -167,6 +297,9 @@ struct LibraryView: View {
                     Label("Add", systemImage: "plus")
                 }
             }
+        }
+        .sheet(item: $filteredSheet) { sheet in
+            FilteredBooksSheet(sheet: sheet)
         }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }
@@ -226,8 +359,11 @@ struct LibraryView: View {
             let grouped = Dictionary(grouping: filteredBooks) { book in
                 groupKey(for: book)
             }
-            let keys = grouped.keys.sorted {
-                ($0 ?? "") < ($1 ?? "")
+            let keys = grouped.keys.sorted { lhs, rhs in
+                if grouping == .author, let lhs, let rhs {
+                    return lastName(of: lhs) < lastName(of: rhs)
+                }
+                return (lhs ?? "") < (rhs ?? "")
             }
             return AnyView(
                 ScrollView {
@@ -274,7 +410,7 @@ struct LibraryView: View {
                 NavigationLink {
                     BookDetailView(book: book)
                 } label: {
-                    BookListRow(book: book)
+                    BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
                 }
             })
         } else {
@@ -370,11 +506,11 @@ struct LibraryView: View {
             ForEach(locations, id: \.self) { location in
                 Section(location ?? "Unplaced") {
                     ForEach(grouped[location] ?? []) { book in
-                        NavigationLink {
-                            BookDetailView(book: book)
-                        } label: {
-                            BookListRow(book: book)
-                        }
+                NavigationLink {
+                    BookDetailView(book: book)
+                } label: {
+                    BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
+                }
                     }
                 }
             }
@@ -391,8 +527,26 @@ struct LibraryView: View {
                 LabeledContent("Reading", value: "\(count(status: .reading))")
                 LabeledContent("To read", value: "\(count(status: .toRead))")
                 LabeledContent("Completed", value: "\(count(status: .completed))")
-                LabeledContent("Loaned out", value: "\(libraryBooks.filter(\.isLoaned).count)")
-                LabeledContent("Donated", value: "\(count(status: .donated))")
+                Button {
+                    filteredSheet = FilteredSheet(title: "Loaned out", books: libraryBooks.filter(\.isLoaned))
+                } label: {
+                    HStack {
+                        Text("Loaned out")
+                        Spacer()
+                        Text("\(libraryBooks.filter(\.isLoaned).count)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button {
+                    filteredSheet = FilteredSheet(title: "Donated", books: libraryBooks.filter { $0.status == BookStatus.donated.rawValue })
+                } label: {
+                    HStack {
+                        Text("Donated")
+                        Spacer()
+                        Text("\(count(status: .donated))")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             Section("By location") {
                 let counts = Dictionary(grouping: libraryBooks, by: \.physicalLocation)
@@ -458,6 +612,7 @@ struct LoanBadge: View {
 /// List row: cover thumbnail + title/author/status.
 struct BookListRow: View {
     let book: Book
+    var showAddedDate = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -465,9 +620,20 @@ struct BookListRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.title)
                     .font(.body)
-                Text(book.authorsText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if showAddedDate {
+                    HStack(spacing: 4) {
+                        Text(book.authorsText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("· \(addedDateFormatter.string(from: book.createdAt))")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                } else {
+                    Text(book.authorsText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             Image(systemName: book.statusEnum.systemImage)
@@ -490,3 +656,37 @@ extension BookStatus {
         }
     }
 }
+
+/// A filtered book list presented from the dashboard.
+struct FilteredSheet: Identifiable {
+    let id = UUID()
+    let title: String
+    let books: [Book]
+}
+
+/// Sheet listing a filtered set of books (e.g. loaned out or donated).
+struct FilteredBooksSheet: View {
+    let sheet: FilteredSheet
+
+    var body: some View {
+        NavigationStack {
+            List(sheet.books) { book in
+                NavigationLink {
+                    BookDetailView(book: book)
+                } label: {
+                    BookListRow(book: book)
+                }
+            }
+            .navigationTitle(sheet.title)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+/// Formats the date a book was added for display in list rows.
+private let addedDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .short
+    formatter.timeStyle = .none
+    return formatter
+}()

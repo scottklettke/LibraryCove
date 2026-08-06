@@ -64,8 +64,9 @@ struct BookDetailView: View {
     }
 
     private var infoSection: some View {
-        Section("Details") {
-            LabeledContent("Status", value: book.statusEnum.displayName)
+            Section("Details") {
+                LabeledContent("Status", value: book.statusEnum.displayName)
+                LabeledContent("Date added", value: addedDateFormatter.string(from: book.createdAt))
             if let location = book.physicalLocation, !location.isEmpty {
                 LabeledContent("Location", value: location)
             }
@@ -184,5 +185,12 @@ struct BookDetailView: View {
         case "openlibrary": return "Open Library"
         default: return source
         }
+    }
+
+    private var addedDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
     }
 }

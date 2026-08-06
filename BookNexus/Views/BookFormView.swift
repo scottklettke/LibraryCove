@@ -75,7 +75,9 @@ struct BookFormView: View {
             detailsSection
             statusSection
             descriptionSection
-            loanedSection
+            if existing != nil {
+                loanedSection
+            }
             saveSection
         }
         .task {
@@ -140,6 +142,9 @@ struct BookFormView: View {
                 .textInputAutocapitalization(.words)
             if let isbn = catalog?.isbn ?? existing?.isbn {
                 LabeledContent("ISBN", value: isbn)
+                if let existing {
+                    LabeledContent("Date added", value: addedDateFormatter.string(from: existing.createdAt))
+                }
             }
         } header: {
             Text("Details")
@@ -310,6 +315,13 @@ struct BookFormView: View {
     private var catalogISBN: String? {
         if let isbn = catalog?.isbn { return isbn }
         return existing?.isbn
+    }
+
+    private var addedDateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
     }
 
     private func save() {

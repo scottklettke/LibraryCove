@@ -8,6 +8,8 @@ struct BookDetailView: View {
 
     @State private var showEdit = false
     @State private var newNoteText = ""
+    @State private var isFetchingDescription = false
+    @State private var fetchError: String?
 
     var body: some View {
         List {
@@ -87,6 +89,24 @@ struct BookDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            } else {
+                HStack {
+                    if isFetchingDescription {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Button {
+                        Task { await fetchDescription() }
+                    } label: {
+                        Text(isFetchingDescription ? "Fetching…" : "Fetch description")
+                    }
+                    .disabled(isFetchingDescription)
+                }
+                if let fetchError {
+                    Text(fetchError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
             }
         }
     }
@@ -132,6 +152,31 @@ struct BookDetailView: View {
         try? modelContext.save()
         newNoteText = ""
     }
+    private func fetchDescription() async {
+        isFetchingDescription = true
+        fetchError = nil
+        defer { isFetchingDescription = false }
+
+        let catalog = OpenLibraryService()
+        let result: CatalogBook?
+        if let isbn = book.isbn {
+            result = try? await catalog.lookup(isbn: isbn)
+        } else {
+            let results = (try? await catalog.search(query: book.title)) ?? []
+            result = results.first
+        }
+
+        guard let found = result, let description = found.description, !description.isEmpty else {
+            fetchError = "No description found for this book."
+            return
+        }
+
+        book.bookDescription = description
+        book.descriptionSource = found.descriptionSource
+        book.updatedAt = Date()
+        try? modelContext.save()
+    }
+
     private func sourceLabel(_ source: String) -> String {
         switch source {
         case "wikipedia": return "Wikipedia"

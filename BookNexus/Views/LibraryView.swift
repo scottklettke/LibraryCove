@@ -44,15 +44,12 @@ struct LibraryView: View {
     @State private var viewMode: LibraryViewMode = .grid
     @State private var searchText = ""
     @State private var showAdd = false
-    @State private var showingDonated = false
     @State private var grouping: LibraryGrouping = .none
     @State private var filterAuthor: String?
     @State private var filterGenre: String?
 
     private var filteredBooks: [Book] {
-        let visible = showingDonated
-            ? books.filter { $0.status == BookStatus.donated.rawValue }
-            : books.filter { $0.status != BookStatus.donated.rawValue }
+        let visible = books.filter { $0.status != BookStatus.donated.rawValue }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         let searched: [Book]
         if query.isEmpty {
@@ -85,9 +82,7 @@ struct LibraryView: View {
     }
 
     private var visibleBooks: [Book] {
-        showingDonated
-            ? books.filter { $0.status == BookStatus.donated.rawValue }
-            : books.filter { $0.status != BookStatus.donated.rawValue }
+        books.filter { $0.status != BookStatus.donated.rawValue }
     }
 
     private var allAuthors: [String] {
@@ -129,7 +124,7 @@ struct LibraryView: View {
                     }
                     Button("Clear author") { filterAuthor = nil }
                 } label: {
-                    Label("Author", systemImage: "person")
+                    Label(filterAuthor ?? "Author", systemImage: "person")
                 }
                 Menu {
                     Picker("Genre", selection: $filterGenre) {
@@ -140,11 +135,8 @@ struct LibraryView: View {
                     }
                     Button("Clear genre") { filterGenre = nil }
                 } label: {
-                    Label("Genre", systemImage: "tag")
+                    Label(filterGenre ?? "Genre", systemImage: "tag")
                 }
-            }
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                donatedToggle
             }
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -180,30 +172,6 @@ struct LibraryView: View {
         .fixedSize()
     }
 
-    private var donatedToggle: some View {
-        Menu {
-            Button {
-                showingDonated = false
-            } label: {
-                if !showingDonated {
-                    Label("Library", systemImage: "checkmark")
-                } else {
-                    Label("Library", systemImage: "books.vertical")
-                }
-            }
-            Button {
-                showingDonated = true
-            } label: {
-                if showingDonated {
-                    Label("Donated", systemImage: "checkmark")
-                } else {
-                    Label("Donated", systemImage: "gift")
-                }
-            }
-        } label: {
-            Label(showingDonated ? "Donated" : "Library", systemImage: showingDonated ? "gift" : "books.vertical")
-        }
-    }
 
     // MARK: - Grid
 

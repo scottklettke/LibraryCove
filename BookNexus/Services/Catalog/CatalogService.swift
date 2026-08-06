@@ -10,10 +10,11 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable {
     let genres: [String]
     let publisher: String?
     let pageCount: Int?
-    let description: String?
+    var description: String?
     let language: String?
     /// Multiple available cover image URLs (thumbnails / full size).
     let coverURLs: [String]
+    var descriptionSource: String?
     let source: String
 
     var authorsText: String { authors.isEmpty ? "Unknown" : authors.joined(separator: ", ") }
@@ -77,7 +78,8 @@ final class OpenLibraryService: CatalogService {
                 description: nil,
                 language: languageList.first,
                 coverURLs: [coverURL].compactMap { $0 },
-                source: "openlibrary"
+                descriptionSource: nil,
+            source: "openlibrary"
             ))
         }
 
@@ -122,6 +124,7 @@ final class OpenLibraryService: CatalogService {
                 description: description,
                 language: books[index].language,
                 coverURLs: covers,
+                descriptionSource: gb["description"] != nil ? "googlebooks" : books[index].descriptionSource,
                 source: books[index].source
             )
         }
@@ -164,6 +167,7 @@ final class OpenLibraryService: CatalogService {
             description: book?["description"] as? String,
             language: nil,
             coverURLs: [coverURL].compactMap { $0 },
+            descriptionSource: "openlibrary",
             source: "openlibrary"
         )
 
@@ -183,7 +187,8 @@ final class OpenLibraryService: CatalogService {
                     description: gb["description"] as? String,
                     language: nil,
                     coverURLs: [gb["thumbnail"], gb["large"]].compactMap { $0 as? String },
-                    source: "googlebooks"
+                    descriptionSource: "googlebooks",
+                source: "googlebooks"
                 )
             }
         } else if let gb = await googleResult(isbn: cleaned) {
@@ -208,6 +213,7 @@ final class OpenLibraryService: CatalogService {
                 description: description,
                 language: catalog.language,
                 coverURLs: covers,
+                descriptionSource: gb["description"] != nil ? "googlebooks" : catalog.descriptionSource,
                 source: catalog.source
             )
         }
@@ -225,9 +231,15 @@ final class OpenLibraryService: CatalogService {
                 description: workDesc,
                 language: catalog.language,
                 coverURLs: catalog.coverURLs,
+                descriptionSource: "openlibrary",
                 source: catalog.source
             )
         }
+
+            if catalog.description == nil, let wikiDesc = await fetchWikipediaDescription(for: catalog.title, authors: catalog.authors) {
+                catalog.description = wikiDesc
+                catalog.descriptionSource = "wikipedia"
+            }
 
         return catalog.title.isEmpty ? nil : catalog
     }
@@ -350,7 +362,55 @@ final class OpenLibraryService: CatalogService {
         return Int(first)
     }
 
-    static func truncate(_ s: String, to limit: Int = 2000) -> String {
+    /// Fetch a longer description from Wikipedia when OpenLibrary/Google return none.
+    private func fetchWikipediaDescription(for title: String, authors: [String]) async -> String? {
+        var searchComponents = URLComponents(string: "https://en.wikipedia.org/w/api.php")!
+        var query = title
+        if let first = authors.first {
+            query += " " + first
+        }
+        searchComponents.queryItems = [
+            URLQueryItem(name: "action", value: "query"),
+            URLQueryItem(name: "list", value: "search"),
+            URLQueryItem(name: "srsearch", value: query),
+            URLQueryItem(name: "srlimit", value: "1"),
+            URLQueryItem(name: "format", value: "json"),
+        ]
+        guard let searchURL = searchComponents.url else { return nil }
+
+        do {
+            let (data, response) = try await session.data(from: searchURL)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let queryResult = json["query"] as? [String: Any],
+                  let search = queryResult["search"] as? [[String: Any]],
+                  let first = search.first, let pageTitle = first["title"] as? String else { return nil }
+
+            var extractComponents = URLComponents(string: "https://en.wikipedia.org/w/api.php")!
+            extractComponents.queryItems = [
+                URLQueryItem(name: "action", value: "query"),
+                URLQueryItem(name: "prop", value: "extracts"),
+                URLQueryItem(name: "exintro", value: "true"),
+                URLQueryItem(name: "explaintext", value: "true"),
+                URLQueryItem(name: "titles", value: pageTitle),
+                URLQueryItem(name: "format", value: "json"),
+            ]
+            guard let extractURL = extractComponents.url else { return nil }
+            let (extractData, extractResponse) = try await session.data(from: extractURL)
+            guard let extractHTTP = extractResponse as? HTTPURLResponse, extractHTTP.statusCode == 200,
+                  let extractJSON = try? JSONSerialization.jsonObject(with: extractData) as? [String: Any],
+                  let pages = extractJSON["query"] as? [String: Any] else { return nil }
+            let pagesDict = pages["pages"] as? [String: Any]
+            guard let pagesDict else { return nil }
+            let page = pagesDict.values.compactMap { $0 as? [String: Any] }.first
+            let extract = page?["extract"] as? String
+            return extract.map { Self.truncate($0) }
+        } catch {
+            return nil
+        }
+    }
+
+    static func truncate(_ s: String, to limit: Int = 20000) -> String {
         if s.count <= limit { return s }
         return String(s.prefix(limit))
     }

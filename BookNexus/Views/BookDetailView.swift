@@ -82,6 +82,11 @@ struct BookDetailView: View {
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)
+                if book.descriptionSource != "none" {
+                    LabeledContent("Source", value: sourceLabel(book.descriptionSource))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -126,5 +131,13 @@ struct BookDetailView: View {
         modelContext.insert(note)
         try? modelContext.save()
         newNoteText = ""
+    }
+    private func sourceLabel(_ source: String) -> String {
+        switch source {
+        case "wikipedia": return "Wikipedia"
+        case "googlebooks": return "Google Books"
+        case "openlibrary": return "Open Library"
+        default: return source
+        }
     }
 }

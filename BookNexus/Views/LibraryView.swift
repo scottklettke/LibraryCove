@@ -41,6 +41,7 @@ struct LibraryView: View {
                 book.authorsText,
                 book.genres.joined(separator: " "),
                 book.physicalLocation ?? "",
+                book.bookDescription ?? "",
                 book.notes.map(\.content).joined(separator: " ")
             ].joined(separator: " ").lowercased()
             return haystack.contains(query.lowercased())

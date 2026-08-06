@@ -15,6 +15,7 @@ final class Book {
     var publisher: String?
     var pageCount: Int?
     var bookDescription: String?
+    var descriptionSource: String  // openlibrary | googlebooks | wikipedia | none
     var language: String?
     var physicalLocation: String?
     var status: String  // reading | to-read | completed | donated
@@ -61,6 +62,7 @@ final class Book {
         publisher: String? = nil,
         pageCount: Int? = nil,
         bookDescription: String? = nil,
+        descriptionSource: String = "none",
         language: String? = nil,
         physicalLocation: String? = nil,
         status: String = "to-read",
@@ -88,6 +90,7 @@ final class Book {
         self.publisher = publisher
         self.pageCount = pageCount
         self.bookDescription = bookDescription
+        self.descriptionSource = descriptionSource
         self.language = language
         self.physicalLocation = physicalLocation
         self.status = status

@@ -1,0 +1,24 @@
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.moved aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.o
+
+# Swift
+*.build/
+.build/
+
+# Package
+.swiftpm/
+
+# Git
+.DS_Store
+
+# BookNexus specific
+BookNexus.xcodeproj/project.xcworkspace/xcuserdata/
+BookNexus.xcodeproj/xcuserdata/

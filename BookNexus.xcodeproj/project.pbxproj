@@ -1,0 +1,659 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */; };
+		23446AA2093D6D1DF964DCE2 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BECBAE066EF4A05F33A7576 /* Persistence.swift */; };
+		3E1B70428ED02FC7ADECABA2 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479F167FA4D4909D64A9776B /* LibraryView.swift */; };
+		487826298A0FC7013B446583 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F1799A7E99E9EE23090A3F /* User.swift */; };
+		4DED8832C0944E3A26296EF8 /* BookNexusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */; };
+		57E31A54F5DC33D83BCD4432 /* CatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */; };
+		74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19F634236D2E25996ABFAF7E /* AuthService.swift */; };
+		7E2FA0F74EC58B2CD575BCC0 /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4081CCAF7239F1FEE720B2ED /* Connection.swift */; };
+		8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C1DCDE47ED67E664790114 /* Book.swift */; };
+		95AB138620E3799EAC0D17FD /* BookNexusUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */; };
+		AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */; };
+		AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7A776C41705A6CB7A15A49 /* RootView.swift */; };
+		AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E94C93E532B33EA592F1EB /* Note.swift */; };
+		C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142ED389ED138762597BEC0F /* SettingsView.swift */; };
+		D4D62FC90B2D9F5728F3F42D /* InferenceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FF9D2FA28C5B44002958A93 /* InferenceProvider.swift */; };
+		E953E8BE36ABF0C51F8F84E2 /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D0B3560429372162C83A82A /* ReadingList.swift */; };
+		F1FFA880481D050874F2CC74 /* SyncProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */; };
+		72C49FD85C0F196EB32264B4 /* AddBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85DE1F2688451C61ADC99E4 /* AddBookView.swift */; };
+		87637331719EF5D87E26E772 /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F65CDCD22F379C4D7B16BEF /* BookDetailView.swift */; };
+		E55A5E8409C8F6C2EF97681A /* BookFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC43B795199B82492900CF3 /* BookFormView.swift */; };
+		E5ED765192B6F57DC329363E /* ISBNScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E658096083D90C7E5506166 /* ISBNScannerView.swift */; };
+		9C34AB9D3FFAFA154EDF9F19 /* LocationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AE7C6BC36EFDF6FC7D271E /* LocationStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		12FE55AE726CD10BF3907BB4 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D8DA322D3B87A0FC45490C8F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 57972BB0464D334D5C67DB16;
+			remoteInfo = BookNexus;
+		};
+		1DB423A3293D46B711FD6D35 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D8DA322D3B87A0FC45490C8F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 57972BB0464D334D5C67DB16;
+			remoteInfo = BookNexus;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		07E94C93E532B33EA592F1EB /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
+		142ED389ED138762597BEC0F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		19F634236D2E25996ABFAF7E /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusUITests.swift; sourceTree = "<group>"; };
+		2D0B3560429372162C83A82A /* ReadingList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingList.swift; sourceTree = "<group>"; };
+		2FF9D2FA28C5B44002958A93 /* InferenceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceProvider.swift; sourceTree = "<group>"; };
+		3BECBAE066EF4A05F33A7576 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
+		4081CCAF7239F1FEE720B2ED /* Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
+		40C1DCDE47ED67E664790114 /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
+		479F167FA4D4909D64A9776B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProvider.swift; sourceTree = "<group>"; };
+		65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusTests.swift; sourceTree = "<group>"; };
+		8B7A776C41705A6CB7A15A49 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
+		941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusApp.swift; sourceTree = "<group>"; };
+		BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogService.swift; sourceTree = "<group>"; };
+		D9F1799A7E99E9EE23090A3F /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C85DE1F2688451C61ADC99E4 /* AddBookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AddBookView.swift"; sourceTree = "<group>"; };
+		4F65CDCD22F379C4D7B16BEF /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BookDetailView.swift"; sourceTree = "<group>"; };
+		4AC43B795199B82492900CF3 /* BookFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BookFormView.swift"; sourceTree = "<group>"; };
+		5E658096083D90C7E5506166 /* ISBNScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ISBNScannerView.swift"; sourceTree = "<group>"; };
+		D4AE7C6BC36EFDF6FC7D271E /* LocationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocationStore.swift"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0D0800773FE3195EA9A3C758 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */,
+			);
+			path = Sync;
+			sourceTree = "<group>";
+		};
+		1155CBDF4A99BCD54EECB555 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				479F167FA4D4909D64A9776B /* LibraryView.swift */,
+				8B7A776C41705A6CB7A15A49 /* RootView.swift */,
+				142ED389ED138762597BEC0F /* SettingsView.swift */,
+			
+				C85DE1F2688451C61ADC99E4 /* AddBookView.swift */,
+				4F65CDCD22F379C4D7B16BEF /* BookDetailView.swift */,
+				4AC43B795199B82492900CF3 /* BookFormView.swift */,
+				5E658096083D90C7E5506166 /* ISBNScannerView.swift */,);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		11AF671194A960017AA6A1A9 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		13C4D610BC8DB05B4453BF2A = {
+			isa = PBXGroup;
+			children = (
+				81FA1011C8BB955023DD5549 /* BookNexus */,
+				990A166765E29A475B0897F4 /* BookNexusTests */,
+				DBEA881FE7C1BB933D618633 /* BookNexusUITests */,
+				CE2CBA910F2864DF9ED24313 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		36C7F8DD9CEF6776262061DD /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				19F634236D2E25996ABFAF7E /* AuthService.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		3B53E736B9ABE352CFC5DB3C /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				40C1DCDE47ED67E664790114 /* Book.swift */,
+				4081CCAF7239F1FEE720B2ED /* Connection.swift */,
+				07E94C93E532B33EA592F1EB /* Note.swift */,
+				2D0B3560429372162C83A82A /* ReadingList.swift */,
+				D9F1799A7E99E9EE23090A3F /* User.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		81FA1011C8BB955023DD5549 /* BookNexus */ = {
+			isa = PBXGroup;
+			children = (
+				B148346CD3999133276391B6 /* App */,
+				3B53E736B9ABE352CFC5DB3C /* Models */,
+				DDBC7675668DC9B7246D5775 /* Persistence */,
+				F6590F32A3001250A4C8E305 /* Services */,
+				11AF671194A960017AA6A1A9 /* ViewModels */,
+				1155CBDF4A99BCD54EECB555 /* Views */,
+			);
+			path = BookNexus;
+			sourceTree = "<group>";
+		};
+		990A166765E29A475B0897F4 /* BookNexusTests */ = {
+			isa = PBXGroup;
+			children = (
+				65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */,
+			);
+			path = BookNexusTests;
+			sourceTree = "<group>";
+		};
+		B148346CD3999133276391B6 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		CE2CBA910F2864DF9ED24313 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F9A0A589327811D6BC0451EC /* BookNexus.app */,
+				E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */,
+				E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D210360B8AA99C125E5896FB /* AI */ = {
+			isa = PBXGroup;
+			children = (
+				2FF9D2FA28C5B44002958A93 /* InferenceProvider.swift */,
+			);
+			path = AI;
+			sourceTree = "<group>";
+		};
+		DBEA881FE7C1BB933D618633 /* BookNexusUITests */ = {
+			isa = PBXGroup;
+			children = (
+				1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */,
+			);
+			path = BookNexusUITests;
+			sourceTree = "<group>";
+		};
+		DDBC7675668DC9B7246D5775 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				3BECBAE066EF4A05F33A7576 /* Persistence.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
+		F0007BCC6179F88F3F5B1096 /* Catalog */ = {
+			isa = PBXGroup;
+			children = (
+				BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */,
+			
+				D4AE7C6BC36EFDF6FC7D271E /* LocationStore.swift */,);
+			path = Catalog;
+			sourceTree = "<group>";
+		};
+		F6590F32A3001250A4C8E305 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				D210360B8AA99C125E5896FB /* AI */,
+				36C7F8DD9CEF6776262061DD /* Auth */,
+				F0007BCC6179F88F3F5B1096 /* Catalog */,
+				0D0800773FE3195EA9A3C758 /* Sync */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		4AAD42513A6DD7710A68C615 /* BookNexusTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF86E281206D389382DC565A /* Build configuration list for PBXNativeTarget "BookNexusTests" */;
+			buildPhases = (
+				F8E52D5D0799C1056DC4692A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5AF2E46103574E65ADD7830E /* PBXTargetDependency */,
+			);
+			name = BookNexusTests;
+			packageProductDependencies = (
+			);
+			productName = BookNexusTests;
+			productReference = E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		57972BB0464D334D5C67DB16 /* BookNexus */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 581433FB435D130F5B035740 /* Build configuration list for PBXNativeTarget "BookNexus" */;
+			buildPhases = (
+				6692F37246D9BB2FC7A1C21A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BookNexus;
+			packageProductDependencies = (
+			);
+			productName = BookNexus;
+			productReference = F9A0A589327811D6BC0451EC /* BookNexus.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DEF9BD143A5A27770D12D263 /* BookNexusUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 19937C54C5AB7FD3C325C106 /* Build configuration list for PBXNativeTarget "BookNexusUITests" */;
+			buildPhases = (
+				DFECA4BA0AF8D69C8A0534DB /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				441C4E17642F77420DAD757D /* PBXTargetDependency */,
+			);
+			name = BookNexusUITests;
+			packageProductDependencies = (
+			);
+			productName = BookNexusUITests;
+			productReference = E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D8DA322D3B87A0FC45490C8F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2650;
+				TargetAttributes = {
+					DEF9BD143A5A27770D12D263 = {
+						TestTargetID = 57972BB0464D334D5C67DB16;
+					};
+				};
+			};
+			buildConfigurationList = 8DEC121DFD3CA48429FF23B2 /* Build configuration list for PBXProject "BookNexus" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 13C4D610BC8DB05B4453BF2A;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CE2CBA910F2864DF9ED24313 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				57972BB0464D334D5C67DB16 /* BookNexus */,
+				4AAD42513A6DD7710A68C615 /* BookNexusTests */,
+				DEF9BD143A5A27770D12D263 /* BookNexusUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6692F37246D9BB2FC7A1C21A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */,
+				8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */,
+				4DED8832C0944E3A26296EF8 /* BookNexusApp.swift in Sources */,
+				57E31A54F5DC33D83BCD4432 /* CatalogService.swift in Sources */,
+				7E2FA0F74EC58B2CD575BCC0 /* Connection.swift in Sources */,
+				D4D62FC90B2D9F5728F3F42D /* InferenceProvider.swift in Sources */,
+				3E1B70428ED02FC7ADECABA2 /* LibraryView.swift in Sources */,
+				213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */,
+				AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */,
+				23446AA2093D6D1DF964DCE2 /* Persistence.swift in Sources */,
+				E953E8BE36ABF0C51F8F84E2 /* ReadingList.swift in Sources */,
+				AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */,
+				C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */,
+				F1FFA880481D050874F2CC74 /* SyncProvider.swift in Sources */,
+				487826298A0FC7013B446583 /* User.swift in Sources */,
+			
+				72C49FD85C0F196EB32264B4 /* AddBookView.swift in Sources */,
+				87637331719EF5D87E26E772 /* BookDetailView.swift in Sources */,
+				E55A5E8409C8F6C2EF97681A /* BookFormView.swift in Sources */,
+				E5ED765192B6F57DC329363E /* ISBNScannerView.swift in Sources */,
+				9C34AB9D3FFAFA154EDF9F19 /* LocationStore.swift in Sources */,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DFECA4BA0AF8D69C8A0534DB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				95AB138620E3799EAC0D17FD /* BookNexusUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F8E52D5D0799C1056DC4692A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		441C4E17642F77420DAD757D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 57972BB0464D334D5C67DB16 /* BookNexus */;
+			targetProxy = 1DB423A3293D46B711FD6D35 /* PBXContainerItemProxy */;
+		};
+		5AF2E46103574E65ADD7830E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 57972BB0464D334D5C67DB16 /* BookNexus */;
+			targetProxy = 12FE55AE726CD10BF3907BB4 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2B03EE1179FBC4DE51A483C0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited,,,,,,,,,,)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.booknexus.BookNexusUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = BookNexus;
+			};
+			name = Release;
+		};
+		56D664863942A693E083EAA9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 5F86DRD856;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "BookNexus uses the camera to scan ISBN barcodes on books.";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.booknexus.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		7493DDB158DCC67C6221967B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.booknexus.BookNexusUITests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = BookNexus;
+			};
+			name = Debug;
+		};
+		814184B7673542949F6D5403 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.booknexus.BookNexusTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BookNexus.app/BookNexus";
+			};
+			name = Release;
+		};
+		874FCA860A845E81C5FAE1E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_AGREEMENT = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B6E440254A16A184976FCFA8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.booknexus.BookNexusTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BookNexus.app/BookNexus";
+			};
+			name = Debug;
+		};
+		BE334BBADAB3BB60867D3409 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_AGREEMENT = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		DD25C9D179FAAC2D2F3447A6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 5F86DRD856;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "BookNexus uses the camera to scan ISBN barcodes on books.";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.booknexus.app;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		19937C54C5AB7FD3C325C106 /* Build configuration list for PBXNativeTarget "BookNexusUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7493DDB158DCC67C6221967B /* Debug */,
+				2B03EE1179FBC4DE51A483C0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		581433FB435D130F5B035740 /* Build configuration list for PBXNativeTarget "BookNexus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				56D664863942A693E083EAA9 /* Debug */,
+				DD25C9D179FAAC2D2F3447A6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8DEC121DFD3CA48429FF23B2 /* Build configuration list for PBXProject "BookNexus" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				874FCA860A845E81C5FAE1E8 /* Debug */,
+				BE334BBADAB3BB60867D3409 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FF86E281206D389382DC565A /* Build configuration list for PBXNativeTarget "BookNexusTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6E440254A16A184976FCFA8 /* Debug */,
+				814184B7673542949F6D5403 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D8DA322D3B87A0FC45490C8F /* Project object */;
+}

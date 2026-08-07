@@ -131,7 +131,7 @@ struct AddBookView: View {
             } else {
                 if searchText.isEmpty && !isSearching {
                     if !searchHistory.isEmpty {
-                        Section("Recent searches") {
+                        Section {
                             ForEach(searchHistory, id: \.self) { query in
                                 Button {
                                     runSearch(query)
@@ -142,6 +142,15 @@ struct AddBookView: View {
                                         Text(query)
                                         Spacer()
                                     }
+                                }
+                            }
+                        } header: {
+                            HStack {
+                                Text("Recent searches")
+                                Spacer()
+                                Button("Clear") {
+                                    searchHistory = []
+                                    saveSearchHistory([])
                                 }
                             }
                         }

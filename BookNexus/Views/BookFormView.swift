@@ -38,6 +38,7 @@ struct BookFormView: View {
     @State private var selectedCover: String?
     @State private var selectedPhotoCover: String?
     @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
     @State private var locationStore = LocationStore()
     @State private var genreStore = GenreStore()
     @State private var genreQuery = ""
@@ -97,6 +98,15 @@ struct BookFormView: View {
         .task {
             if catalog != nil && description.isEmpty {
                 await fetchDescription()
+            }
+        }
+        .sheet(isPresented: $showCamera) {
+            CameraPicker { image in
+                let shrunk = shrinkImage(image, maxDimension: 900)
+                guard let jpeg = shrunk.jpegData(compressionQuality: 0.8) else { return }
+                let base64 = jpeg.base64EncodedString()
+                selectedPhotoCover = "data:image/jpeg;base64," + base64
+                selectedCover = nil
             }
         }
         .toolbar {
@@ -193,6 +203,20 @@ struct BookFormView: View {
                 .onChange(of: photoItem) { _, item in
                     Task { await loadPhoto(item) }
                 }
+                Button {
+                    showCamera = true
+                } label: {
+                    VStack {
+                        Image(systemName: "camera")
+                            .font(.title2)
+                        Text("Take photo")
+                            .font(.caption2)
+                    }
+                    .frame(width: 68, height: 100)
+                    .background(.quaternary.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
         } header: {
             Text("Cover")
@@ -448,6 +472,7 @@ struct BookFormView: View {
         if let publisher = found.publisher { publisherText = publisher }
         if let pages = found.pageCount { pageCountText = String(pages) }
         if let year = found.publicationYear { yearText = String(year) }
+        if !found.coverURLs.isEmpty { coverURLs = found.coverURLs }
     }
 
     private var catalogISBN: String? {
@@ -619,6 +644,43 @@ struct RatingPicker: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+}
+
+/// Camera capture wrapper for taking a photo on the spot.
+private struct CameraPicker: UIViewControllerRepresentable {
+    @Environment(\.dismiss) private var dismiss
+    let onImage: (UIImage) -> Void
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: CameraPicker
+        init(parent: CameraPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImage(image)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }

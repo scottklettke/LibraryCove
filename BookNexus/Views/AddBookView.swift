@@ -35,19 +35,8 @@ struct AddBookView: View {
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("Add a book")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .navigation) {
-                    Menu {
-                        Picker("Source", selection: $descriptionSource) {
-                            ForEach(DescriptionSource.allCases) { source in
-                                Text(source.displayName).tag(source)
-                            }
-                        }
-                    } label: {
-                        Label("Source", systemImage: "book.closed")
-                    }
-                }
-                ToolbarItemGroup(placement: .primaryAction) {
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         showScanner = true
                     } label: {

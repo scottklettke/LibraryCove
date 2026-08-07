@@ -8,6 +8,7 @@ struct AddBookView: View {
     @State private var catalog: CatalogService = OpenLibraryService()
     @State private var searchText = ""
     @State private var results: [CatalogBook] = []
+    @State private var hasSearched = false
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var selectedResult: CatalogBook?
@@ -94,6 +95,7 @@ struct AddBookView: View {
                 Button {
                     searchText = ""
                     results = []
+                    hasSearched = false
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
@@ -117,7 +119,7 @@ struct AddBookView: View {
                     } description: {
                         Text("Searching for \"\(searchText)\"…")
                     }
-                } else {
+                } else if hasSearched {
                     ContentUnavailableView(
                         "No books found",
                         systemImage: "magnifyingglass",
@@ -157,14 +159,16 @@ struct AddBookView: View {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else {
             results = []
+            hasSearched = false
             return
         }
         isSearching = true
         errorMessage = nil
-        defer { isSearching = false }
+        defer { isSearching = false; hasSearched = true }
         do {
             results = try await catalog.search(query: query, preferred: descriptionSource)
         } catch {
+            results = []
             errorMessage = "Search failed: \(error.localizedDescription)"
         }
     }

@@ -110,11 +110,20 @@ struct AddBookView: View {
     private var resultsList: some View {
         List {
             if results.isEmpty && !searchText.isEmpty {
-                ContentUnavailableView(
-                    "No results",
-                    systemImage: "books.vertical",
-                    description: Text("Try a different title or author.")
-                )
+                if isSearching {
+                    ContentUnavailableView {
+                        ProgressView()
+                            .controlSize(.large)
+                    } description: {
+                        Text("Searching for \"\(searchText)\"…")
+                    }
+                } else {
+                    ContentUnavailableView(
+                        "No books found",
+                        systemImage: "magnifyingglass",
+                        description: Text("Try a different title or author.")
+                    )
+                }
             } else {
                 ForEach(results) { result in
                     Button {

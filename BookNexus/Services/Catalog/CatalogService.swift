@@ -98,59 +98,6 @@ final class OpenLibraryService: CatalogService {
             ))
         }
 
-        // Enrich the top result(s) with Google Books descriptions + extra covers.
-        let enriched = await withTaskGroup(of: (Int, [String: Any]).self) { group in
-            var results: [(Int, [String: Any])] = []
-            let count = min(books.count, 4)
-            for i in 0..<count {
-                group.addTask {
-                    let book = books[i]
-                    let gb = await self.googleResult(for: book.title, authors: book.authors)
-                    return (i, gb ?? [:])
-                }
-            }
-            for await result in group {
-                results.append(result)
-            }
-            return results
-        }
-
-        for (index, gb) in enriched {
-            if gb.isEmpty { continue }
-            var covers = books[index].coverURLs
-            if let thumb = gb["thumbnail"] as? String { covers.append(thumb) }
-            if let large = gb["large"] as? String { covers.append(large) }
-            let description = gb["description"] as? String ?? books[index].description
-            let genres = gb["categories"] as? [String] ?? books[index].genres
-            let isbn = gb["isbn"] as? String ?? books[index].isbn
-            let publisher = gb["publisher"] as? String ?? books[index].publisher
-            let pageCount = gb["pageCount"] as? Int ?? books[index].pageCount
-            let year = gb["year"] as? Int ?? books[index].publicationYear
-
-            books[index] = CatalogBook(
-                id: books[index].id,
-                title: books[index].title,
-                authors: books[index].authors,
-                isbn: isbn,
-                publicationYear: year,
-                genres: genres,
-                publisher: publisher,
-                pageCount: pageCount,
-                description: description,
-                language: books[index].language,
-                coverURLs: covers,
-                descriptionSource: gb["description"] != nil ? "googlebooks" : books[index].descriptionSource,
-                source: books[index].source
-            )
-        }
-
-        // Fill in missing descriptions using the preferred source.
-        for i in books.indices where books[i].description == nil {
-            if let desc = await fetchDescription(for: books[i].title, authors: books[i].authors, preferred: preferred) {
-                books[i].description = desc
-                books[i].descriptionSource = preferred.rawValue
-            }
-        }
         return books
     }
 

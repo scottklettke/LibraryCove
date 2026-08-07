@@ -408,12 +408,16 @@ struct BookFormView: View {
             result = nil
         }
 
-        guard let found = result, let newDescription = found.description, !newDescription.isEmpty else {
-            fetchError = "No description found for this book."
+        guard let found = result else {
+            fetchError = "No details found for this book."
             return
         }
 
-        description = newDescription
+        if let newDescription = found.description { description = newDescription }
+        if !found.genres.isEmpty { genresText = found.genres.joined(separator: ", ") }
+        if let publisher = found.publisher { publisherText = publisher }
+        if let pages = found.pageCount { pageCountText = String(pages) }
+        if let year = found.publicationYear { yearText = String(year) }
     }
 
     private var catalogISBN: String? {

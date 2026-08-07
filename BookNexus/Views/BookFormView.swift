@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 /// Import a catalog result into the library.
 struct BookImportView: View {
@@ -35,6 +36,8 @@ struct BookFormView: View {
     @State private var rating: Int?
     @State private var coverURLs: [String] = []
     @State private var selectedCover: String?
+    @State private var selectedPhotoCover: String?
+    @State private var photoItem: PhotosPickerItem?
     @State private var locationStore = LocationStore()
     @State private var genreStore = GenreStore()
     @State private var genreQuery = ""
@@ -162,6 +165,33 @@ struct BookFormView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                }
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    if let cover = selectedPhotoCover, let url = URL(string: cover) {
+                        AsyncCoverView(url: url, width: 68, height: 100)
+                            .overlay(alignment: .bottomTrailing) {
+                                Image(systemName: "pencil.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.white, .blue)
+                            }
+                    } else {
+                        VStack {
+                            Image(systemName: "photo.on.rectangle")
+                                .font(.title2)
+                            Text("Photo")
+                                .font(.caption2)
+                        }
+                        .frame(width: 68, height: 100)
+                        .background(.quaternary.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .overlay(alignment: .bottomTrailing) {
+                            Image(systemName: "plus.circle.fill")
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .onChange(of: photoItem) { _, item in
+                    Task { await loadPhoto(item) }
                 }
             }
         } header: {
@@ -470,6 +500,32 @@ struct BookFormView: View {
         onDeleted()
     }
 
+    private func loadPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            guard let image = UIImage(data: data) else { return }
+            let shrunk = shrinkImage(image, maxDimension: 900)
+            guard let jpeg = shrunk.jpegData(compressionQuality: 0.8) else { return }
+            let base64 = jpeg.base64EncodedString()
+            selectedPhotoCover = "data:image/jpeg;base64," + base64
+            selectedCover = nil
+        } catch {
+        }
+    }
+
+    private func shrinkImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let maxSide = max(size.width, size.height)
+        guard maxSide > maxDimension else { return image }
+        let scale = maxDimension / maxSide
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let resized = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+        return resized
+    }
     private func save() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
@@ -482,7 +538,7 @@ struct BookFormView: View {
             locationStore.add(location)
         }
 
-        let cover = selectedCover ?? existing?.coverImageURL
+        let cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
 
         if let existing {
             existing.title = trimmedTitle

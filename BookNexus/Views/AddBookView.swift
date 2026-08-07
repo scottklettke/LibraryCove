@@ -407,27 +407,41 @@ struct AsyncCoverView: View {
     }
 
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color(uiColor: .secondarySystemFill))
-            if let url {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
+        if let url {
+            if url.absoluteString.hasPrefix("data:") {
+                if let ui = imageFromDataURL(url) {
+                    Image(uiImage: ui).resizable().scaledToFill()
                         .frame(width: width, height: height)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                } placeholder: {
+                } else {
                     Placeholder
                 }
             } else {
-                Placeholder
+                AsyncImage(url: url, transaction: Transaction()) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        Placeholder
+                    default:
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
+        } else {
+            Placeholder
         }
-        .frame(width: width, height: height)
-        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 1)
     }
 
+    private func imageFromDataURL(_ url: URL) -> UIImage? {
+        let str = url.absoluteString
+        guard let comma = str.firstIndex(of: ",") else { return nil }
+        let base64 = str[str.index(after: comma)...]
+        guard let data = Data(base64Encoded: String(base64)) else { return nil }
+        return UIImage(data: data)
+    }
     private var Placeholder: some View {
         VStack(spacing: 4) {
             Image(systemName: "book.closed")

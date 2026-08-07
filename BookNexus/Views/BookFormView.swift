@@ -20,6 +20,7 @@ struct BookFormView: View {
     let catalog: CatalogBook?
     var existing: Book?
     var onSaved: () -> Void = {}
+    var onDeleted: () -> Void = {}
     var dismissOnSave: Bool = true
 
     @State private var title = ""
@@ -46,10 +47,11 @@ struct BookFormView: View {
     @State private var showDeleteConfirmation = false
     @State private var pendingInsertBook: Book?
 
-    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
+    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
         self.catalog = catalog
         self.existing = existing
         self.onSaved = onSaved
+        self.onDeleted = onDeleted
         self.dismissOnSave = dismissOnSave
         _status = State(initialValue: existing?.statusEnum ?? .toRead)
         _rating = State(initialValue: existing?.rating)
@@ -461,6 +463,7 @@ struct BookFormView: View {
         modelContext.delete(book)
         try? modelContext.save()
         dismiss()
+        onDeleted()
     }
 
     private func save() {

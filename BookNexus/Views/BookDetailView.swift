@@ -4,6 +4,7 @@ import SwiftData
 /// Detail view for a single book: info, notes, edit.
 struct BookDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     let book: Book
 
     @State private var showEdit = false
@@ -15,6 +16,7 @@ struct BookDetailView: View {
         List {
             headerSection
             infoSection
+            copiesSection
             notesSection
         }
         .navigationTitle(book.title)
@@ -30,9 +32,44 @@ struct BookDetailView: View {
         }
         .sheet(isPresented: $showEdit) {
             NavigationStack {
-                BookFormView(catalog: nil, existing: book)
+                BookFormView(catalog: nil, existing: book, onDeleted: {
+                    showEdit = false
+                    dismiss()
+                })
             }
         }
+    }
+
+    private var copiesSection: some View {
+        let key = book.isbn
+        let copies: [Book]
+        if let key, !key.isEmpty {
+            copies = allCopies(isbn: key)
+        } else {
+            copies = allCopies(title: book.title)
+        }
+        guard copies.count > 1 else { return AnyView(EmptyView()) }
+        return AnyView(
+            Section("Copies") {
+                ForEach(copies) { copy in
+                    LabeledContent(copy.physicalLocation ?? "Unplaced") {
+                        Text(copy.createdAt, style: .date)
+                    }
+                }
+            }
+        )
+    }
+
+    private func allCopies(isbn: String) -> [Book] {
+        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.isbn == isbn })
+        guard let list = try? modelContext.fetch(descriptor) else { return [] }
+        return list.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    private func allCopies(title: String) -> [Book] {
+        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.title == title })
+        guard let list = try? modelContext.fetch(descriptor) else { return [] }
+        return list.sorted { $0.createdAt < $1.createdAt }
     }
 
     private var headerSection: some View {

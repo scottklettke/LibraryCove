@@ -4,6 +4,7 @@ import SwiftData
 /// Add a book: search the catalog, scan an ISBN, or import a result.
 struct AddBookView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @State private var catalog: CatalogService = OpenLibraryService()
     @State private var searchText = ""
     @State private var results: [CatalogBook] = []
@@ -67,7 +68,10 @@ struct AddBookView: View {
                 BookImportView(catalog: result)
             }
             .sheet(isPresented: $showImportFlow) {
-                BookImportFlow(queue: importQueue)
+                BookImportFlow(queue: importQueue, onDone: {
+                    showImportFlow = false
+                    dismiss()
+                })
             }
             .onAppear {
                 buildExistingSet()
@@ -396,8 +400,10 @@ struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: [CatalogBook] = []
     @State private var currentID: String?
+    var onDone: () -> Void = {}
 
-    init(queue: [CatalogBook]) {
+    init(queue: [CatalogBook], onDone: @escaping () -> Void = {}) {
+        self.onDone = onDone
         _remaining = State(initialValue: queue)
         _currentID = State(initialValue: queue.first?.id)
     }
@@ -435,7 +441,7 @@ struct BookImportFlow: View {
     private func handleSaved(_ id: String) {
         remaining.removeAll { $0.id == id }
         if remaining.isEmpty {
-            dismiss()
+            onDone()
         } else {
             currentID = remaining.first?.id
         }

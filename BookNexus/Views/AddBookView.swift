@@ -1,6 +1,18 @@
 import SwiftUI
 import SwiftData
 
+private func loadSearchHistory() -> [String] {
+    guard let data = UserDefaults.standard.data(forKey: "searchHistory"),
+          let list = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+    return list
+}
+
+private func saveSearchHistory(_ history: [String]) {
+    if let data = try? JSONEncoder().encode(history) {
+        UserDefaults.standard.set(data, forKey: "searchHistory")
+    }
+}
+
 /// Add a book: search the catalog, scan an ISBN, or import a result.
 struct AddBookView: View {
     @Environment(\.modelContext) private var modelContext
@@ -18,6 +30,7 @@ struct AddBookView: View {
     @State private var importQueue = [CatalogBook]()
     @State private var showImportFlow = false
     @State private var existingIsbns = Set<String>()
+    @State private var searchHistory: [String] = loadSearchHistory()
 
     var body: some View {
         NavigationStack {
@@ -116,7 +129,25 @@ struct AddBookView: View {
                     )
                 }
             } else {
-                ForEach(results) { result in
+                if searchText.isEmpty && !isSearching {
+                    if !searchHistory.isEmpty {
+                        Section("Recent searches") {
+                            ForEach(searchHistory, id: \.self) { query in
+                                Button {
+                                    runSearch(query)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "clock")
+                                            .foregroundStyle(.secondary)
+                                        Text(query)
+                                        Spacer()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(results) { result in
                     Button {
                         toggleSelection(result)
                     } label: {
@@ -137,7 +168,8 @@ struct AddBookView: View {
                                         .padding(8)
                                 }
                             }
-                    }
+                        }
+                }
                 }
             }
         }
@@ -160,6 +192,24 @@ struct AddBookView: View {
             results = []
             errorMessage = "Search failed: \(error.localizedDescription)"
         }
+        recordSearch(query)
+    }
+
+    private func runSearch(_ query: String) {
+        searchText = query
+        results = []
+        hasSearched = false
+        Task { await performSearch() }
+    }
+
+    private func recordSearch(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var history = searchHistory
+        history.removeAll { $0 == trimmed }
+        history.insert(trimmed, at: 0)
+        searchHistory = Array(history.prefix(10))
+        saveSearchHistory(searchHistory)
     }
 
 }

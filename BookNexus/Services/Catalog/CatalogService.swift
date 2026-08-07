@@ -75,7 +75,12 @@ final class OpenLibraryService: CatalogService {
             let isbnList = doc["isbn"] as? [String] ?? []
             let isbn = isbnList.first
             let coverID = doc["cover_i"] as? Int
-            let coverURL = coverID.map { "https://covers.openlibrary.org/b/id/\($0)-L.jpg" }
+            var coverURLs: [String] = []
+            if let coverID {
+                coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-S.jpg")
+                coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-M.jpg")
+                coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-L.jpg")
+            }
             let genres = doc["subject"] as? [String] ?? []
             let publishers = doc["publisher"] as? [String] ?? []
             let languageList = doc["language"] as? [String] ?? []
@@ -92,7 +97,7 @@ final class OpenLibraryService: CatalogService {
                 pageCount: doc["number_of_pages_median"] as? Int,
                 description: nil,
                 language: languageList.first,
-                coverURLs: [coverURL].compactMap { $0 },
+                 coverURLs: coverURLs,
                 descriptionSource: nil,
             source: "openlibrary"
             ))
@@ -155,15 +160,14 @@ final class OpenLibraryService: CatalogService {
                     pageCount: gb["pageCount"] as? Int,
                     description: gb["description"] as? String,
                     language: nil,
-                    coverURLs: [gb["thumbnail"], gb["large"]].compactMap { $0 as? String },
+                     coverURLs: (gb["covers"] as? [String]) ?? [],
                     descriptionSource: "googlebooks",
                 source: "googlebooks"
                 )
             }
         } else if let gb = await googleResult(isbn: cleaned) {
             var covers = catalog.coverURLs
-            if let thumb = gb["thumbnail"] as? String { covers.append(thumb) }
-            if let large = gb["large"] as? String { covers.append(large) }
+            if let gcovers = gb["covers"] as? [String] { covers.append(contentsOf: gcovers) }
             let description = gb["description"] as? String ?? catalog.description
             let genres = gb["categories"] as? [String] ?? catalog.genres
             let publisher = gb["publisher"] as? String ?? catalog.publisher
@@ -326,6 +330,11 @@ final class OpenLibraryService: CatalogService {
         if let images = info["imageLinks"] as? [String: Any] {
             mapped["thumbnail"] = images["thumbnail"] as? String
             mapped["large"] = images["large"] as? String
+            var covers: [String] = []
+            for key in ["smallThumbnail", "thumbnail", "small", "medium", "large", "extraLarge"] {
+                if let url = images[key] as? String { covers.append(url) }
+            }
+            mapped["covers"] = covers
         }
         return mapped
     }

@@ -150,49 +150,50 @@ struct BookFormView: View {
         }
     }
 
-    private var coverSection: some View {
-        Section {
-            if !coverURLs.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(coverURLs, id: \.self) { url in
-                            Button {
-                                selectedCover = url
-                            } label: {
-                                AsyncCoverView(url: URL(string: url), width: 68, height: 100)
-                                    .overlay(alignment: .bottomTrailing) {
-                                        if selectedCover == url {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundStyle(.blue)
-                                                .padding(4)
-            }
+private var coverSection: some View {
+    Section {
+        if let cover = selectedCover, let url = URL(string: cover) {
+            AsyncCoverView(url: url, width: 100, height: 140)
+        } else if let photo = selectedPhotoCover, let url = URL(string: photo) {
+            AsyncCoverView(url: url, width: 100, height: 140)
         }
-    }
 
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
+        HStack(spacing: 8) {
+            ForEach(coverURLs, id: \.self) { url in
                 Button {
-                    showCamera = true
+                    selectedCover = url
+                    selectedPhotoCover = nil
                 } label: {
-                    VStack {
-                        Image(systemName: "camera")
-                            .font(.title2)
-                        Text("Take photo")
-                            .font(.caption2)
-                    }
-                    .frame(width: 68, height: 100)
-                    .background(.quaternary.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    AsyncCoverView(url: URL(string: url), width: 56, height: 80)
+                        .overlay(alignment: .bottomTrailing) {
+                            if selectedCover == url {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.white, .blue)
+                            }
+                        }
                 }
                 .buttonStyle(.plain)
             }
-        } header: {
-            Text("Cover")
+            Button {
+                showCamera = true
+            } label: {
+                VStack {
+                    Image(systemName: "camera")
+                        .font(.title2)
+                    Text("Photo")
+                        .font(.caption2)
+                }
+                .frame(width: 56, height: 80)
+                .background(.quaternary.opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
+    } header: {
+        Text("Cover")
     }
+}
 
     private var detailsSection: some View {
         Section {

@@ -191,6 +191,24 @@ final class OpenLibraryService: CatalogService {
             )
         }
 
+        // Gather multiple cover variants from OpenLibrary editions + Google title search.
+        let olCovers = await fetchOpenLibraryCovers(isbn: cleaned)
+        let gCovers = await fetchGoogleCovers(title: catalog.title, authors: catalog.authors)
+        let combined = olCovers + gCovers
+        if !combined.isEmpty {
+            var merged = catalog.coverURLs
+            var seen = Set(merged)
+            for url in combined where seen.insert(url).inserted {
+                merged.append(url)
+            }
+            catalog = CatalogBook(
+                id: catalog.id, title: catalog.title, authors: catalog.authors, isbn: catalog.isbn,
+                publicationYear: catalog.publicationYear, genres: catalog.genres, publisher: catalog.publisher,
+                pageCount: catalog.pageCount, description: catalog.description, language: catalog.language,
+                coverURLs: merged, descriptionSource: catalog.descriptionSource, source: catalog.source
+            )
+        }
+
         if catalog.description == nil, let fetchedDesc = await fetchDescription(for: catalog.title, authors: catalog.authors, preferred: preferred) {
             catalog = CatalogBook(
                 id: catalog.id, title: catalog.title, authors: catalog.authors, isbn: catalog.isbn,
@@ -201,6 +219,68 @@ final class OpenLibraryService: CatalogService {
         }
 
         return catalog.title.isEmpty ? nil : catalog
+    }
+    /// Fetch multiple cover variants for an ISBN from OpenLibrary.
+    /// Reads the edition's `covers` array (multiple cover IDs), then follows
+    /// the `works` key to `/editions.json` to gather covers from every printing.
+    private func fetchOpenLibraryCovers(isbn: String) async -> [String] {
+        var covers: [String] = []
+
+        // 1) Edition record: read the covers array (cover IDs).
+        if let editionURL = URL(string: "https://openlibrary.org/isbn/\(isbn).json"),
+           let (data, response) = try? await session.data(from: editionURL),
+           let http = response as? HTTPURLResponse, http.statusCode == 200,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+
+            let coverIDs = json["covers"] as? [Int] ?? []
+            for id in coverIDs {
+                covers.append("https://covers.openlibrary.org/b/id/\(id)-L.jpg")
+                covers.append("https://covers.openlibrary.org/b/id/\(id)-M.jpg")
+            }
+
+            // 2) Follow works key -> editions.json for covers from other printings.
+            let works = json["works"] as? [[String: Any]] ?? []
+            let workKey = works.first?["key"] as? String
+            if let workKey, let editionsURL = URL(string: "https://openlibrary.org\(workKey)/editions.json"),
+               let (edata, eresponse) = try? await session.data(from: editionsURL),
+               let ehttp = eresponse as? HTTPURLResponse, ehttp.statusCode == 200,
+               let ejson = try? JSONSerialization.jsonObject(with: edata) as? [String: Any],
+               let entries = ejson["entries"] as? [[String: Any]] {
+                for entry in entries {
+                    let eids = entry["covers"] as? [Int] ?? []
+                    for id in eids {
+                        covers.append("https://covers.openlibrary.org/b/id/\(id)-L.jpg")
+                    }
+                }
+            }
+        }
+
+        var seen = Set<String>()
+        return covers.filter { seen.insert($0).inserted }
+    }
+
+    private func fetchGoogleCovers(title: String, authors: [String]) async -> [String] {
+        guard !title.isEmpty else { return [] }
+        let query = [title] + authors
+        var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
+        components.queryItems = [URLQueryItem(name: "q", value: query.joined(separator: "+"))]
+        guard let url = components.url else { return [] }
+
+        var covers: [String] = []
+        if let (data, response) = try? await session.data(from: url),
+           let http = response as? HTTPURLResponse, http.statusCode == 200,
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let items = json["items"] as? [[String: Any]] {
+            for item in items {
+                if let links = item["volumeInfo"] as? [String: Any],
+                   let imageLinks = links["imageLinks"] as? [String: Any],
+                   let coverURL = imageLinks["large"] as? String ?? imageLinks["thumbnail"] as? String {
+                    covers.append(coverURL)
+                }
+            }
+        }
+        var seen = Set<String>()
+        return covers.filter { seen.insert($0).inserted }
     }
 
     /// Fetch a book description from the preferred source, falling back to the other.

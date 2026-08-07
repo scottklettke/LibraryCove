@@ -82,6 +82,24 @@ struct BookFormView: View {
         }
     }
 
+    /// Whether the edit form differs from the existing book (drives the top Save button).
+    private var hasChanges: Bool {
+        guard let book = existing else { return false }
+        return title != book.title
+            || authorsText != book.authors.joined(separator: ", ")
+            || yearText != (book.publicationYear.map { String($0) } ?? "")
+            || genresText != book.genres.joined(separator: ", ")
+            || publisherText != (book.publisher ?? "")
+            || pageCountText != (book.pageCount.map { String($0) } ?? "")
+            || description != (book.bookDescription ?? "")
+            || locationText != (book.physicalLocation ?? "")
+            || status != book.statusEnum
+            || rating != book.rating
+            || loanedToText != (book.loanedTo ?? "")
+            || selectedCover != book.coverImageURL
+    }
+
+
     var body: some View {
         Form {
             coverSection
@@ -111,6 +129,11 @@ struct BookFormView: View {
             ToolbarItem(placement: .cancellationAction) {
                 if existing != nil {
                     Button("Cancel") { dismiss() }
+                }
+            }
+            if existing != nil && hasChanges {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Save") { save() }
                 }
             }
             if existing != nil {

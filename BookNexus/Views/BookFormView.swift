@@ -158,37 +158,39 @@ private var coverSection: some View {
             AsyncCoverView(url: url, width: 100, height: 140)
         }
 
-        HStack(spacing: 8) {
-            ForEach(coverURLs, id: \.self) { url in
-                Button {
-                    selectedCover = url
-                    selectedPhotoCover = nil
-                } label: {
-                    AsyncCoverView(url: URL(string: url), width: 56, height: 80)
-                        .overlay(alignment: .bottomTrailing) {
-                            if selectedCover == url {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.white, .blue)
+        ScrollView(.horizontal, showsIndicators: true) {
+            HStack(spacing: 8) {
+                ForEach(coverURLs, id: \.self) { url in
+                    Button {
+                        selectedCover = url
+                        selectedPhotoCover = nil
+                    } label: {
+                        AsyncCoverView(url: URL(string: url), width: 56, height: 80)
+                            .overlay(alignment: .bottomTrailing) {
+                                if selectedCover == url {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.title3)
+                                        .foregroundStyle(.white, .blue)
+                                }
                             }
-                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    showCamera = true
+                } label: {
+                    VStack {
+                        Image(systemName: "camera")
+                            .font(.title2)
+                        Text("Photo")
+                            .font(.caption2)
+                    }
+                    .frame(width: 56, height: 80)
+                    .background(.quaternary.opacity(0.5))
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
-            Button {
-                showCamera = true
-            } label: {
-                VStack {
-                    Image(systemName: "camera")
-                        .font(.title2)
-                    Text("Photo")
-                        .font(.caption2)
-                }
-                .frame(width: 56, height: 80)
-                .background(.quaternary.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-            }
-            .buttonStyle(.plain)
         }
     } header: {
         Text("Cover")

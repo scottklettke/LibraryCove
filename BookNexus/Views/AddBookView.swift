@@ -395,20 +395,21 @@ extension AddBookView {
 struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: [CatalogBook] = []
-    @State private var index = 0
+    @State private var currentID: String?
 
     init(queue: [CatalogBook]) {
         _remaining = State(initialValue: queue)
+        _currentID = State(initialValue: queue.first?.id)
     }
 
     var body: some View {
         NavigationStack {
-            TabView(selection: $index) {
-                ForEach(remaining.indices, id: \.self) { i in
-                    BookFormView(catalog: remaining[i], existing: nil,
-                                 onSaved: { handleSaved(i) },
+            TabView(selection: $currentID) {
+                ForEach(remaining, id: \.id) { book in
+                    BookFormView(catalog: book, existing: nil,
+                                 onSaved: { handleSaved(book.id) },
                                  dismissOnSave: false)
-                        .tag(i)
+                        .tag(book.id)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .automatic))
@@ -431,12 +432,12 @@ struct BookImportFlow: View {
         }
     }
 
-    private func handleSaved(_ i: Int) {
-        remaining.remove(at: i)
+    private func handleSaved(_ id: String) {
+        remaining.removeAll { $0.id == id }
         if remaining.isEmpty {
             dismiss()
         } else {
-            index = min(index, remaining.count - 1)
+            currentID = remaining.first?.id
         }
     }
 }

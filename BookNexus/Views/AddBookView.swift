@@ -394,36 +394,49 @@ extension AddBookView {
 
 struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
-    let queue: [CatalogBook]
+    @State private var remaining: [CatalogBook] = []
     @State private var index = 0
-    @State private var savedIndexes = Set<Int>()
+
+    init(queue: [CatalogBook]) {
+        _remaining = State(initialValue: queue)
+    }
 
     var body: some View {
         NavigationStack {
             TabView(selection: $index) {
-                ForEach(queue.indices, id: \.self) { i in
-                    BookFormView(catalog: queue[i], existing: nil,
+                ForEach(remaining.indices, id: \.self) { i in
+                    BookFormView(catalog: remaining[i], existing: nil,
                                  onSaved: { handleSaved(i) },
                                  dismissOnSave: false)
                         .tag(i)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .navigationTitle("\(index + 1) of \(queue.count) selected")
+            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .navigationTitle(remaining.isEmpty ? "All books added" : "\(remaining.count) remaining")
             .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .top) {
+                if remaining.count > 1 {
+                    HStack {
+                        Image(systemName: "arrow.left")
+                        Text("Swipe to browse \(remaining.count) books")
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
+                }
+            }
         }
     }
 
     private func handleSaved(_ i: Int) {
-        savedIndexes.insert(i)
-        var next = i + 1
-        while next < queue.count && savedIndexes.contains(next) {
-            next += 1
-        }
-        if next < queue.count {
-            index = next
-        } else {
+        remaining.remove(at: i)
+        if remaining.isEmpty {
             dismiss()
+        } else {
+            index = min(index, remaining.count - 1)
         }
     }
 }

@@ -10,9 +10,12 @@ struct AddBookView: View {
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var selectedResult: CatalogBook?
-    @State private var scannedCode: String?
     @State private var showScanner = false
     @State private var descriptionSource: DescriptionSource = .openlibrary
+    @State private var selectedIDs = Set<String>()
+    @State private var importQueue = [CatalogBook]()
+    @State private var showImportFlow = false
+    @State private var existingIsbns = Set<String>()
 
     var body: some View {
         NavigationStack {
@@ -42,28 +45,36 @@ struct AddBookView: View {
                         Label("Source", systemImage: "book.closed")
                     }
                 }
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         showScanner = true
                     } label: {
                         Label("Scan ISBN", systemImage: "barcode.viewfinder")
                     }
+                    if !selectedIDs.isEmpty {
+                        Button("Add selected (\(selectedIDs.count))") {
+                            startImportFlow()
+                        }
+                    }
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                ScannerFlow(scannedCode: $scannedCode)
-            }
-            .onChange(of: scannedCode) { _, code in
-                guard let code else { return }
-                scannedCode = nil
-                Task { await handleScanned(code) }
+                ScannerFlow(existingIsbns: existingIsbns, onAddBook: { book in
+                    selectedResult = book
+                })
             }
             .navigationDestination(item: $selectedResult) { result in
                 BookImportView(catalog: result)
             }
-
+            .sheet(isPresented: $showImportFlow) {
+                BookImportFlow(queue: importQueue)
+            }
+            .onAppear {
+                buildExistingSet()
+            }
         }
     }
+
 
     private var searchBar: some View {
         HStack(spacing: 8) {
@@ -103,9 +114,25 @@ struct AddBookView: View {
             } else {
                 ForEach(results) { result in
                     Button {
-                        selectedResult = result
+                        toggleSelection(result)
                     } label: {
                         CatalogRow(book: result)
+                            .overlay(alignment: .leading) {
+                                if existingIsbns.contains(result.isbn ?? "") {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.green)
+                                        .padding(8)
+                                }
+                            }
+                            .overlay(alignment: .trailing) {
+                                if selectedIDs.contains(result.id) {
+                                    Image(systemName: "circle.inset.filled")
+                                        .font(.title3)
+                                        .foregroundStyle(.blue)
+                                        .padding(8)
+                                }
+                            }
                     }
                 }
             }
@@ -129,35 +156,24 @@ struct AddBookView: View {
         }
     }
 
-    private func handleScanned(_ code: String) async {
-        isSearching = true
-        errorMessage = nil
-        defer { isSearching = false }
-        do {
-            if let book = try await catalog.lookup(isbn: code, preferred: descriptionSource) {
-                selectedResult = book
-            } else {
-                errorMessage = "No book found for ISBN \(code)."
-            }
-        } catch {
-            errorMessage = "Lookup failed: \(error.localizedDescription)"
-        }
-    }
-
 }
 
 /// Full-screen scanner that returns the first detected barcode.
 private struct ScannerFlow: View {
     @Environment(\.dismiss) private var dismiss
-    @Binding var scannedCode: String?
+    @State private var catalog: CatalogService = OpenLibraryService()
+    @State private var scannedCode: String?
+    @State private var resultBook: CatalogBook?
+    @State private var isLookup = false
+    @State private var lookupError: String?
+    @State private var rescanKey = 0
+    let existingIsbns: Set<String>
+    let onAddBook: (CatalogBook) -> Void
 
     var body: some View {
         ZStack {
-            ISBNScannerView { code in
-                scannedCode = code
-                dismiss()
-            }
-            .ignoresSafeArea()
+            ISBNScannerView(onCode: handleCode, rescanKey: rescanKey)
+                .ignoresSafeArea()
             VStack {
                 Spacer()
                 Text("Point the camera at a book's barcode")
@@ -166,6 +182,13 @@ private struct ScannerFlow: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .padding(.bottom, 40)
+            }
+            if let book = resultBook {
+                resultPanel(book)
+            } else if isLookup {
+                lookupPanel
+            } else if let error = lookupError {
+                errorPanel(error)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -180,6 +203,104 @@ private struct ScannerFlow: View {
             }
             .padding()
         }
+    }
+
+    private func handleCode(_ code: String) {
+        resultBook = nil
+        lookupError = nil
+        isLookup = true
+        scannedCode = code
+        Task {
+            do {
+                if let book = try await catalog.lookup(isbn: code, preferred: .openlibrary) {
+                    resultBook = book
+                } else {
+                    lookupError = "No book found for ISBN \(code)."
+                }
+            } catch {
+                lookupError = "Lookup failed: \(error.localizedDescription)"
+            }
+            isLookup = false
+        }
+    }
+
+    private var lookupPanel: some View {
+        VStack {
+            ProgressView()
+            Text("Looking up ISBN…")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding()
+    }
+
+    private func errorPanel(_ message: String) -> some View {
+        VStack(spacing: 8) {
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(.red)
+            Button("Scan more") {
+                lookupError = nil
+                rescanKey += 1
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding()
+    }
+
+    private func resultPanel(_ book: CatalogBook) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                AsyncCoverView(url: book.primaryCoverURL.flatMap { URL(string: $0) }, width: 52, height: 76)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(book.title)
+                        .font(.headline)
+                    Text(book.authorsText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let year = book.publicationYear {
+                        Text(verbatim: "\(year)")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                Spacer()
+            }
+            HStack {
+                if existingIsbns.contains(book.isbn ?? "") {
+                    Label("Already in your library", systemImage: "checkmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.green)
+                } else {
+                    Label("Not in your library", systemImage: "plus.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            HStack {
+                Button("Scan more") {
+                    resultBook = nil
+                    lookupError = nil
+                    rescanKey += 1
+                }
+                Spacer()
+                Button("Add to library") {
+                    onAddBook(book)
+                    dismiss()
+                }
+                .fontWeight(.semibold)
+            }
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding()
     }
 }
 
@@ -252,5 +373,69 @@ struct AsyncCoverView: View {
                 .frame(width: width * 0.7, height: 2)
         }
         .frame(width: width, height: height)
+    }
+}
+
+extension AddBookView {
+    private func toggleSelection(_ result: CatalogBook) {
+        if selectedIDs.contains(result.id) {
+            selectedIDs.remove(result.id)
+        } else {
+            selectedIDs.insert(result.id)
+        }
+    }
+
+    private func startImportFlow() {
+        importQueue = results.filter { selectedIDs.contains($0.id) }
+        selectedIDs = []
+        showImportFlow = true
+    }
+}
+
+struct BookImportFlow: View {
+    @Environment(\.dismiss) private var dismiss
+    let queue: [CatalogBook]
+    @State private var index = 0
+    @State private var savedIndexes = Set<Int>()
+
+    var body: some View {
+        NavigationStack {
+            TabView(selection: $index) {
+                ForEach(queue.indices, id: \.self) { i in
+                    BookFormView(catalog: queue[i], existing: nil,
+                                 onSaved: { handleSaved(i) },
+                                 dismissOnSave: false)
+                        .tag(i)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .navigationTitle("\(index + 1) of \(queue.count) selected")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private func handleSaved(_ i: Int) {
+        savedIndexes.insert(i)
+        var next = i + 1
+        while next < queue.count && savedIndexes.contains(next) {
+            next += 1
+        }
+        if next < queue.count {
+            index = next
+        } else {
+            dismiss()
+        }
+    }
+}
+
+extension AddBookView {
+    private func buildExistingSet() {
+        let descriptor = FetchDescriptor<Book>()
+        do {
+            let books = try modelContext.fetch(descriptor)
+            existingIsbns = Set(books.compactMap { $0.isbn })
+        } catch {
+            existingIsbns = []
+        }
     }
 }

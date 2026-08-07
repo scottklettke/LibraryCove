@@ -19,6 +19,8 @@ struct BookFormView: View {
 
     let catalog: CatalogBook?
     var existing: Book?
+    var onSaved: () -> Void = {}
+    var dismissOnSave: Bool = true
 
     @State private var title = ""
     @State private var authorsText = ""
@@ -33,15 +35,21 @@ struct BookFormView: View {
     @State private var coverURLs: [String] = []
     @State private var selectedCover: String?
     @State private var locationStore = LocationStore()
+    @State private var genreStore = GenreStore()
+    @State private var genreQuery = ""
     @State private var loanedToText = ""
     @State private var loanedDate: Date?
     @State private var descriptionSource: DescriptionSource = .openlibrary
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
+    @State private var showDuplicateAlert = false
+    @State private var pendingInsertBook: Book?
 
-    init(catalog: CatalogBook? = nil, existing: Book? = nil) {
+    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
         self.catalog = catalog
         self.existing = existing
+        self.onSaved = onSaved
+        self.dismissOnSave = dismissOnSave
         _status = State(initialValue: existing?.statusEnum ?? .toRead)
         _rating = State(initialValue: existing?.rating)
 
@@ -49,7 +57,7 @@ struct BookFormView: View {
             _title = State(initialValue: catalog.title)
             _authorsText = State(initialValue: catalog.authors.joined(separator: ", "))
             _yearText = State(initialValue: catalog.publicationYear.map { String($0) } ?? "")
-            _genresText = State(initialValue: catalog.genres.joined(separator: ", "))
+            _genresText = State(initialValue: "")
             _publisherText = State(initialValue: catalog.publisher ?? "")
             _pageCountText = State(initialValue: catalog.pageCount.map { String($0) } ?? "")
             _description = State(initialValue: catalog.description ?? "")
@@ -92,6 +100,23 @@ struct BookFormView: View {
                 }
             }
         }
+        .alert("This book is already in your library", isPresented: $showDuplicateAlert) {
+            Button("Add another copy") {
+                if let pending = pendingInsertBook {
+                    modelContext.insert(pending)
+                    try? modelContext.save()
+                    onSaved()
+                    if dismissOnSave {
+                        dismiss()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingInsertBook = nil
+            }
+        } message: {
+            Text("You already have this book. You can add another copy with a different location, or cancel.")
+        }
     }
 
     private var coverSection: some View {
@@ -109,9 +134,10 @@ struct BookFormView: View {
                                             Image(systemName: "checkmark.circle.fill")
                                                 .foregroundStyle(.blue)
                                                 .padding(4)
-                                        }
-                                    }
-                            }
+            }
+        }
+    }
+
                             .buttonStyle(.plain)
                         }
                     }
@@ -138,8 +164,7 @@ struct BookFormView: View {
             }
             TextField("Publisher", text: $publisherText)
                 .textInputAutocapitalization(.words)
-            TextField("Genres (comma separated)", text: $genresText)
-                .textInputAutocapitalization(.words)
+            genrePicker
             if let isbn = catalog?.isbn ?? existing?.isbn {
                 LabeledContent("ISBN", value: isbn)
                 if let existing {
@@ -150,6 +175,65 @@ struct BookFormView: View {
             Text("Details")
         } footer: {
             Text("Fields marked * are required.")
+        }
+    }
+
+    private var genrePicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !selectedGenres.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(selectedGenres, id: \.self) { genre in
+                            Button {
+                                toggleGenre(genre)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(genre)
+                                        .font(.caption)
+                                    Image(systemName: "xmark")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(Color(uiColor: .secondarySystemFill)))
+            }
+        }
+    }
+
+            }
+            HStack {
+                TextField("Add your own category…", text: $genreQuery)
+                    .textInputAutocapitalization(.words)
+                    .onSubmit {
+                        addGenre(genreQuery)
+                        genreQuery = ""
+                    }
+                Menu {
+                    ForEach(genreStore.genres, id: \.self) { genre in
+                        Button {
+                            toggleGenre(genre)
+                        } label: {
+                            if selectedGenres.contains(where: {
+                                $0.caseInsensitiveCompare(genre) == .orderedSame
+                            }) {
+                                Label(genre, systemImage: "checkmark")
+                            } else {
+                                Text(genre)
+            }
+        }
+    }
+
+                    Button("Add new category") {
+                        addGenre(genreQuery)
+                        genreQuery = ""
+                    }
+                } label: {
+                    Label("Pick", systemImage: "tag")
+                }
+            }
         }
     }
 
@@ -317,6 +401,36 @@ struct BookFormView: View {
         return existing?.isbn
     }
 
+    private var selectedGenres: [String] {
+        genresText.split(separator: ",").map(String.init).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+    }
+
+    private func toggleGenre(_ genre: String) {
+        if selectedGenres.contains(where: { $0.caseInsensitiveCompare(genre) == .orderedSame }) {
+            removeGenre(genre)
+        } else {
+            addGenre(genre)
+        }
+    }
+
+    private func addGenre(_ genre: String) {
+        let trimmed = genre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let canonical = genreStore.add(trimmed)
+        var list = selectedGenres
+        if !list.contains(where: { $0.caseInsensitiveCompare(canonical) == .orderedSame }) {
+            list.append(canonical)
+        }
+        genresText = list.joined(separator: ", ")
+    }
+
+    private func removeGenre(_ genre: String) {
+        let list = selectedGenres.filter { $0.caseInsensitiveCompare(genre) != .orderedSame }
+        genresText = list.joined(separator: ", ")
+    }
+
     private var addedDateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -375,9 +489,29 @@ struct BookFormView: View {
                 loanedTo: loanedToText.isEmpty ? nil : loanedToText,
                 loanedDate: loanedDate
             )
-            modelContext.insert(book)
-            try? modelContext.save()
-            dismiss()
+            let key = catalog?.isbn ?? ""
+            if findDuplicate(key: key) != nil {
+                pendingInsertBook = book
+                showDuplicateAlert = true
+            } else {
+                modelContext.insert(book)
+                try? modelContext.save()
+                onSaved()
+                if dismissOnSave {
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func findDuplicate(key: String) -> Book? {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.isbn == trimmed })
+        do {
+            return try modelContext.fetch(descriptor).first
+        } catch {
+            return nil
         }
     }
 }

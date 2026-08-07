@@ -6,6 +6,11 @@ import Vision
 /// Emits detected ISBN/EAN codes via `onCode`.
 struct ISBNScannerView: UIViewControllerRepresentable {
     var onCode: (String) -> Void
+    var rescanKey: Int = 0
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
 
     func makeUIViewController(context: Context) -> BarcodeScannerViewController {
         let vc = BarcodeScannerViewController()
@@ -13,10 +18,20 @@ struct ISBNScannerView: UIViewControllerRepresentable {
         return vc
     }
 
-    func updateUIViewController(_ uiViewController: BarcodeScannerViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: BarcodeScannerViewController, context: Context) {
+        if context.coordinator.lastRescanKey != rescanKey {
+            uiViewController.reset()
+        }
+        context.coordinator.lastRescanKey = rescanKey
+        uiViewController.onCode = onCode
+    }
 
-    static func dismantleUIViewController(_ uiViewController: BarcodeScannerViewController, coordinator: Void) {
+    static func dismantleUIViewController(_ uiViewController: BarcodeScannerViewController, coordinator: Coordinator) {
         uiViewController.stop()
+    }
+
+    final class Coordinator {
+        var lastRescanKey = 0
     }
 }
 
@@ -44,6 +59,13 @@ final class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOut
     func stop() {
         if captureSession?.isRunning == true {
             captureSession?.stopRunning()
+        }
+    }
+
+    func reset() {
+        didDetect = false
+        if captureSession?.isRunning != true {
+            captureSession?.startRunning()
         }
     }
 

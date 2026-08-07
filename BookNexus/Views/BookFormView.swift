@@ -43,6 +43,7 @@ struct BookFormView: View {
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
     @State private var showDuplicateAlert = false
+    @State private var showDeleteConfirmation = false
     @State private var pendingInsertBook: Book?
 
     init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
@@ -99,6 +100,15 @@ struct BookFormView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            if existing != nil {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                }
+            }
         }
         .alert("This book is already in your library", isPresented: $showDuplicateAlert) {
             Button("Add another copy") {
@@ -116,6 +126,14 @@ struct BookFormView: View {
             }
         } message: {
             Text("You already have this book. You can add another copy with a different location, or cancel.")
+        }
+        .alert("Delete this book?", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) {
+                deleteExistingBook()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This book will be removed from your library.")
         }
     }
 
@@ -436,6 +454,13 @@ struct BookFormView: View {
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
         return formatter
+    }
+
+    private func deleteExistingBook() {
+        guard let book = existing else { return }
+        modelContext.delete(book)
+        try? modelContext.save()
+        dismiss()
     }
 
     private func save() {

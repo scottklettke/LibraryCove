@@ -303,7 +303,7 @@ private struct ScannerFlow: View {
             }
             Button("Cancel", role: .cancel) { pendingDeleteID = nil }
         } message: { _ in
-            "This book won't be added unless you scan it again."
+            Text("This book won't be added unless you scan it again.")
         }
     }
 

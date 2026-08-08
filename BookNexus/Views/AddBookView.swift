@@ -23,7 +23,6 @@ struct AddBookView: View {
     @State private var hasSearched = false
     @State private var isSearching = false
     @State private var errorMessage: String?
-    @State private var selectedResult: CatalogBook?
     @State private var showScanner = false
     @State private var descriptionSource: DescriptionSource = .openlibrary
     @State private var selectedIDs = Set<String>()
@@ -31,10 +30,32 @@ struct AddBookView: View {
     @State private var showImportFlow = false
     @State private var existingIsbns = Set<String>()
     @State private var searchHistory: [String] = loadSearchHistory()
+    @State private var pendingCount = 0
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if pendingCount > 0 {
+                    Button {
+                        resumePendingScans()
+                    } label: {
+                        HStack {
+                            Label("\(pendingCount) scanned book\(pendingCount == 1 ? "" : "s") not yet added",
+                                  systemImage: "barcode.viewfinder")
+                                .font(.body)
+                                .fontWeight(.semibold)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(12)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+                }
                 searchBar
                 if let errorMessage {
                     Text(errorMessage)
@@ -63,21 +84,23 @@ struct AddBookView: View {
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                ScannerFlow(existingIsbns: existingIsbns, onAddBook: { book in
-                    selectedResult = book
+                ScannerFlow(existingIsbns: existingIsbns, onAddBooks: { books in
+                    importQueue = books
+                    showImportFlow = true
                 })
             }
-            .navigationDestination(item: $selectedResult) { result in
-                BookImportView(catalog: result)
-            }
             .sheet(isPresented: $showImportFlow) {
-                BookImportFlow(queue: importQueue, onDone: {
+                BookImportFlow(queue: importQueue,
+                               onEachSaved: { id in PendingScanStore.remove(id: id) },
+                               onDone: {
                     showImportFlow = false
+                    showScanner = false
                     dismiss()
                 })
             }
             .onAppear {
                 buildExistingSet()
+                loadPendingScans()
             }
         }
     }
@@ -223,17 +246,17 @@ struct AddBookView: View {
 
 }
 
-/// Full-screen scanner that returns the first detected barcode.
+/// Full-screen scanner that accumulates detected barcodes into a list.
 private struct ScannerFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var catalog: CatalogService = OpenLibraryService()
-    @State private var scannedCode: String?
-    @State private var resultBook: CatalogBook?
+    @State private var scannedBooks: [CatalogBook] = []
     @State private var isLookup = false
     @State private var lookupError: String?
     @State private var rescanKey = 0
+    @State private var pendingDeleteID: String?
     let existingIsbns: Set<String>
-    let onAddBook: (CatalogBook) -> Void
+    let onAddBooks: ([CatalogBook]) -> Void
 
     var body: some View {
         ZStack {
@@ -248,12 +271,11 @@ private struct ScannerFlow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .padding(.bottom, 40)
             }
-            if let book = resultBook {
-                resultPanel(book)
-            } else if isLookup {
-                lookupPanel
-            } else if let error = lookupError {
-                errorPanel(error)
+            VStack {
+                Spacer()
+                scannedBar
+                    .padding(.horizontal)
+                    .padding(.bottom, 20)
             }
         }
         .overlay(alignment: .topTrailing) {
@@ -268,17 +290,86 @@ private struct ScannerFlow: View {
             }
             .padding()
         }
+        .confirmationDialog(
+            "Remove scanned book?",
+            isPresented: .init(get: { pendingDeleteID != nil },
+                               set: { if !$0 { pendingDeleteID = nil } }),
+            presenting: pendingDeleteID
+        ) { id in
+            Button("Remove", role: .destructive) {
+                scannedBooks.removeAll { $0.id == id }
+                PendingScanStore.remove(id: id)
+                pendingDeleteID = nil
+            }
+            Button("Cancel", role: .cancel) { pendingDeleteID = nil }
+        } message: { _ in
+            "This book won't be added unless you scan it again."
+        }
+    }
+
+    private var scannedBar: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(scannedBooks.isEmpty ? "No books scanned yet" : "\(scannedBooks.count) scanned")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                Text("Tap a book to remove it")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            if !scannedBooks.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(scannedBooks) { book in
+                            Button {
+                                pendingDeleteID = book.id
+                            } label: {
+                                AsyncCoverView(url: book.primaryCoverURL.flatMap { URL(string: $0) }, width: 44, height: 64)
+                                    .overlay(alignment: .topLeading) {
+                                        if existingIsbns.contains(book.isbn ?? "") {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.caption)
+                                                .foregroundStyle(.green)
+                                        }
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .frame(height: 64)
+            } else if isLookup {
+                ProgressView().controlSize(.small)
+            } else if let error = lookupError {
+                Text(error)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            }
+            Button {
+                onAddBooks(scannedBooks)
+            } label: {
+                Label("Add all", systemImage: "plus")
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+            }
+            .disabled(scannedBooks.isEmpty || isLookup)
+        }
+        .padding(10)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private func handleCode(_ code: String) {
-        resultBook = nil
         lookupError = nil
         isLookup = true
-        scannedCode = code
         Task {
             do {
                 if let book = try await catalog.lookup(isbn: code, preferred: .openlibrary) {
-                    resultBook = book
+                    scannedBooks.removeAll { $0.id == book.id }
+                    scannedBooks.append(book)
+                    PendingScanStore.append(book)
                 } else {
                     lookupError = "No book found for ISBN \(code)."
                 }
@@ -286,88 +377,11 @@ private struct ScannerFlow: View {
                 lookupError = "Lookup failed: \(error.localizedDescription)"
             }
             isLookup = false
+            rescanKey += 1
         }
-    }
-
-    private var lookupPanel: some View {
-        VStack {
-            ProgressView()
-            Text("Looking up ISBN…")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding()
-    }
-
-    private func errorPanel(_ message: String) -> some View {
-        VStack(spacing: 8) {
-            Text(message)
-                .font(.footnote)
-                .foregroundStyle(.red)
-            Button("Scan more") {
-                lookupError = nil
-                rescanKey += 1
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding()
-    }
-
-    private func resultPanel(_ book: CatalogBook) -> some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                AsyncCoverView(url: book.primaryCoverURL.flatMap { URL(string: $0) }, width: 52, height: 76)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(book.title)
-                        .font(.headline)
-                    Text(book.authorsText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if let year = book.publicationYear {
-                        Text(verbatim: "\(year)")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer()
-            }
-            HStack {
-                if existingIsbns.contains(book.isbn ?? "") {
-                    Label("Already in your library", systemImage: "checkmark.circle.fill")
-                        .font(.footnote)
-                        .foregroundStyle(.green)
-                } else {
-                    Label("Not in your library", systemImage: "plus.circle")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-            HStack {
-                Button("Scan more") {
-                    resultBook = nil
-                    lookupError = nil
-                    rescanKey += 1
-                }
-                Spacer()
-                Button("Add to library") {
-                    onAddBook(book)
-                    dismiss()
-                }
-                .fontWeight(.semibold)
-            }
-        }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .padding()
     }
 }
+
 
 private struct CatalogRow: View {
     let book: CatalogBook
@@ -475,12 +489,15 @@ struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: [CatalogBook] = []
     @State private var currentID: String?
+    var onEachSaved: (String) -> Void = { _ in }
     var onDone: () -> Void = {}
 
-    init(queue: [CatalogBook], onDone: @escaping () -> Void = {}) {
+    init(queue: [CatalogBook], onEachSaved: @escaping (String) -> Void = { _ in }, onDone: @escaping () -> Void = {}) {
+        self.onEachSaved = onEachSaved
         self.onDone = onDone
-        _remaining = State(initialValue: queue)
-        _currentID = State(initialValue: queue.first?.id)
+        let pending = PendingScanStore.load()
+        _remaining = State(initialValue: pending)
+        _currentID = State(initialValue: pending.first?.id)
     }
 
     var body: some View {
@@ -515,6 +532,7 @@ struct BookImportFlow: View {
 
     private func handleSaved(_ id: String) {
         remaining.removeAll { $0.id == id }
+        onEachSaved(id)
         if remaining.isEmpty {
             onDone()
         } else {
@@ -532,5 +550,15 @@ extension AddBookView {
         } catch {
             existingIsbns = []
         }
+    }
+
+    private func loadPendingScans() {
+        pendingCount = PendingScanStore.load().count
+    }
+
+    private func resumePendingScans() {
+        importQueue = PendingScanStore.load()
+        pendingCount = 0
+        showImportFlow = true
     }
 }

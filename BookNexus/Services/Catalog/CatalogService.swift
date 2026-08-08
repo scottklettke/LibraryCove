@@ -1,7 +1,7 @@
 import Foundation
 
 /// A book found in an external catalog (OpenLibrary / Google Books).
-struct CatalogBook: Identifiable, Sendable, Equatable, Hashable {
+struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
     let id: String
     let title: String
     let authors: [String]

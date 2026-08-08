@@ -196,6 +196,17 @@ struct LibraryView: View {
         }
     }
 
+    private func sortFieldLabel(_ field: LibrarySortField) -> String {
+        switch field {
+        case .title:
+            return isSortField(.title) ? "Title (A–Z)" : "Title (Z–A)"
+        case .author:
+            return isSortField(.author) ? "Author (A–Z)" : "Author (Z–A)"
+        case .dateAdded:
+            return isSortField(.dateAdded) ? "Date added (newest)" : "Date added (oldest)"
+        }
+    }
+
     private var visibleBooks: [Book] {
         books.filter { $0.status != BookStatus.donated.rawValue }
     }
@@ -261,30 +272,21 @@ struct LibraryView: View {
                         Button {
                             toggleSortField(.title)
                         } label: {
-                            if isSortField(.title) {
-                                Label("Title", systemImage: "checkmark")
-                            } else {
-                                Text("Title")
-                            }
+                            Label(sortFieldLabel(.title), systemImage: isSortField(.title) ? "checkmark" : "arrow.up.arrow.down")
                         }
                         Button {
                             toggleSortField(.author)
                         } label: {
-                            if isSortField(.author) {
-                                Label("Author", systemImage: "checkmark")
-                            } else {
-                                Text("Author")
-                            }
+                            Label(sortFieldLabel(.author), systemImage: isSortField(.author) ? "checkmark" : "arrow.up.arrow.down")
                         }
                         Button {
                             toggleSortField(.dateAdded)
                         } label: {
-                            if isSortField(.dateAdded) {
-                                Label("Date added", systemImage: "checkmark")
-                            } else {
-                                Text("Date added")
-                            }
+                            Label(sortFieldLabel(.dateAdded), systemImage: isSortField(.dateAdded) ? "checkmark" : "arrow.up.arrow.down")
                         }
+                        Button("Tap a field again to reverse the order") {}
+                            .disabled(true)
+                            .accessibilityHidden(true)
                     } label: {
                         Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
                     }
@@ -315,6 +317,22 @@ struct LibraryView: View {
                     systemImage: "books.vertical",
                     description: Text("Add your first book from the catalog or scan an ISBN.")
                 )
+            }
+        }
+        .overlay(alignment: .center) {
+            if books.isEmpty {
+                Button {
+                    showAdd = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 40, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 96, height: 96)
+                        .background(Circle().fill(.blue))
+                        .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
+                }
+                .accessibilityLabel("Add a book")
+                .offset(y: 40)
             }
         }
     }

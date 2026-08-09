@@ -84,9 +84,9 @@ struct AddBookView: View {
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                ScannerFlow(existingIsbns: existingIsbns, onAddBooks: { books in
-                    importQueue = books
-                    showImportFlow = true
+                ScannerFlow(existingIsbns: existingIsbns, onFinished: {
+                    showScanner = false
+                    dismiss()
                 })
             }
             .sheet(isPresented: $showImportFlow) {
@@ -255,13 +255,21 @@ private struct ScannerFlow: View {
     @State private var lookupError: String?
     @State private var rescanKey = 0
     @State private var pendingDeleteID: String?
+    @State private var flashISBN: String?
+    @State private var flash = false
+    @State private var flashPulse = false
+    @State private var lookupAlertMessage: String?
+    @State private var showLookupAlert = false
+    @State private var importQueue: [CatalogBook] = []
+    @State private var showImportFlow = false
     let existingIsbns: Set<String>
-    let onAddBooks: ([CatalogBook]) -> Void
+    let onFinished: () -> Void
 
     var body: some View {
         ZStack {
             ISBNScannerView(onCode: handleCode, rescanKey: rescanKey)
                 .ignoresSafeArea()
+            scanFrameFlash
             VStack {
                 Spacer()
                 Text("Point the camera at a book's barcode")
@@ -278,18 +286,6 @@ private struct ScannerFlow: View {
                     .padding(.bottom, 20)
             }
         }
-        .overlay(alignment: .topTrailing) {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.body.bold())
-                    .padding(10)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Circle())
-            }
-            .padding()
-        }
         .confirmationDialog(
             "Remove scanned book?",
             isPresented: .init(get: { pendingDeleteID != nil },
@@ -299,11 +295,26 @@ private struct ScannerFlow: View {
             Button("Remove", role: .destructive) {
                 scannedBooks.removeAll { $0.id == id }
                 PendingScanStore.remove(id: id)
-                pendingDeleteID = nil
             }
             Button("Cancel", role: .cancel) { pendingDeleteID = nil }
         } message: { _ in
             Text("This book won't be added unless you scan it again.")
+        }
+        .alert(
+            "Scan result",
+            isPresented: $showLookupAlert
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(lookupAlertMessage ?? "The book lookup failed. Try again.")
+        }
+        .sheet(isPresented: $showImportFlow) {
+            BookImportFlow(queue: importQueue,
+                           onEachSaved: { id in PendingScanStore.remove(id: id) },
+                           onDone: {
+                               showImportFlow = false
+                               onFinished()
+                           })
         }
     }
 
@@ -348,7 +359,8 @@ private struct ScannerFlow: View {
                     .foregroundStyle(.red)
             }
             Button {
-                onAddBooks(scannedBooks)
+                importQueue = scannedBooks
+                showImportFlow = true
             } label: {
                 Label("Add all", systemImage: "plus")
                     .font(.footnote)
@@ -361,10 +373,55 @@ private struct ScannerFlow: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    private var scanFrameFlash: some View {
+        Group {
+            if flash, let isbn = flashISBN {
+                VStack(spacing: 14) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .stroke(Color.green, lineWidth: 3)
+                            .frame(width: 230, height: 230)
+                            .overlay {
+                                Image(systemName: "barcode.viewfinder")
+                                    .font(.system(size: 52))
+                                    .foregroundStyle(.green)
+                            }
+                    }
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("ISBN \(isbn) detected")
+                            .font(.headline.monospacedDigit())
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                }
+                .scaleEffect(flashPulse ? 1.0 : 0.94)
+                .opacity(flashPulse ? 1.0 : 0.75)
+                .shadow(color: .green.opacity(flashPulse ? 0.9 : 0.35), radius: flashPulse ? 24 : 10)
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 0.45).repeatForever(autoreverses: true)) {
+                        flashPulse = true
+                    }
+                }
+                .onDisappear {
+                    flashPulse = false
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+    }
+
     private func handleCode(_ code: String) {
         lookupError = nil
         isLookup = true
-        Task {
+        flashISBN = code
+        withAnimation(.easeOut(duration: 0.2)) {
+            flash = true
+        }
+        Task { @MainActor in
             do {
                 if let book = try await catalog.lookup(isbn: code, preferred: .openlibrary) {
                     scannedBooks.removeAll { $0.id == book.id }
@@ -372,15 +429,25 @@ private struct ScannerFlow: View {
                     PendingScanStore.append(book)
                 } else {
                     lookupError = "No book found for ISBN \(code)."
+                    lookupAlertMessage = "No book found for ISBN \(code). Try scanning again, or search by title instead."
+                    showLookupAlert = true
                 }
             } catch {
                 lookupError = "Lookup failed: \(error.localizedDescription)"
+                lookupAlertMessage = "Lookup failed: \(error.localizedDescription). Try again."
+                showLookupAlert = true
             }
             isLookup = false
             rescanKey += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    flash = false
+                }
+            }
         }
     }
 }
+
 
 
 private struct CatalogRow: View {

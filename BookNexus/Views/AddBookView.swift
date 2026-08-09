@@ -488,44 +488,45 @@ extension AddBookView {
 struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: [CatalogBook] = []
-    @State private var currentID: String?
     var onEachSaved: (String) -> Void = { _ in }
     var onDone: () -> Void = {}
 
     init(queue: [CatalogBook], onEachSaved: @escaping (String) -> Void = { _ in }, onDone: @escaping () -> Void = {}) {
         self.onEachSaved = onEachSaved
         self.onDone = onDone
-        let pending = PendingScanStore.load()
-        _remaining = State(initialValue: pending)
-        _currentID = State(initialValue: pending.first?.id)
+        _remaining = State(initialValue: queue)
     }
 
     var body: some View {
         NavigationStack {
-            TabView(selection: $currentID) {
-                ForEach(remaining, id: \.id) { book in
-                    BookFormView(catalog: book, existing: nil,
-                                 onSaved: { handleSaved(book.id) },
-                                 dismissOnSave: false)
-                        .tag(book.id)
-                }
-            }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
-            .navigationTitle(remaining.isEmpty ? "All books added" : "\(remaining.count) remaining")
-            .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .top) {
-                if remaining.count > 1 {
-                    HStack {
-                        Image(systemName: "arrow.left")
-                        Text("Swipe to browse \(remaining.count) books")
-                        Image(systemName: "arrow.right")
+            if let book = remaining.first {
+                BookFormView(catalog: book, existing: nil,
+                            onSaved: { handleSaved(book.id) },
+                            dismissOnSave: false)
+                .navigationTitle("\(remaining.count) remaining")
+                .navigationBarTitleDisplayMode(.inline)
+                .safeAreaInset(edge: .top) {
+                    if remaining.count > 1 {
+                        HStack {
+                            Image(systemName: "arrow.left")
+                            Text("Swipe to browse \(remaining.count) books")
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial)
                 }
+            } else {
+                ContentUnavailableView(
+                    "All books added",
+                    systemImage: "checkmark",
+                    description: Text("There are no more books to import.")
+                )
+                .navigationTitle("All books added")
+                .navigationBarTitleDisplayMode(.inline)
             }
         }
     }
@@ -535,8 +536,6 @@ struct BookImportFlow: View {
         onEachSaved(id)
         if remaining.isEmpty {
             onDone()
-        } else {
-            currentID = remaining.first?.id
         }
     }
 }

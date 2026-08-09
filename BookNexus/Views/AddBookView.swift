@@ -488,6 +488,7 @@ extension AddBookView {
 struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: [CatalogBook] = []
+    @State private var currentID = ""
     var onEachSaved: (String) -> Void = { _ in }
     var onDone: () -> Void = {}
 
@@ -495,14 +496,29 @@ struct BookImportFlow: View {
         self.onEachSaved = onEachSaved
         self.onDone = onDone
         _remaining = State(initialValue: queue)
+        _currentID = State(initialValue: queue.first?.id ?? "")
     }
 
     var body: some View {
         NavigationStack {
-            if let book = remaining.first {
-                BookFormView(catalog: book, existing: nil,
-                            onSaved: { handleSaved(book.id) },
-                            dismissOnSave: false)
+            if remaining.isEmpty {
+                ContentUnavailableView(
+                    "All books added",
+                    systemImage: "checkmark",
+                    description: Text("There are no more books to import.")
+                )
+                .navigationTitle("All books added")
+                .navigationBarTitleDisplayMode(.inline)
+            } else {
+                TabView(selection: $currentID) {
+                    ForEach(remaining, id: \.id) { book in
+                        BookFormView(catalog: book, existing: nil,
+                                    onSaved: { handleSaved(book.id) },
+                                    dismissOnSave: false)
+                            .tag(book.id)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .automatic))
                 .navigationTitle("\(remaining.count) remaining")
                 .navigationBarTitleDisplayMode(.inline)
                 .safeAreaInset(edge: .top) {
@@ -519,14 +535,6 @@ struct BookImportFlow: View {
                         .background(.ultraThinMaterial)
                     }
                 }
-            } else {
-                ContentUnavailableView(
-                    "All books added",
-                    systemImage: "checkmark",
-                    description: Text("There are no more books to import.")
-                )
-                .navigationTitle("All books added")
-                .navigationBarTitleDisplayMode(.inline)
             }
         }
     }
@@ -536,9 +544,12 @@ struct BookImportFlow: View {
         onEachSaved(id)
         if remaining.isEmpty {
             onDone()
+        } else {
+            currentID = remaining.first?.id ?? ""
         }
     }
 }
+
 
 extension AddBookView {
     private func buildExistingSet() {

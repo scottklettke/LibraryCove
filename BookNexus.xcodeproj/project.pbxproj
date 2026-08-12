@@ -7,30 +7,37 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		053D6A4DA7EEA1D7DE261AE0 /* CoverImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */; };
+		1D227A84A443CE7DBBF3C546 /* ZipArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE4766D3B7B69FC70AA5FED /* ZipArchive.swift */; };
 		213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */; };
 		23446AA2093D6D1DF964DCE2 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BECBAE066EF4A05F33A7576 /* Persistence.swift */; };
 		3E1B70428ED02FC7ADECABA2 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479F167FA4D4909D64A9776B /* LibraryView.swift */; };
+		3F6CDA65D5064229C183B4A9 /* ISBNScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06FB9E9C79C3D1AAF67B49B4 /* ISBNScannerView.swift */; };
+		44873906AE2241D5902C09CB /* PhotoCropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8D13E465719FF80F0A10F54 /* PhotoCropView.swift */; };
 		487826298A0FC7013B446583 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F1799A7E99E9EE23090A3F /* User.swift */; };
 		4DED8832C0944E3A26296EF8 /* BookNexusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */; };
-		ECFEA672F6D5E1CF724FBA77 /* PendingScanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 992D16B92714306D4C5A7FE4 /* PendingScanStore.swift */; };
+		5230248279AD3B3B56BB1AA5 /* LibraryDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00CDDBF2563BF734AC13F320 /* LibraryDataServiceTests.swift */; };
+		56354CE53D12EC9AD8638BEF /* LibraryDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB1362C8B8BD5B6600FDF7A /* LibraryDataService.swift */; };
 		57E31A54F5DC33D83BCD4432 /* CatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */; };
+		65456C37A2809A0046B28BA7 /* PendingScanStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE39D4B5EFBB0D27F363B112 /* PendingScanStore.swift */; };
 		74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19F634236D2E25996ABFAF7E /* AuthService.swift */; };
+		78F338101414D83FAAC7B0B3 /* BookFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33EF2D5991F14BE64B336D96 /* BookFormView.swift */; };
 		7E2FA0F74EC58B2CD575BCC0 /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4081CCAF7239F1FEE720B2ED /* Connection.swift */; };
+		8171B07342C8F77A5A081F94 /* AddBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07963244E0A5CBAFF3685B76 /* AddBookView.swift */; };
+		86A583012566B0E63489B2DC /* LocationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C743DD9BC9974475BD485779 /* LocationStore.swift */; };
+		88A65217368FC591DC3B5396 /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA71BCA2022D2862829348EC /* BookDetailView.swift */; };
 		8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C1DCDE47ED67E664790114 /* Book.swift */; };
 		95AB138620E3799EAC0D17FD /* BookNexusUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */; };
+		987B77E5B2E31037BAF2CA4F /* GenreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FCBC84DCB9CD2FF86A129E /* GenreStore.swift */; };
 		AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */; };
 		AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7A776C41705A6CB7A15A49 /* RootView.swift */; };
 		AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E94C93E532B33EA592F1EB /* Note.swift */; };
 		C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142ED389ED138762597BEC0F /* SettingsView.swift */; };
 		D4D62FC90B2D9F5728F3F42D /* InferenceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FF9D2FA28C5B44002958A93 /* InferenceProvider.swift */; };
 		E953E8BE36ABF0C51F8F84E2 /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D0B3560429372162C83A82A /* ReadingList.swift */; };
+		F1B6C4200EEBC0004D173763 /* LibraryExportDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD18FEC58EA8AC9EA08D6EB2 /* LibraryExportDTOs.swift */; };
 		F1FFA880481D050874F2CC74 /* SyncProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */; };
-		72C49FD85C0F196EB32264B4 /* AddBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85DE1F2688451C61ADC99E4 /* AddBookView.swift */; };
-		87637331719EF5D87E26E772 /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F65CDCD22F379C4D7B16BEF /* BookDetailView.swift */; };
-		E55A5E8409C8F6C2EF97681A /* BookFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AC43B795199B82492900CF3 /* BookFormView.swift */; };
-		E5ED765192B6F57DC329363E /* ISBNScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E658096083D90C7E5506166 /* ISBNScannerView.swift */; };
-		9C34AB9D3FFAFA154EDF9F19 /* LocationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4AE7C6BC36EFDF6FC7D271E /* LocationStore.swift */; };
-		A1B2C3D4E5F6A7B8C9D0E1F2 /* GenreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E3F4 /* GenreStore.swift */; };
+		FBD02930C22165FB4952717B /* ExportFormatGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F3C5EAEAF435F572633AA09 /* ExportFormatGuide.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,33 +58,40 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		00CDDBF2563BF734AC13F320 /* LibraryDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataServiceTests.swift; sourceTree = "<group>"; };
+		06FB9E9C79C3D1AAF67B49B4 /* ISBNScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISBNScannerView.swift; sourceTree = "<group>"; };
+		07963244E0A5CBAFF3685B76 /* AddBookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddBookView.swift; sourceTree = "<group>"; };
 		07E94C93E532B33EA592F1EB /* Note.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Note.swift; sourceTree = "<group>"; };
 		142ED389ED138762597BEC0F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		19F634236D2E25996ABFAF7E /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusUITests.swift; sourceTree = "<group>"; };
 		2D0B3560429372162C83A82A /* ReadingList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingList.swift; sourceTree = "<group>"; };
 		2FF9D2FA28C5B44002958A93 /* InferenceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InferenceProvider.swift; sourceTree = "<group>"; };
+		33EF2D5991F14BE64B336D96 /* BookFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormView.swift; sourceTree = "<group>"; };
 		3BECBAE066EF4A05F33A7576 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
+		3F3C5EAEAF435F572633AA09 /* ExportFormatGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFormatGuide.swift; sourceTree = "<group>"; };
 		4081CCAF7239F1FEE720B2ED /* Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
 		40C1DCDE47ED67E664790114 /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
 		479F167FA4D4909D64A9776B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProvider.swift; sourceTree = "<group>"; };
 		65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusTests.swift; sourceTree = "<group>"; };
 		8B7A776C41705A6CB7A15A49 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		8CB1362C8B8BD5B6600FDF7A /* LibraryDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataService.swift; sourceTree = "<group>"; };
 		93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
+		93FCBC84DCB9CD2FF86A129E /* GenreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreStore.swift; sourceTree = "<group>"; };
 		941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusApp.swift; sourceTree = "<group>"; };
-		992D16B92714306D4C5A7FE4 /* PendingScanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PendingScanStore.swift; path = PendingScanStore.swift; sourceTree = "<group>"; };
+		AA71BCA2022D2862829348EC /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
+		AD18FEC58EA8AC9EA08D6EB2 /* LibraryExportDTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryExportDTOs.swift; sourceTree = "<group>"; };
+		AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverImageStore.swift; sourceTree = "<group>"; };
+		BAE4766D3B7B69FC70AA5FED /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogService.swift; sourceTree = "<group>"; };
+		BE39D4B5EFBB0D27F363B112 /* PendingScanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingScanStore.swift; sourceTree = "<group>"; };
+		C743DD9BC9974475BD485779 /* LocationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationStore.swift; sourceTree = "<group>"; };
+		D8D13E465719FF80F0A10F54 /* PhotoCropView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCropView.swift; sourceTree = "<group>"; };
 		D9F1799A7E99E9EE23090A3F /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C85DE1F2688451C61ADC99E4 /* AddBookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AddBookView.swift"; sourceTree = "<group>"; };
-		4F65CDCD22F379C4D7B16BEF /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BookDetailView.swift"; sourceTree = "<group>"; };
-		4AC43B795199B82492900CF3 /* BookFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BookFormView.swift"; sourceTree = "<group>"; };
-		5E658096083D90C7E5506166 /* ISBNScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ISBNScannerView.swift"; sourceTree = "<group>"; };
-		D4AE7C6BC36EFDF6FC7D271E /* LocationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LocationStore.swift"; sourceTree = "<group>"; };
-		A1B2C3D4E5F6A7B8C9D0E3F4 /* GenreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "GenreStore.swift"; sourceTree = "<group>"; };
+		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -92,14 +106,15 @@
 		1155CBDF4A99BCD54EECB555 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				07963244E0A5CBAFF3685B76 /* AddBookView.swift */,
+				AA71BCA2022D2862829348EC /* BookDetailView.swift */,
+				33EF2D5991F14BE64B336D96 /* BookFormView.swift */,
+				06FB9E9C79C3D1AAF67B49B4 /* ISBNScannerView.swift */,
 				479F167FA4D4909D64A9776B /* LibraryView.swift */,
+				D8D13E465719FF80F0A10F54 /* PhotoCropView.swift */,
 				8B7A776C41705A6CB7A15A49 /* RootView.swift */,
 				142ED389ED138762597BEC0F /* SettingsView.swift */,
-			
-				C85DE1F2688451C61ADC99E4 /* AddBookView.swift */,
-				4F65CDCD22F379C4D7B16BEF /* BookDetailView.swift */,
-				4AC43B795199B82492900CF3 /* BookFormView.swift */,
-				5E658096083D90C7E5506166 /* ISBNScannerView.swift */,);
+			);
 			path = Views;
 			sourceTree = "<group>";
 		};
@@ -158,8 +173,20 @@
 			isa = PBXGroup;
 			children = (
 				65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */,
+				00CDDBF2563BF734AC13F320 /* LibraryDataServiceTests.swift */,
 			);
 			path = BookNexusTests;
+			sourceTree = "<group>";
+		};
+		AD40B58537E8781B7D05444F /* Export */ = {
+			isa = PBXGroup;
+			children = (
+				3F3C5EAEAF435F572633AA09 /* ExportFormatGuide.swift */,
+				8CB1362C8B8BD5B6600FDF7A /* LibraryDataService.swift */,
+				AD18FEC58EA8AC9EA08D6EB2 /* LibraryExportDTOs.swift */,
+				BAE4766D3B7B69FC70AA5FED /* ZipArchive.swift */,
+			);
+			path = Export;
 			sourceTree = "<group>";
 		};
 		B148346CD3999133276391B6 /* App */ = {
@@ -208,21 +235,23 @@
 			isa = PBXGroup;
 			children = (
 				BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */,
-			
-				D4AE7C6BC36EFDF6FC7D271E /* LocationStore.swift */,
-				A1B2C3D4E5F6A7B8C9D0E3F4 /* GenreStore.swift */,);
+				93FCBC84DCB9CD2FF86A129E /* GenreStore.swift */,
+				C743DD9BC9974475BD485779 /* LocationStore.swift */,
+			);
 			path = Catalog;
 			sourceTree = "<group>";
 		};
 		F6590F32A3001250A4C8E305 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */,
+				BE39D4B5EFBB0D27F363B112 /* PendingScanStore.swift */,
 				D210360B8AA99C125E5896FB /* AI */,
 				36C7F8DD9CEF6776262061DD /* Auth */,
 				F0007BCC6179F88F3F5B1096 /* Catalog */,
+				AD40B58537E8781B7D05444F /* Export */,
 				0D0800773FE3195EA9A3C758 /* Sync */,
-			
-				992D16B92714306D4C5A7FE4 /* PendingScanStore.swift */,);
+			);
 			path = Services;
 			sourceTree = "<group>";
 		};
@@ -322,29 +351,35 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8171B07342C8F77A5A081F94 /* AddBookView.swift in Sources */,
 				74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */,
 				8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */,
+				88A65217368FC591DC3B5396 /* BookDetailView.swift in Sources */,
+				78F338101414D83FAAC7B0B3 /* BookFormView.swift in Sources */,
 				4DED8832C0944E3A26296EF8 /* BookNexusApp.swift in Sources */,
 				57E31A54F5DC33D83BCD4432 /* CatalogService.swift in Sources */,
 				7E2FA0F74EC58B2CD575BCC0 /* Connection.swift in Sources */,
+				053D6A4DA7EEA1D7DE261AE0 /* CoverImageStore.swift in Sources */,
+				FBD02930C22165FB4952717B /* ExportFormatGuide.swift in Sources */,
+				987B77E5B2E31037BAF2CA4F /* GenreStore.swift in Sources */,
+				3F6CDA65D5064229C183B4A9 /* ISBNScannerView.swift in Sources */,
 				D4D62FC90B2D9F5728F3F42D /* InferenceProvider.swift in Sources */,
+				56354CE53D12EC9AD8638BEF /* LibraryDataService.swift in Sources */,
+				F1B6C4200EEBC0004D173763 /* LibraryExportDTOs.swift in Sources */,
 				3E1B70428ED02FC7ADECABA2 /* LibraryView.swift in Sources */,
 				213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */,
+				86A583012566B0E63489B2DC /* LocationStore.swift in Sources */,
 				AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */,
+				65456C37A2809A0046B28BA7 /* PendingScanStore.swift in Sources */,
 				23446AA2093D6D1DF964DCE2 /* Persistence.swift in Sources */,
+				44873906AE2241D5902C09CB /* PhotoCropView.swift in Sources */,
 				E953E8BE36ABF0C51F8F84E2 /* ReadingList.swift in Sources */,
 				AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */,
 				C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */,
 				F1FFA880481D050874F2CC74 /* SyncProvider.swift in Sources */,
 				487826298A0FC7013B446583 /* User.swift in Sources */,
-			
-				72C49FD85C0F196EB32264B4 /* AddBookView.swift in Sources */,
-				87637331719EF5D87E26E772 /* BookDetailView.swift in Sources */,
-				E55A5E8409C8F6C2EF97681A /* BookFormView.swift in Sources */,
-				E5ED765192B6F57DC329363E /* ISBNScannerView.swift in Sources */,
-				9C34AB9D3FFAFA154EDF9F19 /* LocationStore.swift in Sources */,
-				A1B2C3D4E5F6A7B8C9D0E1F2 /* GenreStore.swift in Sources */,
-				ECFEA672F6D5E1CF724FBA77 /* PendingScanStore.swift in Sources */,);
+				1D227A84A443CE7DBBF3C546 /* ZipArchive.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		DFECA4BA0AF8D69C8A0534DB /* Sources */ = {
@@ -360,6 +395,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */,
+				5230248279AD3B3B56BB1AA5 /* LibraryDataServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -386,7 +422,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited,,,,,,,,,,)",
+					"$(inherited)",
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
@@ -403,11 +439,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "BookNexus uses the camera to scan ISBN barcodes on books.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -604,11 +638,9 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "BookNexus uses the camera to scan ISBN barcodes on books.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

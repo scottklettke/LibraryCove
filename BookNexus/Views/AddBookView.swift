@@ -261,11 +261,48 @@ private struct ScannerFlow: View {
     @State private var lookupAlertMessage: String?
     @State private var showLookupAlert = false
     @State private var importQueue: [CatalogBook] = []
-    @State private var showImportFlow = false
+    @State private var isImporting = false
     let existingIsbns: Set<String>
     let onFinished: () -> Void
 
     var body: some View {
+        Group {
+            if isImporting {
+                importFlow
+            } else {
+                cameraView
+            }
+        }
+        .onAppear {
+            seedScannedBooksForTesting()
+        }
+    }
+
+    /// The import/edit/swipe screen, swapped in place of the camera so we never
+    /// present a modal on top of the full-screen camera (that was unreliable).
+    private var importFlow: some View {
+        BookImportFlow(queue: importQueue,
+                       onEachSaved: { id in PendingScanStore.remove(id: id) },
+                       onDone: {
+                           onFinished()
+                       })
+        .overlay(alignment: .topLeading) {
+            Button {
+                isImporting = false
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.body.bold())
+                    .padding(10)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+                    .foregroundStyle(.primary)
+            }
+            .padding(.leading, 8)
+            .accessibilityLabel("Back to scanning")
+        }
+    }
+
+    private var cameraView: some View {
         ZStack {
             ISBNScannerView(onCode: handleCode, rescanKey: rescanKey)
                 .ignoresSafeArea()
@@ -285,6 +322,19 @@ private struct ScannerFlow: View {
                     .padding(.horizontal)
                     .padding(.bottom, 20)
             }
+        }
+        .overlay(alignment: .topLeading) {
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.bold())
+                    .padding(10)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+            }
+            .padding()
+            .accessibilityLabel("Close scanner")
         }
         .confirmationDialog(
             "Remove scanned book?",
@@ -307,14 +357,6 @@ private struct ScannerFlow: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(lookupAlertMessage ?? "The book lookup failed. Try again.")
-        }
-        .sheet(isPresented: $showImportFlow) {
-            BookImportFlow(queue: importQueue,
-                           onEachSaved: { id in PendingScanStore.remove(id: id) },
-                           onDone: {
-                               showImportFlow = false
-                               onFinished()
-                           })
         }
     }
 
@@ -360,7 +402,7 @@ private struct ScannerFlow: View {
             }
             Button {
                 importQueue = scannedBooks
-                showImportFlow = true
+                isImporting = true
             } label: {
                 Label("Add all", systemImage: "plus")
                     .font(.footnote)
@@ -371,6 +413,18 @@ private struct ScannerFlow: View {
         .padding(10)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    /// UI-test seam: seed scanned books from the launch environment so the
+    /// "Add all" hand-off to the import flow is testable without a camera.
+    private func seedScannedBooksForTesting() {
+        guard let raw = ProcessInfo.processInfo.environment["UI_TEST_SCANNED_BOOKS"],
+              let data = raw.data(using: .utf8),
+              let list = try? JSONDecoder().decode([CatalogBook].self, from: data) else { return }
+        scannedBooks = list
+        for book in list {
+            PendingScanStore.append(book)
+        }
     }
 
     private var scanFrameFlash: some View {
@@ -489,8 +543,10 @@ struct AsyncCoverView: View {
 
     var body: some View {
         if let url {
-            if url.absoluteString.hasPrefix("data:") {
-                if let ui = imageFromDataURL(url) {
+            // Locally stored covers (data: URLs and on-disk file: URLs) render
+            // synchronously; only truly remote URLs hit AsyncImage.
+            if url.absoluteString.hasPrefix("data:") || url.isFileURL {
+                if let ui = image(from: url) {
                     Image(uiImage: ui).resizable().scaledToFill()
                         .frame(width: width, height: height)
                         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -516,12 +572,12 @@ struct AsyncCoverView: View {
         }
     }
 
-    private func imageFromDataURL(_ url: URL) -> UIImage? {
+    private func image(from url: URL) -> UIImage? {
+        if url.isFileURL {
+            return UIImage(contentsOfFile: url.path)
+        }
         let str = url.absoluteString
-        guard let comma = str.firstIndex(of: ",") else { return nil }
-        let base64 = str[str.index(after: comma)...]
-        guard let data = Data(base64Encoded: String(base64)) else { return nil }
-        return UIImage(data: data)
+        return CoverImageStore.data(fromDataURL: str).flatMap(UIImage.init(data:))
     }
     private var Placeholder: some View {
         VStack(spacing: 4) {
@@ -581,6 +637,7 @@ struct BookImportFlow: View {
                     ForEach(remaining, id: \.id) { book in
                         BookFormView(catalog: book, existing: nil,
                                     onSaved: { handleSaved(book.id) },
+                                    onDeleted: { handleSaved(book.id) },
                                     dismissOnSave: false)
                             .tag(book.id)
                     }
@@ -606,6 +663,9 @@ struct BookImportFlow: View {
         }
     }
 
+    /// Removes a finished book from the queue. Called for both saved books
+    /// and books discarded via "Delete" — either way the book leaves the
+    /// queue and its pending-scan record is cleared.
     private func handleSaved(_ id: String) {
         remaining.removeAll { $0.id == id }
         onEachSaved(id)

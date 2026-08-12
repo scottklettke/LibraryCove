@@ -1,6 +1,65 @@
 import SwiftUI
 import SwiftData
 
+/// Encodes a captured cover photo into the stored `data:` URL form.
+///
+/// Camera photos hold far more pixels than any cover ever renders on screen
+/// (the largest cover is ~100×140pt ≈ 300px wide at 3x), so they are downscaled
+/// to `maxPixelDimension` before JPEG compression. 640px keeps every on-screen
+/// cover sharp while the embedded base64 stays small — roughly a quarter of the
+/// old 900pt cap (which actually stored ~2700px on a 3x screen).
+enum CoverImageData {
+    /// Longest edge in stored pixels. 480px covers the largest render
+    /// (92×134pt @3x = 276×402px) with headroom and keeps every photo cover
+    /// small. Imported catalog covers are typically ~500px wide already, so
+    /// this makes photos match them.
+    static let maxPixelDimension: CGFloat = 480
+    static let compressionQuality: CGFloat = 0.8
+
+    /// Resizes `image` so its longest edge is at most `maxPixelDimension`
+    /// pixels, keeping aspect ratio. Smaller images are returned unchanged.
+    /// A scale-1 renderer is used so the pixel size is exact (not × screen
+    /// scale), making the stored JPEG predictable.
+    static func resize(_ image: UIImage, maxPixelDimension: CGFloat) -> UIImage {
+        let size = image.size
+        let maxSide = max(size.width, size.height)
+        guard maxSide > maxPixelDimension else { return image }
+        let scale = maxPixelDimension / maxSide
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+
+    /// Returns `image` as a `data:image/jpeg;base64,` URL, resized to
+    /// `maxPixelDimension` if needed. `nil` if JPEG encoding fails.
+    static func encode(_ image: UIImage) -> String? {
+        let resized = resize(image, maxPixelDimension: maxPixelDimension)
+        guard let jpeg = resized.jpegData(compressionQuality: compressionQuality) else { return nil }
+        return "data:image/jpeg;base64," + jpeg.base64EncodedString()
+    }
+
+    /// Decodes the payload of a `data:image/...;base64,` URL back to bytes.
+    static func data(fromDataURL urlString: String) -> Data? {
+        guard urlString.hasPrefix("data:"),
+              let comma = urlString.firstIndex(of: ",") else { return nil }
+        let base64 = urlString[urlString.index(after: comma)...]
+        return Data(base64Encoded: String(base64))
+    }
+
+    /// Re-encodes image bytes down to `maxPixelDimension`. Used when storing
+    /// legacy covers (or photos) that predate the small-size pipeline so they
+    /// get shrunk too. `nil` if the bytes aren't an image or encoding fails.
+    static func normalize(_ data: Data) -> Data? {
+        guard let image = UIImage(data: data) else { return nil }
+        return resize(image, maxPixelDimension: maxPixelDimension)
+            .jpegData(compressionQuality: compressionQuality)
+    }
+}
+
 /// Import a catalog result into the library.
 struct BookImportView: View {
     let catalog: CatalogBook
@@ -37,6 +96,7 @@ struct BookFormView: View {
     @State private var selectedCover: String?
     @State private var selectedPhotoCover: String?
     @State private var showCamera = false
+    @State private var photoToCrop: UIImage?
     @State private var locationStore = LocationStore()
     @State private var genreStore = GenreStore()
     @State private var genreQuery = ""
@@ -117,12 +177,23 @@ struct BookFormView: View {
             }
         }
         .sheet(isPresented: $showCamera) {
-            CameraPicker { image in
-                let shrunk = shrinkImage(image, maxDimension: 900)
-                guard let jpeg = shrunk.jpegData(compressionQuality: 0.8) else { return }
-                let base64 = jpeg.base64EncodedString()
-                selectedPhotoCover = "data:image/jpeg;base64," + base64
-                selectedCover = nil
+            // Camera first; once a photo is captured the sheet's content swaps
+            // to the crop view in place (so no sheet-on-sheet animation races).
+            if let image = photoToCrop {
+                PhotoCropView(sourceImage: image) { cropped in
+                    if let cover = CoverImageData.encode(cropped) {
+                        selectedPhotoCover = cover
+                        selectedCover = nil
+                    }
+                    photoToCrop = nil
+                    showCamera = false
+                }
+                .onDisappear { photoToCrop = nil }
+            } else {
+                CameraPicker { image in
+                    photoToCrop = image
+                    selectedCover = nil
+                }
             }
         }
         .toolbar {
@@ -136,7 +207,7 @@ struct BookFormView: View {
                     Button("Save") { save() }
                 }
             }
-            if existing != nil {
+            if existing != nil || catalog != nil {
                 ToolbarItem(placement: .primaryAction) {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true
@@ -165,11 +236,11 @@ struct BookFormView: View {
         }
         .alert("Delete this book?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
-                deleteExistingBook()
+                deleteBook()
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This book will be removed from your library.")
+            Text(deleteMessage)
         }
     }
 
@@ -514,27 +585,28 @@ private var coverSection: some View {
         return formatter
     }
 
-    private func deleteExistingBook() {
-        guard let book = existing else { return }
-        modelContext.delete(book)
-        try? modelContext.save()
-        dismiss()
+    /// Deletes an already-saved book, or discards an unsaved import
+    /// (when `existing` is nil the book was never inserted).
+    private func deleteBook() {
+        if let book = existing {
+            CoverImageStore.delete(forBookID: book.id)
+            modelContext.delete(book)
+            try? modelContext.save()
+        }
+        if dismissOnSave {
+            dismiss()
+        }
         onDeleted()
     }
 
-
-    private func shrinkImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
-        let size = image.size
-        let maxSide = max(size.width, size.height)
-        guard maxSide > maxDimension else { return image }
-        let scale = maxDimension / maxSide
-        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
-        let resized = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: newSize))
+    private var deleteMessage: String {
+        if existing != nil {
+            return "This book will be removed from your library."
         }
-        return resized
+        return "This book won't be added to your library."
     }
+
+
     private func save() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
@@ -547,7 +619,22 @@ private var coverSection: some View {
             locationStore.add(location)
         }
 
-        let cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
+        // New books get their id up front so a photo cover can be written to
+        // the file system under the same id the database will use.
+        let newID = existing == nil ? UUID().uuidString : nil
+        var cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
+        // Persist covers as real files on disk instead of base64 blobs in the
+        // database. Re-normalize legacy/large photos so they shrink to the
+        // same target size as freshly captured ones.
+        if let dataCover = cover, dataCover.hasPrefix("data:"),
+           let storeID = existing?.id ?? newID {
+            let bytes = CoverImageData.data(fromDataURL: dataCover)
+                .flatMap(CoverImageData.normalize)
+                ?? CoverImageData.data(fromDataURL: dataCover)
+            if let bytes, CoverImageStore.save(bytes, forBookID: storeID) {
+                cover = CoverImageStore.fileURL(forBookID: storeID).absoluteString
+            }
+        }
 
         if let existing {
             existing.title = trimmedTitle
@@ -568,7 +655,7 @@ private var coverSection: some View {
             try? modelContext.save()
             dismiss()
         } else {
-            let book = Book(
+            let book = Book(id: newID!,
                 title: trimmedTitle,
                 authors: authors,
                 isbn: catalog?.isbn,
@@ -660,7 +747,8 @@ private struct CameraPicker: UIViewControllerRepresentable {
             if let image = info[.originalImage] as? UIImage {
                 parent.onImage(image)
             }
-            parent.dismiss()
+            // No dismiss here: BookFormView swaps this sheet's content to the
+            // crop view, so dismissing would tear the sheet down mid-transition.
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {

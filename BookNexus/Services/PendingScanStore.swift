@@ -6,6 +6,14 @@ struct PendingScanStore {
     private static let key = "pendingScannedBooks"
 
     static func load() -> [CatalogBook] {
+        // UI-test seam: seed pending scans from the launch environment so
+        // deterministic offline tests can exercise the import flow without a
+        // camera. Only active when the variable is set by a test.
+        if let raw = ProcessInfo.processInfo.environment["UI_TEST_PENDING_SCANS"],
+           let data = raw.data(using: .utf8),
+           let list = try? JSONDecoder().decode([CatalogBook].self, from: data) {
+            return list
+        }
         guard let data = UserDefaults.standard.data(forKey: key),
               let list = try? JSONDecoder().decode([CatalogBook].self, from: data) else {
             return []

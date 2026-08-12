@@ -360,7 +360,7 @@ struct LibraryView: View {
                             NavigationLink {
                                 BookDetailView(book: book)
                             } label: {
-                                BookGridCell(book: book)
+                                BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
                             }
                             .buttonStyle(.plain)
                         }
@@ -393,7 +393,7 @@ struct LibraryView: View {
                                         NavigationLink {
                                             BookDetailView(book: book)
                                         } label: {
-                                            BookGridCell(book: book)
+                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -593,9 +593,11 @@ struct LibraryView: View {
     }
 }
 
-/// Grid cell: cover + short title.
+/// Grid cell: cover + short title (plus the added date when sorting by it,
+/// mirroring the list view).
 struct BookGridCell: View {
     let book: Book
+    var showAddedDate = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -609,6 +611,12 @@ struct BookGridCell: View {
                 .font(.caption)
                 .lineLimit(2)
                 .frame(maxWidth: 92, alignment: .leading)
+            if showAddedDate {
+                Text(addedDateFormatter.string(from: book.createdAt))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .frame(maxWidth: 92, alignment: .leading)
+            }
         }
     }
 }

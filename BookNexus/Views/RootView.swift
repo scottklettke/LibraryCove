@@ -7,11 +7,26 @@ struct RootView: View {
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
-        if let currentUser = users.first(where: \.isActive) {
-            MainTabView(user: currentUser)
-        } else {
-            LoginView()
+        Group {
+            if let currentUser = users.first(where: \.isActive) {
+                MainTabView(user: currentUser)
+            } else {
+                LoginView()
+            }
         }
+        .task {
+            resetDataIfNeeded()
+        }
+    }
+
+    /// UI-test seam: clear the library (and pending scans) at launch so
+    /// deterministic offline UI tests always start from an empty store —
+    /// previously records persisted across test runs and collided on re-run.
+    private func resetDataIfNeeded() {
+        guard ProcessInfo.processInfo.environment["UI_TEST_RESET_DATA"] == "1" else { return }
+        try? modelContext.delete(model: Book.self)
+        try? modelContext.save()
+        PendingScanStore.clear()
     }
 }
 

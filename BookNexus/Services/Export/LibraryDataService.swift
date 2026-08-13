@@ -299,6 +299,30 @@ enum LibraryDataService {
         return titleKeys.contains(bookTitleKey(dto.title, authors: dto.authors))
     }
 
+    // MARK: - Cover sync migration
+
+    /// One-time migration for the filesystem-cover era: books whose cover
+    /// exists only as a local file (`covers/...` token or stale absolute path)
+    /// get the bytes embedded as a `data:` URL so CloudKit syncs them to other
+    /// devices. Idempotent — data/http covers are left alone; runs each launch.
+    @MainActor
+    static func materializeLocalCovers(context: ModelContext) {
+        guard let books = try? context.fetch(FetchDescriptor<Book>()) else { return }
+        var changed = false
+        for book in books {
+            guard let cover = book.coverImageURL else { continue }
+            if cover.hasPrefix("data:")
+                || cover.hasPrefix("http://")
+                || cover.hasPrefix("https://") {
+                continue
+            }
+            guard let bytes = CoverImageStore.localData(forCover: cover) else { continue }
+            book.coverImageURL = CoverImageStore.dataURL(from: bytes)
+            changed = true
+        }
+        if changed { try? context.save() }
+    }
+
     // MARK: - Cover restoration
 
     /// Writes the bundled `covers/*.jpg` files to the filesystem store and
@@ -310,9 +334,10 @@ enum LibraryDataService {
             guard let entryName = envelope.books[i].coverImageFile,
                   let bytes = files[entryName] else { continue }
             guard CoverImageStore.save(bytes, forBookID: envelope.books[i].id) else { continue }
-            // Container-independent token, so restored covers survive
-            // reinstalls that change the container path.
-            envelope.books[i].coverImageURL = CoverImageStore.zipEntryName(forBookID: envelope.books[i].id)
+            // Store the cover as an embedded data URL: that's the form that
+            // syncs to other devices via CloudKit (CoverImageStore only backs
+            // export bundling / offline file access).
+            envelope.books[i].coverImageURL = CoverImageStore.dataURL(from: bytes)
         }
     }
 

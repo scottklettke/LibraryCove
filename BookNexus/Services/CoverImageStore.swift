@@ -78,6 +78,14 @@ enum CoverImageStore {
         }
     }
 
+    /// Encodes image bytes as a `data:image/jpeg;base64,` URL — the synced form
+    /// stored in `coverImageURL` so cover data travels through CloudKit with
+    /// the book record (the file in `directoryURL` is only a local mirror for
+    /// export bundling and offline access).
+    static func dataURL(from data: Data) -> String {
+        "data:image/jpeg;base64," + data.base64EncodedString()
+    }
+
     /// Decodes a `data:image/...;base64,` URL back to image bytes.
     static func data(fromDataURL urlString: String) -> Data? {
         guard urlString.hasPrefix("data:"),

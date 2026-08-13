@@ -262,16 +262,19 @@ import SwiftData
             #expect(envelope.books.first { $0.id == id }?.coverImageURL == nil)
         }
 
-        // Importing rewrites covers to local files and points the DB at them
-        // via container-independent tokens.
+        // Importing rewrites covers to embedded data URLs (the synced form)
+        // while still mirroring a copy into the filesystem store.
         LibraryDataService.deleteAll(context: context)
         _ = try LibraryDataService.importArchive(data: zipData, context: context)
         let restored = try context.fetch(FetchDescriptor<Book>())
         for id in ["b-cover-remote", "b-cover-data", "b-cover-shared"] {
             let book = restored.first { $0.id == id }
-            #expect(book?.coverImageURL == "covers/\(id).jpg")
+            #expect(book?.coverImageURL?.hasPrefix("data:image/jpeg;base64,") == true)
             #expect(CoverImageStore.data(forBookID: id) != nil)
         }
+        // The embedded URL decodes back to the bundled JPEG bytes.
+        let embedded = restored.first { $0.id == "b-cover-remote" }?.coverImageURL ?? ""
+        #expect(CoverImageStore.data(fromDataURL: embedded) == files["covers/b-cover-remote.jpg"])
         #expect(files["covers/b-cover-remote.jpg"] == CoverImageStore.data(forBookID: "b-cover-remote"))
     }
 
@@ -362,6 +365,24 @@ import SwiftData
         #expect(!books.contains { $0.id == "i-dup-title" })
         #expect(books.contains { $0.id == "x-1" }) // existing untouched
         #expect(books.contains { $0.id == "x-2" })
+    }
+
+    @Test func materializeLocalCoversEmbedsBytesForSync() throws {
+        let context = baseContext()
+        LibraryDataService.deleteAll(context: context)
+
+        let id = UUID().uuidString
+        let bytes = Data([0xFF, 0xD8, 0x01, 0x02, 0x03])
+        // A legacy file-token cover (what older versions stored in the DB).
+        context.insert(Book(id: id, title: "Old", coverImageURL: CoverImageStore.zipEntryName(forBookID: id)))
+        try context.save()
+        #expect(CoverImageStore.save(bytes, forBookID: id))
+
+        LibraryDataService.materializeLocalCovers(context: context)
+
+        let book = try #require(context.fetch(FetchDescriptor<Book>()).first)
+        #expect(book.coverImageURL?.hasPrefix("data:image/jpeg;base64,") == true)
+        #expect(CoverImageStore.data(fromDataURL: book.coverImageURL ?? "") == bytes)
     }
 
     @Test func mergeRecognizesDashEquivalentISBN() throws {

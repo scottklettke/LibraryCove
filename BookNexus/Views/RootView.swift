@@ -19,6 +19,9 @@ struct RootView: View {
             // On relaunch after a sync-provider change: pour the captured
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
+            // Embed any still file-only covers as data URLs so iCloud Sync
+            // pushes cover images to other devices.
+            LibraryDataService.materializeLocalCovers(context: modelContext)
         }
     }
 

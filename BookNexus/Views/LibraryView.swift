@@ -111,6 +111,8 @@ private struct ScrollOffsetTracker: View {
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Book.title) private var books: [Book]
+    /// Members — resolve "Added by" names for search.
+    @Query private var users: [User]
 
     @State private var viewMode: LibraryViewMode = .grid
     @State private var searchText = ""
@@ -129,6 +131,9 @@ struct LibraryView: View {
         if query.isEmpty {
             searched = visible
         } else {
+            // Resolve owner names once for the whole filtered set.
+            let namesByID = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0.displayName) })
+            let activeName = users.first(where: \.isActive)?.displayName ?? ""
             searched = visible.filter { book in
                 let haystack = [
                     book.title,
@@ -136,7 +141,8 @@ struct LibraryView: View {
                     book.genres.joined(separator: " "),
                     book.physicalLocation ?? "",
                     book.bookDescription ?? "",
-                    book.notes.map(\.content).joined(separator: " ")
+                    book.notes.map(\.content).joined(separator: " "),
+                    book.ownerID.flatMap { namesByID[$0] } ?? activeName
                 ].joined(separator: " ").lowercased()
                 return haystack.contains(query.lowercased())
             }
@@ -309,7 +315,7 @@ struct LibraryView: View {
         .sheet(isPresented: $showAdd) {
             AddBookView()
         }
-        .searchable(text: $searchText, prompt: "Search title, author, notes…")
+        .searchable(text: $searchText, prompt: "Search title, author, added by, notes…")
         .overlay {
             if books.isEmpty {
                 ContentUnavailableView(

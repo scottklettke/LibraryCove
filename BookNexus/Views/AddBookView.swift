@@ -387,6 +387,19 @@ private struct ScannerFlow: View {
                                                 .foregroundStyle(.green)
                                         }
                                     }
+                                    .overlay(alignment: .bottom) {
+                                        // Not-found scans have no cover; label them
+                                        // so they're clearly awaiting manual details.
+                                        if book.title.isEmpty {
+                                            Text("manual")
+                                                .font(.system(size: 9, weight: .semibold))
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1)
+                                                .background(.black.opacity(0.65))
+                                                .foregroundStyle(.white)
+                                                .clipShape(Capsule())
+                                        }
+                                    }
                             }
                             .buttonStyle(.plain)
                         }
@@ -483,12 +496,14 @@ private struct ScannerFlow: View {
                     PendingScanStore.append(book)
                 } else {
                     // No catalog entry: still let the user add the book, but
-                    // the details are entered by hand.
+                    // the details are entered by hand. Surface it clearly — a
+                    // bare generic cover in the scan list is too easy to miss.
                     let stub = CatalogBook.manualStub(isbn: code)
                     scannedBooks.removeAll { $0.id == stub.id }
                     scannedBooks.append(stub)
                     PendingScanStore.append(stub)
-                    lookupError = "No online details for this ISBN — it was added; enter the title and author manually."
+                    lookupAlertMessage = "No online details for this ISBN. It was added to the scan list — when you tap Add all, enter the title and author manually."
+                    showLookupAlert = true
                 }
             } catch {
                 lookupError = "Lookup failed: \(error.localizedDescription)"

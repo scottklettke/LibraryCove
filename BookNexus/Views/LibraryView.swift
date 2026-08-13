@@ -529,16 +529,41 @@ struct LibraryView: View {
                 ($0 ?? "") < ($1 ?? "")
             }
             ForEach(locations, id: \.self) { location in
+                let shelf = grouped[location] ?? []
                 Section(location ?? "Unplaced") {
-                    ForEach(grouped[location] ?? []) { book in
-                NavigationLink {
-                    BookDetailView(book: book)
-                } label: {
-                    BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
-                }
+                    if grouping == .none {
+                        // Default: books ordered by the active sort (Title A–Z).
+                        ForEach(shelf) { book in
+                            locationRow(for: book)
+                        }
+                    } else {
+                        // Author/genre subgroups, alphabetical by group name
+                        // (books still in title order within each group).
+                        let sub = Dictionary(grouping: shelf) { book in
+                            groupKey(for: book)
+                        }
+                        let keys = sub.keys.sorted { ($0 ?? "") < ($1 ?? "") }
+                        ForEach(keys, id: \.self) { key in
+                            Section {
+                                ForEach(sub[key] ?? []) { book in
+                                    locationRow(for: book)
+                                }
+                            } header: {
+                                Text(key ?? "Unknown")
+                                    .font(.subheadline)
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private func locationRow(for book: Book) -> some View {
+        NavigationLink {
+            BookDetailView(book: book)
+        } label: {
+            BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
         }
     }
 

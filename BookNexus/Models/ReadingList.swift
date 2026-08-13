@@ -4,23 +4,23 @@ import SwiftData
 /// Reading list + items — ported from backend `ReadingList` / `ReadingListItem`.
 @Model
 final class ReadingList {
-    @Attribute(.unique) var id: String
-    var name: String
+    var id: String = UUID().uuidString
+    var name: String = ""
     var listDescription: String?
-    var ownerID: String
+    var ownerID: String = ""
     var sharedLibraryID: String?
-    var isPrivate: Bool
+    var isPrivate: Bool = true
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var updatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
 
     // Sync metadata
-    var syncState: String
-    var syncUpdatedAt: Date
-    var syncDeviceID: String
+    var syncState: String = "modified"
+    var syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var syncDeviceID: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \ReadingListItem.list)
-    var items: [ReadingListItem]
+    var items: [ReadingListItem]?
 
     init(
         id: String = UUID().uuidString,
@@ -29,10 +29,10 @@ final class ReadingList {
         ownerID: String,
         sharedLibraryID: String? = nil,
         isPrivate: Bool = true,
-        createdAt: Date = .init(),
-        updatedAt: Date = .init(),
+        createdAt: Date = Date(timeIntervalSinceReferenceDate: 0),
+        updatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncState: String = "modified",
-        syncUpdatedAt: Date = .init(),
+        syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncDeviceID: String = ""
     ) {
         self.id = id
@@ -53,20 +53,20 @@ final class ReadingList {
 /// A single book within a reading list (position/priority/target date).
 @Model
 final class ReadingListItem {
-    @Attribute(.unique) var id: String
+    var id: String = UUID().uuidString
     var list: ReadingList?
     var book: Book?
     var addedByID: String?
-    var position: Int
-    var priority: String  // low | normal | high
+    var position: Int = 0
+    var priority: String = "normal"  // low | normal | high
     var targetDate: Date?
 
-    var createdAt: Date
+    var createdAt: Date = Date(timeIntervalSinceReferenceDate: 0)
 
     // Sync metadata
-    var syncState: String
-    var syncUpdatedAt: Date
-    var syncDeviceID: String
+    var syncState: String = "modified"
+    var syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var syncDeviceID: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -76,9 +76,9 @@ final class ReadingListItem {
         position: Int = 0,
         priority: String = "normal",
         targetDate: Date? = nil,
-        createdAt: Date = .init(),
+        createdAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncState: String = "modified",
-        syncUpdatedAt: Date = .init(),
+        syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncDeviceID: String = ""
     ) {
         self.id = id

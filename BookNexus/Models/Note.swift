@@ -4,24 +4,24 @@ import SwiftData
 /// Book note/reflection — ported from backend `Note`.
 @Model
 final class Note {
-    @Attribute(.unique) var id: String
+    var id: String = UUID().uuidString
     var book: Book?
-    var userID: String
+    var userID: String = ""
     var title: String?
-    var content: String
-    var noteType: String  // general | takeaway | quote | question | connection
-    var visibility: String  // private | shared | public
+    var content: String = ""
+    var noteType: String = "general"  // general | takeaway | quote | question | connection
+    var visibility: String = "private"  // private | shared | public
     var sharedLibraryID: String?
     var pageReference: String?
-    var mentions: [String]
+    var mentions: [String] = []
 
-    var createdAt: Date
-    var updatedAt: Date
+    var createdAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var updatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
 
     // Sync metadata
-    var syncState: String
-    var syncUpdatedAt: Date
-    var syncDeviceID: String
+    var syncState: String = "modified"
+    var syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var syncDeviceID: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -34,10 +34,10 @@ final class Note {
         sharedLibraryID: String? = nil,
         pageReference: String? = nil,
         mentions: [String] = [],
-        createdAt: Date = .init(),
-        updatedAt: Date = .init(),
+        createdAt: Date = Date(timeIntervalSinceReferenceDate: 0),
+        updatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncState: String = "modified",
-        syncUpdatedAt: Date = .init(),
+        syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncDeviceID: String = ""
     ) {
         self.id = id

@@ -4,20 +4,20 @@ import SwiftData
 /// Knowledge-graph connection between two books — ported from backend `Connection`.
 @Model
 final class Connection {
-    @Attribute(.unique) var id: String
+    var id: String = UUID().uuidString
     var book1: Book?
     var book2: Book?
-    var connectionType: String  // inspired_by | expands_on | contrasts_with | similar_to
+    var connectionType: String = "similar_to"  // inspired_by | expands_on | contrasts_with | similar_to
     var connectionDescription: String?  // note: "description" conflicts with the Model macro
     var createdByID: String?
     var sharedLibraryID: String?
 
-    var createdAt: Date
+    var createdAt: Date = Date(timeIntervalSinceReferenceDate: 0)
 
     // Sync metadata
-    var syncState: String
-    var syncUpdatedAt: Date
-    var syncDeviceID: String
+    var syncState: String = "modified"
+    var syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var syncDeviceID: String = ""
 
     init(
         id: String = UUID().uuidString,
@@ -27,9 +27,9 @@ final class Connection {
         connectionDescription: String? = nil,
         createdByID: String? = nil,
         sharedLibraryID: String? = nil,
-        createdAt: Date = .init(),
+        createdAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncState: String = "modified",
-        syncUpdatedAt: Date = .init(),
+        syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncDeviceID: String = ""
     ) {
         self.id = id

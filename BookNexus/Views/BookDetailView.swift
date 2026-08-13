@@ -154,11 +154,12 @@ struct BookDetailView: View {
 
     private var notesSection: some View {
         Section("Notes") {
-            if book.notes.isEmpty {
+            let notes = book.notes ?? []
+            if notes.isEmpty {
                 Text("No notes yet")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(book.notes.sorted { $0.createdAt < $1.createdAt }) { note in
+                ForEach(notes.sorted { $0.createdAt < $1.createdAt }) { note in
                     VStack(alignment: .leading, spacing: 2) {
                         Text(note.content)
                             .font(.body)

@@ -30,6 +30,11 @@ struct SettingsView: View {
 
     @FocusState private var nameFieldFocused: Bool
 
+    // Sync
+    @State private var syncProvider: LibrarySync = SyncSettings.selectedProvider
+    @State private var isSwitchingSync = false
+    @State private var showSyncRestartNotice = false
+
     // Feedback
     @State private var lastResult: String?
     @State private var showResult = false
@@ -102,9 +107,21 @@ struct SettingsView: View {
                     Text("Export saves your whole library as a zipped, readable file you can review and edit. Import restores from such a file by replacing the current library. Delete permanently removes everything — export first to keep a backup.")
                 }
 
-                Section("Sync") {
-                    LabeledContent("Provider", value: "iCloud / CloudKit (planned)")
-                    LabeledContent("Status", value: "Local-only")
+                Section {
+                    Picker("Sync provider", selection: $syncProvider) {
+                        ForEach(LibrarySync.allCases) { provider in
+                            Text(provider.isAvailableNow
+                                 ? provider.displayName
+                                 : "\(provider.displayName) (coming soon)")
+                                .tag(provider)
+                        }
+                    }
+                    .disabled(isSwitchingSync)
+                    LabeledContent("Status", value: syncStatusText(syncProvider))
+                } header: {
+                    Text("Sync")
+                } footer: {
+                    Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
                 }
 
                 Section("AI") {
@@ -135,6 +152,14 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showImportPreview) {
                 importPreviewSheet
+            }
+            .onChange(of: syncProvider) { _, newValue in
+                switchSyncProvider(to: newValue)
+            }
+            .alert("Restart to apply", isPresented: $showSyncRestartNotice) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your library was captured. Quit and reopen BookNexus to start using \(syncProvider.displayName); your data will be moved to that store when it relaunches.")
             }
             .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [zipType]) { result in
                 handleFilePicker(result)
@@ -317,6 +342,43 @@ struct SettingsView: View {
     }
 
     // MARK: - Actions
+
+    // MARK: - Sync
+
+    private func syncStatusText(_ provider: LibrarySync) -> String {
+        switch provider {
+        case .localOnly: return "Stored on this device"
+        case .iCloud: return "Syncing via iCloud"
+        case .dropbox, .box, .nextcloud: return "Not connected"
+        }
+    }
+
+    private func switchSyncProvider(to new: LibrarySync) {
+        guard new != SyncSettings.selectedProvider else { return }
+        guard new.isAvailableNow else {
+            // Not implemented providers: show why and revert the picker.
+            lastError = LibrarySyncError.notImplementedFor(new).errorDescription
+            showError = true
+            syncProvider = SyncSettings.selectedProvider
+            return
+        }
+        guard !isSwitchingSync else { return }
+        isSwitchingSync = true
+        Task { @MainActor in
+            defer { isSwitchingSync = false }
+            // Snapshot the current library (zip keeps cover files) so the data
+            // moves into the target provider's store on relaunch.
+            guard let snapshot = await LibraryDataService.export(context: modelContext),
+                  SyncSettings.writeSnapshot(snapshot) else {
+                syncProvider = SyncSettings.selectedProvider
+                lastError = "Couldn't prepare your library for the switch. Nothing changed."
+                showError = true
+                return
+            }
+            SyncSettings.selectedProvider = new
+            showSyncRestartNotice = true
+        }
+    }
 
     private func exportLibrary() {
         isExporting = true

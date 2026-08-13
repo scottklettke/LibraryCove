@@ -16,6 +16,9 @@ struct RootView: View {
         }
         .task {
             resetDataIfNeeded()
+            // On relaunch after a sync-provider change: pour the captured
+            // library into the newly selected provider's store.
+            SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
         }
     }
 

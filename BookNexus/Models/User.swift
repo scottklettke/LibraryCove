@@ -4,14 +4,14 @@ import SwiftData
 /// Current local user (family member) — mirrors backend `User`.
 @Model
 final class User {
-    @Attribute(.unique) var id: String
-    var email: String
-    var displayName: String
+    var id: String = UUID().uuidString
+    var email: String = ""
+    var displayName: String = ""
     var avatarURL: String?
-    var timezone: String
-    var language: String
-    var isActive: Bool
-    var createdAt: Date
+    var timezone: String = "UTC"
+    var language: String = "en"
+    var isActive: Bool = true
+    var createdAt: Date = Date(timeIntervalSinceReferenceDate: 0)
     var lastLoginAt: Date?
 
     init(
@@ -22,7 +22,7 @@ final class User {
         timezone: String = "UTC",
         language: String = "en",
         isActive: Bool = true,
-        createdAt: Date = .init(),
+        createdAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         lastLoginAt: Date? = nil
     ) {
         self.id = id

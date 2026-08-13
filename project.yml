@@ -20,6 +20,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.booknexus.app
+        CODE_SIGN_ENTITLEMENTS: BookNexus/BookNexus.entitlements
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: true
         GENERATE_INFOPLIST_FILE: true
         INFOPLIST_KEY_UILaunchScreen_Generation: true
@@ -27,6 +28,9 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # CloudKit uses silent pushes to wake the app for store updates.
+        INFOPLIST_KEY_UIBackgroundModes:
+          - remote-notification
     dependencies: []
   BookNexusTests:
     type: bundle.unit-test

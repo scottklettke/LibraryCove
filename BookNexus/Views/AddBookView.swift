@@ -482,9 +482,13 @@ private struct ScannerFlow: View {
                     scannedBooks.append(book)
                     PendingScanStore.append(book)
                 } else {
-                    lookupError = "No book found for ISBN \(code)."
-                    lookupAlertMessage = "No book found for ISBN \(code). Try scanning again, or search by title instead."
-                    showLookupAlert = true
+                    // No catalog entry: still let the user add the book, but
+                    // the details are entered by hand.
+                    let stub = CatalogBook.manualStub(isbn: code)
+                    scannedBooks.removeAll { $0.id == stub.id }
+                    scannedBooks.append(stub)
+                    PendingScanStore.append(stub)
+                    lookupError = "No online details for this ISBN — it was added; enter the title and author manually."
                 }
             } catch {
                 lookupError = "Lookup failed: \(error.localizedDescription)"

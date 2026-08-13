@@ -434,4 +434,12 @@ import SwiftData
         let dataURL = "data:image/jpeg;base64," + bytes.base64EncodedString()
         #expect(CoverImageStore.localData(forCover: dataURL) == bytes)
     }
+
+    @Test func manualStubKeepsISBNForHandEntry() {
+        let stub = CatalogBook.manualStub(isbn: "978-1-23456-789-0")
+        #expect(stub.isbn == "9781234567890") // normalized, no dashes
+        #expect(stub.title.isEmpty)           // must be typed by hand
+        #expect(stub.authors.isEmpty)
+        #expect(stub.id == "isbn-9781234567890")
+    }
 }

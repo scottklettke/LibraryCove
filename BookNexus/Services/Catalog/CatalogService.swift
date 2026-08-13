@@ -19,6 +19,26 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
 
     var authorsText: String { authors.isEmpty ? "Unknown" : authors.joined(separator: ", ") }
     var primaryCoverURL: String? { coverURLs.first }
+
+    /// A placeholder for a scanned-but-not-found ISBN so the book can still be
+    /// added with manually entered details. ISBN is normalized (no dashes).
+    static func manualStub(isbn: String) -> CatalogBook {
+        let cleaned = isbn.replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        return CatalogBook(id: "isbn-\(cleaned)",
+                           title: "",
+                           authors: [],
+                           isbn: cleaned,
+                           publicationYear: nil,
+                           genres: [],
+                           publisher: nil,
+                           pageCount: nil,
+                           description: nil,
+                           language: nil,
+                           coverURLs: [],
+                           descriptionSource: nil,
+                           source: "manual")
+    }
 }
 
 /// Where a book description should be fetched from.

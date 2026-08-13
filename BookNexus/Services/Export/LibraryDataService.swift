@@ -276,7 +276,7 @@ enum LibraryDataService {
         var isbns = Set<String>()
         var titleKeys = Set<String>()
         for book in books {
-            if let isbn = book.isbn, !isbn.isEmpty {
+            if let isbn = Book.normalizedISBN(book.isbn) {
                 isbns.insert(isbn)
             } else {
                 titleKeys.insert(bookTitleKey(book.title, authors: book.authors))
@@ -295,7 +295,7 @@ enum LibraryDataService {
     /// A book counts as already known when its ISBN matches, or (no ISBN) its
     /// title + authors match an existing book.
     private static func bookAlreadyKnown(_ dto: BookDTO, isbns: Set<String>, titleKeys: Set<String>) -> Bool {
-        if let isbn = dto.isbn, !isbn.isEmpty { return isbns.contains(isbn) }
+        if let isbn = Book.normalizedISBN(dto.isbn) { return isbns.contains(isbn) }
         return titleKeys.contains(bookTitleKey(dto.title, authors: dto.authors))
     }
 

@@ -729,7 +729,7 @@ struct BookFormView: View {
             let book = Book(id: newID!,
                 title: trimmedTitle,
                 authors: authors,
-                isbn: catalog?.isbn,
+                isbn: Book.normalizedISBN(catalog?.isbn),
                 publicationYear: year,
                 genres: genres,
                 coverImageURL: cover,
@@ -761,14 +761,12 @@ struct BookFormView: View {
     }
 
     private func findDuplicate(key: String) -> Book? {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.isbn == trimmed })
-        do {
-            return try modelContext.fetch(descriptor).first
-        } catch {
-            return nil
-        }
+        // Compare by normalized ISBN (digits only) so dashed/spaced spellings
+        // of the same ISBN still match. SQL predicates can't normalize, so
+        // match in Swift over the (small) library.
+        guard let normalized = Book.normalizedISBN(key) else { return nil }
+        guard let books = try? modelContext.fetch(FetchDescriptor<Book>()) else { return nil }
+        return books.first { Book.normalizedISBN($0.isbn) == normalized }
     }
 }
 

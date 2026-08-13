@@ -364,6 +364,35 @@ import SwiftData
         #expect(books.contains { $0.id == "x-2" })
     }
 
+    @Test func mergeRecognizesDashEquivalentISBN() throws {
+        let context = baseContext()
+        LibraryDataService.deleteAll(context: context)
+        // Stored canonical form (no dashes).
+        context.insert(Book(id: "x-1", title: "Dune", authors: ["Frank Herbert"],
+                            isbn: "9780441172719", createdAt: Date(timeIntervalSince1970: 1)))
+        try context.save()
+
+        // Incoming uses the same ISBN written with dashes/spaces.
+        let dune = BookDTO(model: Book(id: "i-dup", title: "Dune", authors: ["Frank Herbert"],
+                                       isbn: "978-0-441-17271-9",
+                                       createdAt: Date(timeIntervalSince1970: 5)))
+        let envelope = ExportEnvelope(format: LibraryDataService.formatMarker,
+                                      version: LibraryDataService.version,
+                                      exportedAt: Date(),
+                                      users: [], books: [dune], notes: [],
+                                      readingLists: [], readingListItems: [], connections: [])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let zipData = try #require(ZipArchive.create(entries: [
+            ("library.json", try encoder.encode(envelope)),
+            ("README-FORMAT.md", Data("dummy".utf8)),
+        ]))
+
+        let summary = try LibraryDataService.mergeArchive(data: zipData, context: context)
+        #expect(summary.books == 0) // the dashed ISBN is the same book
+        #expect((try context.fetchCount(FetchDescriptor<Book>())) == 1)
+    }
+
     @Test func mergeCandidatesListsOnlyNewBooks() throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)

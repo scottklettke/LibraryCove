@@ -185,7 +185,7 @@ struct AddBookView: View {
                     } label: {
                         CatalogRow(book: result)
                             .overlay(alignment: .leading) {
-                                if existingIsbns.contains(result.isbn ?? "") {
+                                if existingIsbns.contains(Book.normalizedISBN(result.isbn) ?? "") {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.title2)
                                         .foregroundStyle(.green)
@@ -381,7 +381,7 @@ private struct ScannerFlow: View {
                             } label: {
                                 AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.primaryCoverURL), width: 44, height: 64)
                                     .overlay(alignment: .topLeading) {
-                                        if existingIsbns.contains(book.isbn ?? "") {
+                                        if existingIsbns.contains(Book.normalizedISBN(book.isbn) ?? "") {
                                             Image(systemName: "checkmark.circle.fill")
                                                 .font(.caption)
                                                 .foregroundStyle(.green)
@@ -702,7 +702,7 @@ extension AddBookView {
         let descriptor = FetchDescriptor<Book>()
         do {
             let books = try modelContext.fetch(descriptor)
-            existingIsbns = Set(books.compactMap { $0.isbn })
+            existingIsbns = Set(books.compactMap { Book.normalizedISBN($0.isbn) })
         } catch {
             existingIsbns = []
         }

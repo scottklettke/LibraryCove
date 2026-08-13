@@ -131,6 +131,18 @@ extension Book {
     var statusEnum: BookStatus {
         BookStatus(rawValue: status) ?? .toRead
     }
+
+    /// Canonical ISBN used for duplicate detection: digits only (no dashes or
+    /// spaces), so "978-0-441-17271-9" and "9780441172719" match. `nil` when
+    /// there's nothing usable.
+    static func normalizedISBN(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let cleaned = raw
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? nil : cleaned
+    }
 }
 
 /// Book status enum mirroring backend `BookStatus`.

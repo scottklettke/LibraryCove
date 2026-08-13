@@ -713,7 +713,7 @@ struct BookFormView: View {
         // New books get their id up front so a photo cover can be written to
         // the file system under the same id the database will use.
         let newID = existing == nil ? UUID().uuidString : nil
-        var cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
+        let cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
         // Materialize user-taken cover photos as small files on disk (backing
         // export bundling and offline restore). The database keeps the `data:`
         // URL form — it's what marks this cover as a user-taken photo (only

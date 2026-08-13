@@ -28,6 +28,8 @@ struct SettingsView: View {
     @State private var deleteConfirmText = ""
     @State private var isDeleting = false
 
+    @FocusState private var nameFieldFocused: Bool
+
     // Feedback
     @State private var lastResult: String?
     @State private var showResult = false
@@ -42,14 +44,23 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Library name",
-                              text: Binding(get: { user.displayName },
-                                            set: { user.displayName = $0 }))
-                    LabeledContent("Email", value: user.email)
+                    HStack {
+                        TextField("Library name",
+                                  text: Binding(get: { user.displayName },
+                                                set: { user.displayName = $0 }))
+                            .focused($nameFieldFocused)
+                        Button {
+                            nameFieldFocused = true
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Edit library name")
+                    }
                 } header: {
                     Text("Profile")
                 } footer: {
-                    Text("This name is recorded as the member who added books to your library.")
+                    Text("Tap the pencil to edit the name used for “Added by” on your books.")
                 }
 
                 Section {

@@ -6,6 +6,8 @@ struct BookDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     let book: Book
+    /// Members — used to resolve the "Added by" name.
+    @Query private var users: [User]
 
     @State private var showEdit = false
     @State private var newNoteText = ""
@@ -104,6 +106,7 @@ struct BookDetailView: View {
             Section("Details") {
                 LabeledContent("Status", value: book.statusEnum.displayName)
                 LabeledContent("Date added", value: addedDateFormatter.string(from: book.createdAt))
+                LabeledContent("Added by", value: addedByName)
             if let location = book.physicalLocation, !location.isEmpty {
                 LabeledContent("Location", value: location)
             }
@@ -222,6 +225,14 @@ struct BookDetailView: View {
         case "openlibrary": return "Open Library"
         default: return source
         }
+    }
+
+    private var addedByName: String {
+        if let id = book.ownerID, let owner = users.first(where: { $0.id == id }) {
+            return owner.displayName
+        }
+        // Books without an owner fall back to the signed-in library member.
+        return users.first(where: \.isActive)?.displayName ?? "—"
     }
 
     private var addedDateFormatter: DateFormatter {

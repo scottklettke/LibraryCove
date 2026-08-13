@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 /// Detail view for a single book: info, notes, edit.
 struct BookDetailView: View {
@@ -14,6 +15,13 @@ struct BookDetailView: View {
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
 
+    @State private var isSummarizing = false
+    @State private var showSummarySheet = false
+    @State private var summaryText = ""
+    @State private var summaryCopied = false
+    @State private var summaryError: String?
+    @State private var showSummaryError = false
+
     var body: some View {
         List {
             headerSection
@@ -25,12 +33,62 @@ struct BookDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        Task { await summarize() }
+                    } label: {
+                        Label("Summarize", systemImage: "wand.and.stars")
+                    }
+                    .disabled(isSummarizing)
+                } label: {
+                    if isSummarizing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label("AI", systemImage: "sparkles")
+                    }
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     showEdit = true
                 } label: {
                     Label("Edit", systemImage: "pencil")
                 }
             }
+        }
+        .sheet(isPresented: $showSummarySheet) {
+            NavigationStack {
+                ScrollView {
+                    Text(summaryText)
+                        .font(.body)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle("Summary")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            showSummarySheet = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            UIPasteboard.general.string = summaryText
+                            summaryCopied = true
+                        } label: {
+                            Label(summaryCopied ? "Copied" : "Copy", systemImage: "doc.on.doc")
+                        }
+                    }
+                }
+            }
+        }
+        .alert("AI Summary", isPresented: $showSummaryError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(summaryError ?? "")
         }
         .sheet(isPresented: $showEdit) {
             NavigationStack {
@@ -217,6 +275,38 @@ struct BookDetailView: View {
         book.descriptionSource = found.descriptionSource
         book.updatedAt = Date()
         try? modelContext.save()
+    }
+
+    private func summarize() async {
+        guard let description = book.bookDescription,
+              !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            summaryError = "This book has no description yet. Fetch one in the Details section before summarizing."
+            showSummaryError = true
+            return
+        }
+
+        isSummarizing = true
+        defer { isSummarizing = false }
+
+        do {
+            let result = try await AIService.shared.generate(
+                AIPrompt(user: "Summarize this book description in 2-3 sentences:\n\(description)")
+            )
+            summaryText = result
+            summaryCopied = false
+            showSummarySheet = true
+        } catch let error as AIError {
+            switch error {
+            case .notConfigured:
+                summaryError = "Set up your AI endpoint in Settings → AI to use this."
+            default:
+                summaryError = "The AI summary couldn't be generated: \(error.localizedDescription)"
+            }
+            showSummaryError = true
+        } catch {
+            summaryError = "The AI summary couldn't be generated: \(error.localizedDescription)"
+            showSummaryError = true
+        }
     }
 
     private func sourceLabel(_ source: String) -> String {

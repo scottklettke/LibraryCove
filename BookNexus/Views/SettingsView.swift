@@ -35,6 +35,12 @@ struct SettingsView: View {
     @State private var isSwitchingSync = false
     @State private var showSyncRestartNotice = false
 
+    // AI
+    @State private var aiEngine: AIEngine = AIConfig.selectedEngine
+    @State private var aiBaseURL: String = AIConfig.openAIBaseURL
+    @State private var aiAPIKey: String = AIConfig.openAIAPIKey
+    @State private var aiAvailability: AIAvailability?
+
     // Feedback
     @State private var lastResult: String?
     @State private var showResult = false
@@ -43,6 +49,33 @@ struct SettingsView: View {
 
     private var zipType: UTType {
         UTType(filenameExtension: "zip") ?? .data
+    }
+
+    /// Changes whenever any AI setting shifts, so the status re-checks
+    /// after edits (engine, base URL, or key). Includes only the key's
+    /// length/hash — never the key itself.
+    private var aiConfigSignature: String {
+        "\(aiEngine.rawValue)|\(aiBaseURL)|\(aiAPIKey.count)-\(aiAPIKey.hashValue)"
+    }
+
+    private var aiStatusText: String {
+        switch aiAvailability {
+        case nil:
+            return "Checking…"
+        case .available:
+            return "Ready to use"
+        case .unavailable(let reason):
+            return reason
+        }
+    }
+
+    private var aiStatusColor: Color {
+        switch aiAvailability {
+        case .available:
+            return .green
+        case nil, .unavailable:
+            return .secondary
+        }
     }
 
     var body: some View {
@@ -124,8 +157,32 @@ struct SettingsView: View {
                     Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
                 }
 
-                Section("AI") {
-                    LabeledContent("Inference", value: "Local model or endpoint")
+                Section {
+                    Picker("Engine", selection: $aiEngine) {
+                        ForEach(AIEngine.allCases) { engine in
+                            Text(engine.isAvailableNow
+                                 ? engine.displayName
+                                 : "\(engine.displayName) (coming soon)")
+                                .tag(engine)
+                        }
+                    }
+                    LabeledContent("Status") {
+                        Text(aiStatusText)
+                            .foregroundStyle(aiStatusColor)
+                    }
+                    if aiEngine == .openAI {
+                        TextField("Base URL", text: $aiBaseURL)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                            .keyboardType(.URL)
+                        SecureField("API key", text: $aiAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .disableAutocorrection(true)
+                    }
+                } header: {
+                    Text("AI")
+                } footer: {
+                    Text("On-device & Private Cloud Compute arrive with the iOS 27 SDK upgrade.")
                 }
             }
             .navigationTitle("Settings")
@@ -155,6 +212,18 @@ struct SettingsView: View {
             }
             .onChange(of: syncProvider) { _, newValue in
                 switchSyncProvider(to: newValue)
+            }
+            .task(id: aiConfigSignature) {
+                aiAvailability = await AIService.shared.availability()
+            }
+            .onChange(of: aiEngine) { _, newValue in
+                AIConfig.selectedEngine = newValue
+            }
+            .onChange(of: aiBaseURL) { _, newValue in
+                AIConfig.openAIBaseURL = newValue
+            }
+            .onChange(of: aiAPIKey) { _, newValue in
+                AIConfig.openAIAPIKey = newValue
             }
             .alert("Restart to apply", isPresented: $showSyncRestartNotice) {
                 Button("OK", role: .cancel) {}

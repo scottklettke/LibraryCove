@@ -75,6 +75,8 @@ struct BookImportView: View {
 struct BookFormView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    /// The active member — books are attributed to them as "added by".
+    @Query private var users: [User]
 
     let catalog: CatalogBook?
     var existing: Book?
@@ -716,7 +718,8 @@ struct BookFormView: View {
                 status: status.rawValue,
                 rating: rating,
                 loanedTo: loanedToText.isEmpty ? nil : loanedToText,
-                loanedDate: loanedDate
+                loanedDate: loanedDate,
+                ownerID: users.first(where: \.isActive)?.id
             )
             let key = catalog?.isbn ?? ""
             if findDuplicate(key: key) != nil {

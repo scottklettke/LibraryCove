@@ -41,9 +41,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Profile") {
-                    LabeledContent("Name", value: user.displayName)
+                Section {
+                    TextField("Library name",
+                              text: Binding(get: { user.displayName },
+                                            set: { user.displayName = $0 }))
                     LabeledContent("Email", value: user.email)
+                } header: {
+                    Text("Profile")
+                } footer: {
+                    Text("This name is recorded as the member who added books to your library.")
                 }
 
                 Section {

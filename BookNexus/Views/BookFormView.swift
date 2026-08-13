@@ -115,6 +115,8 @@ struct BookFormView: View {
     // Validation feedback: Title is required to save.
     @State private var titleMissingAttempted = false
     @FocusState private var titleFieldFocused: Bool
+    /// Bumped to scroll the title field into view on a failed save.
+    @State private var scrollTrigger = 0
 
     init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
         self.catalog = catalog
@@ -168,15 +170,20 @@ struct BookFormView: View {
 
 
     var body: some View {
-        Form {
-            coverSection
-            detailsSection
-            statusSection
-            descriptionSection
-            if existing != nil {
-                loanedSection
+        ScrollViewReader { proxy in
+            Form {
+                coverSection
+                detailsSection
+                statusSection
+                descriptionSection
+                if existing != nil {
+                    loanedSection
+                }
+                saveSection
             }
-            saveSection
+            .onChange(of: scrollTrigger) { _, _ in
+                withAnimation { proxy.scrollTo("bookFormTitle", anchor: .top) }
+            }
         }
         .task {
             if catalog != nil || existing != nil {
@@ -324,6 +331,7 @@ struct BookFormView: View {
         Section {
             TextField("Title *", text: $title)
                 .focused($titleFieldFocused)
+                .id("bookFormTitle")
             if titleMissingAttempted && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text("Title is required.")
                     .font(.caption)
@@ -666,9 +674,11 @@ struct BookFormView: View {
     private func save() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else {
-            // Title is required; tell the user instead of silently doing nothing.
+            // Title is required; tell the user and scroll to the field instead
+            // of silently doing nothing.
             titleMissingAttempted = true
             titleFieldFocused = true
+            scrollTrigger += 1
             return
         }
         let authors = authorsText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }

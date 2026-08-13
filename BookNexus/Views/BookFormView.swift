@@ -112,6 +112,9 @@ struct BookFormView: View {
     @State private var showDuplicateAlert = false
     @State private var showDeleteConfirmation = false
     @State private var pendingInsertBook: Book?
+    /// The already-in-library book a new add collides with, so the alert can
+    /// offer deleting the duplicate.
+    @State private var pendingDuplicate: Book?
     // Validation feedback: Title is required to save.
     @State private var titleMissingAttempted = false
     @FocusState private var titleFieldFocused: Bool
@@ -251,11 +254,28 @@ struct BookFormView: View {
                     }
                 }
             }
+            Button("Delete duplicate", role: .destructive) {
+                if let duplicate = pendingDuplicate {
+                    CoverImageStore.delete(forBookID: duplicate.id)
+                    modelContext.delete(duplicate)
+                }
+                if let pending = pendingInsertBook {
+                    modelContext.insert(pending)
+                }
+                try? modelContext.save()
+                pendingInsertBook = nil
+                pendingDuplicate = nil
+                onSaved()
+                if dismissOnSave {
+                    dismiss()
+                }
+            }
             Button("Cancel", role: .cancel) {
                 pendingInsertBook = nil
+                pendingDuplicate = nil
             }
         } message: {
-            Text("You already have this book. You can add another copy with a different location, or cancel.")
+            Text("You already have this book. Add another copy, delete the existing one and add this instead, or cancel.")
         }
         .alert("Delete this book?", isPresented: $showDeleteConfirmation) {
             Button("Delete", role: .destructive) {
@@ -746,8 +766,9 @@ struct BookFormView: View {
                 ownerID: users.first(where: \.isActive)?.id
             )
             let key = catalog?.isbn ?? ""
-            if findDuplicate(key: key) != nil {
+            if let duplicate = findDuplicate(key: key) {
                 pendingInsertBook = book
+                pendingDuplicate = duplicate
                 showDuplicateAlert = true
             } else {
                 modelContext.insert(book)

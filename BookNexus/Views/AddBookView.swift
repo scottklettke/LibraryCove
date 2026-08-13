@@ -488,6 +488,19 @@ private struct ScannerFlow: View {
         withAnimation(.easeOut(duration: 0.2)) {
             flash = true
         }
+        // Reject a scan whose ISBN is already in the library before it's queued.
+        if existingIsbns.contains(Book.normalizedISBN(code) ?? "") {
+            lookupAlertMessage = "ISBN \(code) is already in your library. It wasn't added to the scan list."
+            showLookupAlert = true
+            isLookup = false
+            rescanKey += 1
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    flash = false
+                }
+            }
+            return
+        }
         Task { @MainActor in
             do {
                 if let book = try await catalog.lookup(isbn: code, preferred: .openlibrary) {

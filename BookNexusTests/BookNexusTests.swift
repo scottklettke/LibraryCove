@@ -137,3 +137,50 @@ import UIKit
                 "aspect ratio must survive (portrait covers stay tall enough for a 100×140pt render)")
     }
 }
+
+@Suite struct CropMathTests {
+    private let start = CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)
+
+    @Test func cornerDragKeepsOppositePinned() {
+        let br = PhotoCropView.adjusted(start, target: .cornerBR, dx: 0.1, dy: -0.05)
+        #expect(abs(br.minX - start.minX) < 0.0001)
+        #expect(abs(br.minY - start.minY) < 0.0001)
+        #expect(abs(br.width - 0.7) < 0.0001)   // 0.6 + 0.1
+        #expect(abs(br.height - 0.55) < 0.0001) // 0.6 - 0.05
+
+        let tl = PhotoCropView.adjusted(start, target: .cornerTL, dx: 0.05, dy: 0.1)
+        #expect(abs(tl.maxX - start.maxX) < 0.0001)
+        #expect(abs(tl.maxY - start.maxY) < 0.0001)
+        #expect(abs(tl.width - 0.55) < 0.0001)  // 0.6 - 0.05
+        #expect(abs(tl.height - 0.5) < 0.0001)  // 0.6 - 0.1
+    }
+
+    @Test func edgeDragShrinksOneSideOnly() {
+        let r = PhotoCropView.adjusted(start, target: .edgeTop, dx: 0.0, dy: 0.1)
+        #expect(abs(r.minX - start.minX) < 0.0001)
+        #expect(abs(r.maxY - start.maxY) < 0.0001) // bottom pinned
+        #expect(abs(r.height - 0.5) < 0.0001)      // 0.6 - 0.1
+
+        let r2 = PhotoCropView.adjusted(start, target: .edgeRight, dx: -0.15, dy: 0.0)
+        #expect(abs(r2.minX - start.minX) < 0.0001) // left pinned
+        #expect(abs(r2.width - 0.45) < 0.0001)      // 0.6 - 0.15
+        #expect(abs(r2.height - start.height) < 0.0001)
+    }
+
+    @Test func moveTranslatesWithoutResizing() {
+        let r = PhotoCropView.adjusted(start, target: .move, dx: 0.1, dy: 0.05)
+        #expect(abs(r.minX - 0.3) < 0.0001)
+        #expect(abs(r.minY - 0.25) < 0.0001)
+        #expect(abs(r.width - start.width) < 0.0001)
+        #expect(abs(r.height - start.height) < 0.0001)
+    }
+
+    @Test func minSideClampPreventsCollapse() {
+        // Cram the BR corner all the way toward the TL.
+        let r = PhotoCropView.adjusted(start, target: .cornerBR, dx: -1, dy: -1)
+        #expect(r.width >= 0.2 - 0.0001)
+        #expect(r.height >= 0.2 - 0.0001)
+        // Stays inside the image.
+        #expect(r.minX >= 0 && r.maxX <= 1 && r.minY >= 0 && r.maxY <= 1)
+    }
+}

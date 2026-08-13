@@ -31,9 +31,25 @@ enum CoverImageStore {
     }
 
     /// The `covers/<bookID>.jpg` entry name used inside an export zip — matches
-    /// what `fileURL` produces so bundling and restoring line up.
+    /// what `fileURL` produces so bundling and restoring line up. This is also
+    /// the value stored in `coverImageURL` for local covers: it's container-
+    /// independent, so covers survive reinstalls that change the container path.
     static func zipEntryName(forBookID id: String) -> String {
         zipPrefix + fileURL(forBookID: id).lastPathComponent
+    }
+
+    /// The on-disk URL for a stored cover reference of any shape: a
+    /// container-independent `covers/<id>.jpg` token, a `file://` absolute URL
+    /// (possibly stale from an older install — rescued by filename), or nil.
+    static func displayURL(forCover cover: String?) -> URL? {
+        guard let cover else { return nil }
+        if cover.hasPrefix("data:") || cover.hasPrefix("http://") || cover.hasPrefix("https://") {
+            return URL(string: cover)
+        }
+        let name = cover.split(separator: "/").last.map(String.init) ?? ""
+        guard !name.isEmpty else { return nil }
+        let candidate = directoryURL.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
     }
 
     @discardableResult
@@ -70,17 +86,16 @@ enum CoverImageStore {
         return Data(base64Encoded: String(base64))
     }
 
-    /// Resolves any stored cover form (local file, data URL) to image bytes.
-    /// Remote URLs return `nil` — they have no local bytes yet.
+    /// Resolves any stored cover form (local file, `covers/` token, data URL)
+    /// to image bytes. Remote URLs return `nil` — they have no local bytes yet.
+    /// A token or a stale absolute `file://` path resolves by filename inside
+    /// `directoryURL`, making covers container-independent.
     static func localData(forCover cover: String?) -> Data? {
-        guard let cover else { return nil }
-        if cover.hasPrefix("file://") {
-            guard let url = URL(string: cover) else { return nil }
+        if let url = displayURL(forCover: cover), !url.absoluteString.hasPrefix("data:") {
             return try? Data(contentsOf: url)
         }
-        if cover.hasPrefix("data:") {
-            return data(fromDataURL: cover)
-        }
+        guard let cover else { return nil }
+        if cover.hasPrefix("data:") { return data(fromDataURL: cover) }
         return nil
     }
 }

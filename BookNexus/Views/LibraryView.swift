@@ -601,7 +601,7 @@ struct BookGridCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            AsyncCoverView(url: book.coverImageURL.flatMap { URL(string: $0) }, width: 92, height: 134)
+            AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 92, height: 134)
                 .overlay(alignment: .topLeading) {
                     if book.isLoaned {
                         LoanBadge()
@@ -642,7 +642,7 @@ struct BookListRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncCoverView(url: book.coverImageURL.flatMap { URL(string: $0) }, width: 40, height: 58)
+            AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 40, height: 58)
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.title)
                     .font(.body)

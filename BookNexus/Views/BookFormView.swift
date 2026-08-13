@@ -97,6 +97,8 @@ struct BookFormView: View {
     @State private var selectedPhotoCover: String?
     @State private var showCamera = false
     @State private var photoToCrop: UIImage?
+    @State private var showCropper = false
+    @State private var cropSource: UIImage?
     @State private var locationStore = LocationStore()
     @State private var genreStore = GenreStore()
     @State private var genreQuery = ""
@@ -181,10 +183,7 @@ struct BookFormView: View {
             // to the crop view in place (so no sheet-on-sheet animation races).
             if let image = photoToCrop {
                 PhotoCropView(sourceImage: image) { cropped in
-                    if let cover = CoverImageData.encode(cropped) {
-                        selectedPhotoCover = cover
-                        selectedCover = nil
-                    }
+                    applyCropped(cropped)
                     photoToCrop = nil
                     showCamera = false
                 }
@@ -194,6 +193,18 @@ struct BookFormView: View {
                     photoToCrop = image
                     selectedCover = nil
                 }
+            }
+        }
+        .sheet(isPresented: $showCropper) {
+            // Re-crop of an already-stored cover, presented on its own so it
+            // can never collide with the camera sheet.
+            if let source = cropSource {
+                PhotoCropView(sourceImage: source) { cropped in
+                    applyCropped(cropped)
+                    cropSource = nil
+                    showCropper = false
+                }
+                .onDisappear { cropSource = nil }
             }
         }
         .toolbar {
@@ -244,12 +255,25 @@ struct BookFormView: View {
         }
     }
 
-private var coverSection: some View {
+    private var coverSection: some View {
     Section {
-        if let cover = selectedCover, let url = URL(string: cover) {
+        if let photo = selectedPhotoCover, let url = URL(string: photo) {
             AsyncCoverView(url: url, width: 100, height: 140)
-        } else if let photo = selectedPhotoCover, let url = URL(string: photo) {
+        } else if let url = CoverImageStore.displayURL(forCover: selectedCover) {
             AsyncCoverView(url: url, width: 100, height: 140)
+        }
+
+        // Crop an already-stored local cover (photo or previously downloaded)
+        // into just the book cover. Hidden for remote-only URLs with no local
+        // pixels to work with.
+        if let image = currentCoverImage() {
+            Button {
+                cropSource = image
+                showCropper = true
+            } label: {
+                Label("Crop cover", systemImage: "crop")
+                    .font(.callout)
+            }
         }
 
         ScrollView(.horizontal, showsIndicators: true) {
@@ -259,7 +283,7 @@ private var coverSection: some View {
                         selectedCover = url
                         selectedPhotoCover = nil
                     } label: {
-                        AsyncCoverView(url: URL(string: url), width: 56, height: 80)
+                        AsyncCoverView(url: CoverImageStore.displayURL(forCover: url), width: 56, height: 80)
                             .overlay(alignment: .bottomTrailing) {
                                 if selectedCover == url {
                                     Image(systemName: "checkmark.circle.fill")
@@ -540,7 +564,12 @@ private var coverSection: some View {
         if let publisher = found.publisher { publisherText = publisher }
         if let pages = found.pageCount { pageCountText = String(pages) }
         if let year = found.publicationYear { yearText = String(year) }
-        if !found.coverURLs.isEmpty { coverURLs = found.coverURLs }
+
+        // Merge fetched covers with the book's current cover instead of
+        // replacing it, so editing never wipes the user's selection.
+        let keptCover = existing?.coverImageURL
+        let merged = (keptCover.map { [$0] } ?? []) + found.coverURLs.filter { $0 != keptCover }
+        if !merged.isEmpty { coverURLs = merged }
     }
 
     private var catalogISBN: String? {
@@ -607,6 +636,22 @@ private var coverSection: some View {
     }
 
 
+    private func applyCropped(_ cropped: UIImage) {
+        if let cover = CoverImageData.encode(cropped) {
+            selectedPhotoCover = cover
+            selectedCover = nil
+        }
+    }
+
+    /// The cover currently showing, as local pixels (for cropping). Returns a
+    /// non-nil image only for `data:` photo covers — i.e. photos the user
+    /// took; online and imported covers aren't offered for cropping.
+    private func currentCoverImage() -> UIImage? {
+        let cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
+        guard let cover, cover.hasPrefix("data:") else { return nil }
+        return CoverImageData.data(fromDataURL: cover).flatMap(UIImage.init(data:))
+    }
+
     private func save() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedTitle.isEmpty else { return }
@@ -623,17 +668,17 @@ private var coverSection: some View {
         // the file system under the same id the database will use.
         let newID = existing == nil ? UUID().uuidString : nil
         var cover = selectedPhotoCover ?? selectedCover ?? existing?.coverImageURL
-        // Persist covers as real files on disk instead of base64 blobs in the
-        // database. Re-normalize legacy/large photos so they shrink to the
-        // same target size as freshly captured ones.
+        // Materialize user-taken cover photos as small files on disk (backing
+        // export bundling and offline restore). The database keeps the `data:`
+        // URL form — it's what marks this cover as a user-taken photo (only
+        // those offer cropping). Re-normalize legacy/large photos to the same
+        // target size as freshly captured ones.
         if let dataCover = cover, dataCover.hasPrefix("data:"),
-           let storeID = existing?.id ?? newID {
-            let bytes = CoverImageData.data(fromDataURL: dataCover)
+           let storeID = existing?.id ?? newID,
+           let bytes = CoverImageData.data(fromDataURL: dataCover)
                 .flatMap(CoverImageData.normalize)
-                ?? CoverImageData.data(fromDataURL: dataCover)
-            if let bytes, CoverImageStore.save(bytes, forBookID: storeID) {
-                cover = CoverImageStore.fileURL(forBookID: storeID).absoluteString
-            }
+                ?? CoverImageData.data(fromDataURL: dataCover) {
+            CoverImageStore.save(bytes, forBookID: storeID)
         }
 
         if let existing {

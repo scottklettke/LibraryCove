@@ -242,15 +242,27 @@ enum LibraryDataService {
 
     // MARK: - Merge import
 
+    /// The books an archive would add with a merge. Non-mutating, so import
+    /// can show the list before doing anything (matched by ISBN, else title +
+    /// first author). Returns DTOs in archive order.
+    static func mergeCandidates(data: Data, context: ModelContext) throws -> [BookDTO] {
+        let loaded = try loadArchive(data)
+        let keys = knownBookKeys(context: context)
+        return loaded.envelope.books.filter {
+            !bookAlreadyKnown($0, isbns: keys.isbns, titleKeys: keys.titleKeys)
+        }
+    }
+
     /// Adds only the books from an archive that aren't already known locally
     /// (matched by ISBN, else title + first author). Existing data is never
     /// touched. Returns what was actually added.
     @discardableResult
     static func mergeArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
-        let (isbns, titleKeys) = knownBookKeys(context: context)
-        loaded.envelope.books = loaded.envelope.books
-            .filter { !bookAlreadyKnown($0, isbns: isbns, titleKeys: titleKeys) }
+        let keys = knownBookKeys(context: context)
+        loaded.envelope.books = loaded.envelope.books.filter {
+            !bookAlreadyKnown($0, isbns: keys.isbns, titleKeys: keys.titleKeys)
+        }
         // Bundled covers for the newly-added books are restored too (skipped
         // books already exist locally, so their covers are left alone).
         restoreCovers(from: &loaded.envelope, files: loaded.files)
@@ -298,7 +310,9 @@ enum LibraryDataService {
             guard let entryName = envelope.books[i].coverImageFile,
                   let bytes = files[entryName] else { continue }
             guard CoverImageStore.save(bytes, forBookID: envelope.books[i].id) else { continue }
-            envelope.books[i].coverImageURL = CoverImageStore.fileURL(forBookID: envelope.books[i].id).absoluteString
+            // Container-independent token, so restored covers survive
+            // reinstalls that change the container path.
+            envelope.books[i].coverImageURL = CoverImageStore.zipEntryName(forBookID: envelope.books[i].id)
         }
     }
 

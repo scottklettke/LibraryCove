@@ -262,13 +262,14 @@ import SwiftData
             #expect(envelope.books.first { $0.id == id }?.coverImageURL == nil)
         }
 
-        // Importing rewrites covers to local files and points the DB at them.
+        // Importing rewrites covers to local files and points the DB at them
+        // via container-independent tokens.
         LibraryDataService.deleteAll(context: context)
         _ = try LibraryDataService.importArchive(data: zipData, context: context)
         let restored = try context.fetch(FetchDescriptor<Book>())
         for id in ["b-cover-remote", "b-cover-data", "b-cover-shared"] {
             let book = restored.first { $0.id == id }
-            #expect(book?.coverImageURL?.hasPrefix("file://") == true)
+            #expect(book?.coverImageURL == "covers/\(id).jpg")
             #expect(CoverImageStore.data(forBookID: id) != nil)
         }
         #expect(files["covers/b-cover-remote.jpg"] == CoverImageStore.data(forBookID: "b-cover-remote"))
@@ -361,5 +362,76 @@ import SwiftData
         #expect(!books.contains { $0.id == "i-dup-title" })
         #expect(books.contains { $0.id == "x-1" }) // existing untouched
         #expect(books.contains { $0.id == "x-2" })
+    }
+
+    @Test func mergeCandidatesListsOnlyNewBooks() throws {
+        let context = baseContext()
+        LibraryDataService.deleteAll(context: context)
+        context.insert(Book(id: "x-1", title: "Dune", authors: ["Frank Herbert"],
+                            isbn: "9780441172719", createdAt: Date(timeIntervalSince1970: 1)))
+        context.insert(Book(id: "x-2", title: "Foundation", authors: ["Isaac Asimov"],
+                            createdAt: Date(timeIntervalSince1970: 2)))
+        try context.save()
+
+        func dto(_ id: String, _ title: String, authors: [String], isbn: String?) -> BookDTO {
+            BookDTO(model: Book(id: id, title: title, authors: authors, isbn: isbn,
+                                createdAt: Date(timeIntervalSince1970: 5)))
+        }
+        let incoming = [
+            dto("i-dup-isbn", "Dune", authors: ["Frank Herbert"], isbn: "9780441172719"),
+            dto("i-dup-title", "Foundation", authors: ["Isaac Asimov"], isbn: nil),
+            dto("i-new-1", "Hyperion", authors: ["Dan Simmons"], isbn: "9780553283686"),
+            dto("i-new-2", "The Left Hand of Darkness", authors: ["Ursula K. Le Guin"], isbn: nil),
+        ]
+        let envelope = ExportEnvelope(format: LibraryDataService.formatMarker,
+                                      version: LibraryDataService.version,
+                                      exportedAt: Date(),
+                                      users: [], books: incoming, notes: [],
+                                      readingLists: [], readingListItems: [], connections: [])
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let zipData = try #require(ZipArchive.create(entries: [
+            ("library.json", try encoder.encode(envelope)),
+            ("README-FORMAT.md", Data("dummy".utf8)),
+        ]))
+
+        let candidates = try LibraryDataService.mergeCandidates(data: zipData, context: context)
+        #expect(candidates.map(\.id) == ["i-new-1", "i-new-2"]) // in archive order
+        // Non-mutating: current library untouched.
+        #expect((try context.fetchCount(FetchDescriptor<Book>())) == 2)
+    }
+}
+
+@Suite struct CoverImageStoreTests {
+
+    @Test func tokenResolvesBackToStoredFile() {
+        let id = UUID().uuidString
+        let data = Data([0xFF, 0xD8, 0x01, 0x02, 0x03])
+        #expect(CoverImageStore.save(data, forBookID: id))
+
+        let token = CoverImageStore.zipEntryName(forBookID: id)
+        #expect(token.hasPrefix("covers/"))
+        // The stored reference token resolves to image bytes and a real file.
+        #expect(CoverImageStore.localData(forCover: token) == data)
+        #expect(CoverImageStore.displayURL(forCover: token)?.isFileURL == true)
+    }
+
+    @Test func staleAbsolutePathRescuedByFilename() {
+        let id = UUID().uuidString
+        let data = Data([0xFF, 0xD8, 0x11, 0x22, 0x33])
+        #expect(CoverImageStore.save(data, forBookID: id))
+
+        // An absolute path from an older install whose container no longer
+        // exists but whose filename matches the store's layout.
+        let stale = "file:///OldContainer-UUID/\(CoverImageStore.zipEntryName(forBookID: id))"
+        #expect(CoverImageStore.localData(forCover: stale) == data)
+        #expect(CoverImageStore.displayURL(forCover: stale) != nil)
+    }
+
+    @Test func remoteAndDataReferencesUnaffected() {
+        #expect(CoverImageStore.localData(forCover: "https://example.com/c.jpg") == nil)
+        let bytes = Data([0xFF, 0xD8, 0x99])
+        let dataURL = "data:image/jpeg;base64," + bytes.base64EncodedString()
+        #expect(CoverImageStore.localData(forCover: dataURL) == bytes)
     }
 }

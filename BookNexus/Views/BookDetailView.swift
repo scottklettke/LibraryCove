@@ -75,7 +75,7 @@ struct BookDetailView: View {
     private var headerSection: some View {
         Section {
             HStack(alignment: .top, spacing: 16) {
-                AsyncCoverView(url: book.coverImageURL.flatMap { URL(string: $0) }, width: 84, height: 124)
+                AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 84, height: 124)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(book.title)
                         .font(.headline)

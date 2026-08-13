@@ -18,6 +18,8 @@ struct SettingsView: View {
     @State private var previewSummary: ImportSummary?
     @State private var showImportPreview = false
     @State private var showReplaceConfirm = false
+    @State private var showMergeList = false
+    @State private var mergeCandidates: [BookDTO] = []
     @State private var isImporting = false
 
     // Delete
@@ -93,15 +95,14 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
-            .confirmationDialog(
+            .alert(
                 "Delete all data?",
-                isPresented: $showDeleteConfirm,
-                titleVisibility: .visible
+                isPresented: $showDeleteConfirm
             ) {
+                Button("Cancel", role: .cancel) {}
                 Button("Continue", role: .destructive) {
                     showDeleteTypeConfirm = true
                 }
-                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes every book, note, reading list, connection, and member. This cannot be undone.")
             }
@@ -187,7 +188,7 @@ struct SettingsView: View {
                     .font(.callout.bold())
 
                 Button {
-                    performMergeImport()
+                    presentMergeList()
                 } label: {
                     Label("Add new books only", systemImage: "plus.circle")
                         .frame(maxWidth: .infinity)
@@ -196,7 +197,7 @@ struct SettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isImporting)
 
-                Button(role: .destructive) {
+                Button {
                     showReplaceConfirm = true
                 } label: {
                     Text("Replace library with this file")
@@ -210,6 +211,9 @@ struct SettingsView: View {
             .padding()
             .navigationTitle("Import library")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(isPresented: $showMergeList) {
+                mergeListContent
+            }
             .confirmationDialog(
                 "Replace your library?",
                 isPresented: $showReplaceConfirm,
@@ -236,6 +240,63 @@ struct SettingsView: View {
         return "This removes \(current) book\(current == 1 ? "" : "s") (with their notes and lists) "
             + "and imports \(incoming) book\(incoming == 1 ? "" : "s") from the file instead. "
             + "This cannot be undone."
+    }
+
+    // MARK: - Merge list (pushed inside the import preview sheet)
+
+    private var mergeListContent: some View {
+        Group {
+            if mergeCandidates.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "checkmark.circle")
+                        .font(.system(size: 36))
+                        .foregroundStyle(.green)
+                    Text("Nothing new to import")
+                        .font(.headline)
+                    Text("Every book in the file is already in your library.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    Section {
+                        ForEach(mergeCandidates, id: \.id) { book in
+                            LabeledContent {
+                                Text(book.authors.joined(separator: ", "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                            } label: {
+                                Text(book.title)
+                                    .font(.body)
+                            }
+                        }
+                    } footer: {
+                        Text("Books already in your library are skipped.")
+                    }
+                }
+            }
+        }
+        .navigationTitle("Books to import (\(mergeCandidates.count))")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {
+                    showMergeList = false
+                    mergeCandidates = []
+                }
+            }
+            if !mergeCandidates.isEmpty {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Import \(mergeCandidates.count)") {
+                        performMergeImport()
+                    }
+                    .disabled(isImporting)
+                }
+            }
+        }
     }
 
     // MARK: - Actions
@@ -304,12 +365,27 @@ struct SettingsView: View {
         }
     }
 
+    private func presentMergeList() {
+        guard let pendingImportData else { return }
+        do {
+            mergeCandidates = try LibraryDataService.mergeCandidates(data: pendingImportData, context: modelContext)
+            showMergeList = true
+        } catch {
+            lastError = (error as? LibraryDataError)?.errorDescription
+                ?? (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+            showError = true
+        }
+    }
+
     private func performMergeImport() {
         guard let pendingImportData else { return }
         isImporting = true
         Task { @MainActor in
             do {
                 let added = try LibraryDataService.mergeArchive(data: pendingImportData, context: modelContext)
+                showMergeList = false
+                mergeCandidates = []
                 let skipped = (previewSummary?.books ?? 0) - added.books
                 finishImport(added, note: skipped > 0 ? " Skipped \(skipped) already in your library." : nil)
             } catch {

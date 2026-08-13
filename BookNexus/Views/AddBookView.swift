@@ -379,7 +379,7 @@ private struct ScannerFlow: View {
                             Button {
                                 pendingDeleteID = book.id
                             } label: {
-                                AsyncCoverView(url: book.primaryCoverURL.flatMap { URL(string: $0) }, width: 44, height: 64)
+                                AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.primaryCoverURL), width: 44, height: 64)
                                     .overlay(alignment: .topLeading) {
                                         if existingIsbns.contains(book.isbn ?? "") {
                                             Image(systemName: "checkmark.circle.fill")
@@ -509,7 +509,7 @@ private struct CatalogRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AsyncCoverView(url: book.primaryCoverURL.flatMap { URL(string: $0) }, width: 52, height: 76)
+            AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.primaryCoverURL), width: 52, height: 76)
             VStack(alignment: .leading, spacing: 2) {
                 Text(book.title)
                     .font(.body)

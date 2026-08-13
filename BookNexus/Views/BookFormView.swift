@@ -112,6 +112,9 @@ struct BookFormView: View {
     @State private var showDuplicateAlert = false
     @State private var showDeleteConfirmation = false
     @State private var pendingInsertBook: Book?
+    // Validation feedback: Title is required to save.
+    @State private var titleMissingAttempted = false
+    @FocusState private var titleFieldFocused: Bool
 
     init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
         self.catalog = catalog
@@ -320,6 +323,12 @@ struct BookFormView: View {
     private var detailsSection: some View {
         Section {
             TextField("Title *", text: $title)
+                .focused($titleFieldFocused)
+            if titleMissingAttempted && title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("Title is required.")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             TextField("Authors (comma separated)", text: $authorsText)
                 .textInputAutocapitalization(.words)
             LabeledContent("Published year") {
@@ -656,7 +665,12 @@ struct BookFormView: View {
 
     private func save() {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else { return }
+        guard !trimmedTitle.isEmpty else {
+            // Title is required; tell the user instead of silently doing nothing.
+            titleMissingAttempted = true
+            titleFieldFocused = true
+            return
+        }
         let authors = authorsText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         let genres = genresText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         let year = Int(yearText.trimmingCharacters(in: .whitespacesAndNewlines))

@@ -332,7 +332,8 @@ struct LibraryView: View {
                         .shadow(color: .black.opacity(0.25), radius: 6, y: 3)
                 }
                 .accessibilityLabel("Add a book")
-                .offset(y: 40)
+                // Below the empty-state text so it never overlaps.
+                .offset(y: 190)
             }
         }
     }

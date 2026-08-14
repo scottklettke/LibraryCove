@@ -59,6 +59,15 @@ protocol AIModelProviding {
     func generate(_ prompt: AIPrompt) async throws -> String
 }
 
+extension AIModelProviding {
+    /// The engine's total per-request context budget in tokens, or `nil` when
+    /// it can't report one (callers then fall back to the user-configured
+    /// `AIConfig.maxContextTokens`). The on-device provider reports Apple's
+    /// fixed session limit; the OpenAI-compatible provider reports the
+    /// configured window.
+    var contextTokenLimit: Int? { nil }
+}
+
 /// Errors surfaced by the AI layer. Localized so SwiftUI can present them
 /// directly.
 enum AIError: LocalizedError {
@@ -76,6 +85,10 @@ enum AIError: LocalizedError {
     case decoding(String)
     /// The request is valid but this engine can't handle it yet.
     case unsupported(String)
+    /// The request (system + snapshot + transcript + output) exceeded the
+    /// model's per-session context window. `limit` is the window in tokens
+    /// when the engine could report it, else nil.
+    case contextSizeExceeded(limit: Int?)
 
     var errorDescription: String? {
         switch self {
@@ -97,6 +110,9 @@ enum AIError: LocalizedError {
             return "The AI endpoint returned an unexpected response: \(detail)"
         case .unsupported(let reason):
             return "Not supported: \(reason)"
+        case .contextSizeExceeded(let limit):
+            let limitText = limit.map { " of \($0) tokens" } ?? ""
+            return "This request exceeded the model's context window\(limitText). The app keeps the library snapshot small, so this is usually a question that simply asked for too much at once — try a shorter, more specific question."
         }
     }
 }

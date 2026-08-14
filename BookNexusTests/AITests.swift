@@ -267,6 +267,61 @@ final class MockURLProtocol: URLProtocol {
 
     // MARK: - AIService + AIConfig integration
 
+    // MARK: - Provider: context-window overflow
+
+    @Test func isContextOverflowBodyHeuristic() {
+        #expect(OpenAICompatibleProvider.isContextOverflowBody(
+            "This model's maximum context length is 4096 tokens"))
+        #expect(OpenAICompatibleProvider.isContextOverflowBody(
+            #"{"error":{"message":"maximum context size exceeded"}}"#))
+        #expect(!OpenAICompatibleProvider.isContextOverflowBody(
+            "Incorrect API key provided"))
+        #expect(!OpenAICompatibleProvider.isContextOverflowBody(""))
+    }
+
+    @Test func contextLengthBodyMapsToContextSizeExceeded() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+
+        MockURLProtocol.handler = { request in
+            AITests.jsonResponse(request, status: 400,
+                body: #"{"error":{"message":"This model's maximum context length is 4096 tokens","type":"invalid_request_error"}}"#)
+        }
+        let provider = AITests.provider(session: AITests.session())
+        do {
+            _ = try await provider.generate(AIPrompt(user: "hi"))
+            Issue.record("expected a contextSizeExceeded error")
+        } catch let error as AIError {
+            guard case .contextSizeExceeded = error else {
+                Issue.record("wrong error surfaced: \(error)")
+                return
+            }
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test func nonContextServerBodyStaysServerError() async throws {
+        MockURLProtocol.handler = { request in
+            AITests.jsonResponse(request, status: 401,
+                body: #"{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}"#)
+        }
+        let provider = AITests.provider(session: AITests.session())
+        do {
+            _ = try await provider.generate(AIPrompt(user: "hi"))
+            Issue.record("expected an error")
+        } catch let error as AIError {
+            guard case .server = error else {
+                Issue.record("wrong error surfaced: \(error)")
+                return
+            }
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    // MARK: - OpenAI endpoint setup
+
     @Test func missingKeyThroughAIServiceThrowsNotConfigured() async throws {
         AIConfig.resetForTesting()
         AIConfig.selectedEngine = .openAI

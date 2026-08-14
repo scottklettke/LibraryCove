@@ -35,6 +35,15 @@ struct AppleIntelligenceProvider: AIModelProviding {
         Self.map(SystemLanguageModel.default.availability)
     }
 
+    /// Apple's on-device models budget each session to a fixed total token
+    /// count (system + prompts + history + the model's own output). The OS
+    /// exposes it as a constant (currently 4096); query it at runtime rather
+    /// than hard-coding it, in case a future OS version changes the limit.
+    var contextTokenLimit: Int? {
+        guard SystemLanguageModel.default.isAvailable else { return nil }
+        return SystemLanguageModel.default.contextSize
+    }
+
     func generate(_ prompt: AIPrompt) async throws -> String {
         // Reject unsupported input before touching availability/model state.
         guard prompt.images.isEmpty else {
@@ -48,8 +57,19 @@ struct AppleIntelligenceProvider: AIModelProviding {
         // conversation state — is a later optimization once features need it.)
         let session = LanguageModelSession(model: .default, tools: [], instructions: nil)
         session.prewarm()
-        let response = try await session.respond(to: combinedText(for: prompt))
-        return response.content
+        do {
+            let response = try await session.respond(to: combinedText(for: prompt))
+            return response.content
+        } catch let error as LanguageModelSession.GenerationError {
+            if case .exceededContextWindowSize = error {
+                // The request burst past the session's combined 4096-token (or
+                // whatever the OS reports) budget. A new request gets a fresh
+                // session, so retrying naturally recovers — surface a precise
+                // message instead of a generic failure.
+                throw AIError.contextSizeExceeded(limit: SystemLanguageModel.default.contextSize)
+            }
+            throw AIError.engineUnavailable("The on-device model failed: \(error.localizedDescription)")
+        }
     }
 
     // MARK: - Helpers

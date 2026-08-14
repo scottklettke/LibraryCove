@@ -222,12 +222,18 @@ struct AIAskView: View {
 
         Task {
             defer { isSending = false }
+            // Size the context to the engine's *reported* window: on-device
+            // reports Apple's fixed session budget, OpenAI-compatible the
+            // configured one. The snapshot then only embeds the full detail of
+            // the books this question is actually about (retrieval runs
+            // app-side, on-device, before the LLM).
+            let limit = await AIService.shared.effectiveContextTokens()
             do {
-                let snapshot = AILibrarySnapshot.build(books: books, users: users)
+                let snapshot = AILibrarySnapshot.build(books: books, users: users, query: text, contextLimit: limit)
                 // Keep only as much prior conversation as fits the model's
                 // context window; the current turn is always included.
                 let window = memory.window(limit: AIPromptFactory.transcriptWindow)
-                let scoped = AIPromptFactory.transcript(for: window, budget: AIPromptFactory.transcriptBudget)
+                let scoped = AIPromptFactory.transcript(for: window, budget: AIPromptFactory.transcriptBudget(limit: limit))
                 let conversation = scoped
                     .map { "\($0.role == .user ? "User" : "Assistant"): \($0.text)" }
                     .joined(separator: "\n")
@@ -245,24 +251,27 @@ struct AIAskView: View {
                 turns.append(assistantTurn)
                 memory.append(assistantTurn)
             } catch {
-                errorText = Self.contextOverflowHint(error) ?? Self.aiErrorText(error)
+                errorText = Self.aiErrorText(error, limit: limit)
             }
         }
     }
 
-    private static func contextOverflowHint(_ error: Error) -> String? {
-        let text = error.localizedDescription.lowercased()
-        let isContext = text.contains("context")
-            && (text.contains("size") || text.contains("exceed") || text.contains("length") || text.contains("token"))
-        guard isContext else { return nil }
-        return "Your library is too large for this model's context window. In Settings → AI, raise the context window size to match your model, or clear the conversation and ask a shorter question."
-    }
-
-    private static func aiErrorText(_ error: Error) -> String {
+    private static func aiErrorText(_ error: Error, limit: Int) -> String {
         guard let aiError = error as? AIError else { return error.localizedDescription }
         switch aiError {
         case .notConfigured, .engineUnavailable:
             return "AI isn't ready. Set up an engine in Settings → AI."
+        case .contextSizeExceeded:
+            switch AIConfig.selectedEngine {
+            case .onDevice:
+                // The on-device window is fixed — it can't be raised, and the
+                // app already sends only a compact index plus relevant books,
+                // so the user just needs to rephrase. A fresh request gets a
+                // fresh session, so the conversation never needs clearing.
+                return "This question was too large for the on-device model's context window (\(limit) tokens total). The app already sends only a compact index plus the books relevant to your question, so rephrasing it more concisely usually fits. Your conversation is preserved — nothing needs clearing."
+            case .openAI:
+                return "This request exceeded the model's context window (configured \(limit) tokens). The app sends a compact snapshot, so this is unusual — try a shorter question, or raise the context window in Settings → AI to match your model."
+            }
         default:
             return aiError.localizedDescription
         }

@@ -27,6 +27,13 @@ struct AIService {
         return try await provider.generate(prompt)
     }
 
+    /// The chosen engine's real per-request context budget in tokens, falling
+    /// back to the user's configured window when the engine can't report one.
+    /// Callers use this to size the snapshot and transcript precisely.
+    func effectiveContextTokens() async -> Int {
+        await provider(for: AIConfig.selectedEngine).contextTokenLimit ?? AIConfig.maxContextTokens
+    }
+
     private func provider(for engine: AIEngine) -> any AIModelProviding {
         switch engine {
         case .onDevice:

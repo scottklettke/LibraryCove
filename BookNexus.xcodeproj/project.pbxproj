@@ -36,6 +36,7 @@
 		8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C1DCDE47ED67E664790114 /* Book.swift */; };
 		95AB138620E3799EAC0D17FD /* BookNexusUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */; };
 		987B77E5B2E31037BAF2CA4F /* GenreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FCBC84DCB9CD2FF86A129E /* GenreStore.swift */; };
+		A4D5526BA0DDA1751D1D7225 /* LibraryRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83183F1412034C5249A5C93 /* LibraryRetriever.swift */; };
 		AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */; };
 		AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7A776C41705A6CB7A15A49 /* RootView.swift */; };
 		AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E94C93E532B33EA592F1EB /* Note.swift */; };
@@ -114,6 +115,7 @@
 		AA71BCA2022D2862829348EC /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
 		AD18FEC58EA8AC9EA08D6EB2 /* LibraryExportDTOs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryExportDTOs.swift; sourceTree = "<group>"; };
 		AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverImageStore.swift; sourceTree = "<group>"; };
+		B83183F1412034C5249A5C93 /* LibraryRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryRetriever.swift; sourceTree = "<group>"; };
 		BAE4766D3B7B69FC70AA5FED /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		BCC3FAFB30EF2E138F56F252 /* CatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogService.swift; sourceTree = "<group>"; };
 		BE39D4B5EFBB0D27F363B112 /* PendingScanStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingScanStore.swift; sourceTree = "<group>"; };
@@ -124,7 +126,7 @@
 		E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F813FC7967B94AEFA911CF4E /* LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySync.swift; sourceTree = "<group>"; };
-		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAskView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -262,6 +264,7 @@
 				7EEEF39D0AC74B7F9FEB7319 /* DescriptionImprovement.swift */,
 				979A367A45B0D87E6C7C617F /* GenreCleanup.swift */,
 				8E86167FD5411E0B5D28F468 /* LibraryContext.swift */,
+				B83183F1412034C5249A5C93 /* LibraryRetriever.swift */,
 				70D10C87BE8E0D0FD5C243BF /* OpenAICompatibleProvider.swift */,
 			);
 			path = AI;
@@ -427,6 +430,7 @@
 				F67770AFA24ABA1B6830DE46 /* LibraryContext.swift in Sources */,
 				56354CE53D12EC9AD8638BEF /* LibraryDataService.swift in Sources */,
 				F1B6C4200EEBC0004D173763 /* LibraryExportDTOs.swift in Sources */,
+				A4D5526BA0DDA1751D1D7225 /* LibraryRetriever.swift in Sources */,
 				E7EDF16C4AEE314A788AFF95 /* LibrarySync.swift in Sources */,
 				3E1B70428ED02FC7ADECABA2 /* LibraryView.swift in Sources */,
 				213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */,
@@ -508,7 +512,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = BookNexus/BookNexus.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = BookNexus/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -705,7 +708,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = BookNexus/BookNexus.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = BookNexus/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

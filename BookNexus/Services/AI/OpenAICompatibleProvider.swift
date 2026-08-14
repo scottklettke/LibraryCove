@@ -29,6 +29,10 @@ final class OpenAICompatibleProvider: AIModelProviding {
         return .available
     }
 
+    /// The OpenAI-compatible server's window is whatever the user configured
+    /// in Settings → AI (this engine has no way to query the server for it).
+    var contextTokenLimit: Int? { AIConfig.maxContextTokens }
+
     func generate(_ prompt: AIPrompt) async throws -> String {
         guard prompt.images.isEmpty else {
             throw AIError.unsupported("Image input is not available yet.")
@@ -51,7 +55,11 @@ final class OpenAICompatibleProvider: AIModelProviding {
         }
         guard (200..<300).contains(http.statusCode) else {
             let snippet = String(data: data, encoding: .utf8) ?? ""
-            throw AIError.server(status: http.statusCode, body: Self.trimmedSnippet(snippet))
+            let trimmed = Self.trimmedSnippet(snippet)
+            if Self.isContextOverflowBody(snippet) {
+                throw AIError.contextSizeExceeded(limit: AIConfig.maxContextTokens)
+            }
+            throw AIError.server(status: http.statusCode, body: trimmed)
         }
 
         return try Self.decodeMessage(from: data)
@@ -96,6 +104,17 @@ final class OpenAICompatibleProvider: AIModelProviding {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
+    }
+
+    /// Whether a server error body describes a context-window overflow
+    /// (OpenAI and most compatible servers phrase it around "context length" /
+    /// "context size" / "maximum tokens"). Returns true so `generate` can map
+    /// it to a precise `contextSizeExceeded` error before the generic server
+    /// branch.
+    static func isContextOverflowBody(_ body: String) -> Bool {
+        let text = body.lowercased()
+        return text.contains("context")
+            && (text.contains("length") || text.contains("size") || text.contains("exceed") || text.contains("token"))
     }
 
     /// Pulls `choices[0].message.content` out of a non-streaming response,

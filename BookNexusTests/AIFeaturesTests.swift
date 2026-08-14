@@ -388,6 +388,147 @@ import SwiftData
         #expect(book.hasImprovedDescription == false)
     }
 
+    // MARK: - Retrieval-first snapshot (overflow fix)
+
+    @Test func targetedQueryDropsMassiveCatalogToFitTinyContext() {
+        // Regression for the original overflow: 48 books each with a 2k-char
+        // description + summary used to produce a ~190k-char snapshot that
+        // burst the on-device 4096-token budget on the FIRST question. With
+        // retrieval-first context, a simple question ships only the title
+        // index + the matched book's detail + the compact digest.
+        let pad = String(repeating: "z", count: 2000)
+        var books = (0..<48).map { i in
+            Book(title: String(format: "Book %02d", i), authors: ["Author \(i)"],
+                 bookDescription: pad, summary: pad)
+        }
+        books.append(Book(title: "Dune", authors: ["Frank Herbert"],
+                          bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice.",
+                          summary: "A desert epic about power, faith, and spice."))
+
+        let snapshot = AILibrarySnapshot.build(books: books, users: [], query: "Do I have Dune?")
+
+        #expect(snapshot.count <= AIPromptFactory.contextCap)
+        // The matched book's searchable detail reaches the model intact…
+        #expect(snapshot.contains("Description: Paul Atreides journeys to Arrakis, the desert planet of spice."))
+        // …every other title is still indexed (the model can confirm/refute)…
+        #expect(snapshot.contains("Book 47 (Author 47)"))
+        // …and nothing had to be cut, so no truncation note fired.
+        #expect(!snapshot.contains("truncated"))
+    }
+
+    @Test func retrievalTargetsNamedBookAndKeepsSnapshotSlim() {
+        let dune = Book(title: "Dune", authors: ["Frank Herbert"], genres: ["Science Fiction"],
+                        bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice.",
+                        summary: "A desert epic about power, faith, and spice.")
+        let solaris = Book(title: "Solaris", authors: ["Stanislaw Lem"], genres: ["Science Fiction"],
+                           bookDescription: "A psychologist studies an ocean that mirrors human minds.")
+
+        let snapshot = AILibrarySnapshot.build(books: [dune, solaris], users: [], query: "Tell me about Dune")
+
+        // The full catalog index is always present (the model can list every
+        // book)…
+        #expect(snapshot.contains("Dune (Frank Herbert) — Science Fiction"))
+        #expect(snapshot.contains("Solaris (Stanislaw Lem) — Science Fiction"))
+        // …but only the matched book carries its searchable detail, so the
+        // whole library's descriptions never enter the model's context.
+        #expect(snapshot.contains("Description: Paul Atreides journeys to Arrakis, the desert planet of spice."))
+        #expect(!snapshot.contains("ocean that mirrors human minds"))
+        #expect(snapshot.count <= AIPromptFactory.contextCap)
+    }
+
+    @Test func retrievalKeywordFindsSummaryMention() {
+        let walrus = Book(title: "The Voyage", summary: "A sailor befriends a walrus in the Arctic winter.")
+        let other = Book(title: "Antipodes", summary: "Ornithology on a remote island.")
+
+        let snapshot = AILibrarySnapshot.build(books: [walrus, other], users: [], query: "which book mentions a walrus")
+
+        #expect(snapshot.contains("Summary: A sailor befriends a walrus in the Arctic winter."))
+        #expect(!snapshot.contains("remote island"))
+    }
+
+    @Test func retrievalMatchesAuthorSurname() {
+        let lem = Book(title: "Solaris", authors: ["Stanislaw Lem"], summary: "A sentient ocean. ")
+        let herbert = Book(title: "Dune", authors: ["Frank Herbert"], summary: "Desert planet politics. ")
+
+        let snapshot = AILibrarySnapshot.build(books: [lem, herbert], users: [], query: "books by Lem")
+
+        #expect(snapshot.contains("Summary: A sentient ocean."))
+        #expect(!snapshot.contains("Desert planet politics."))
+    }
+
+    @Test func abstractQueryKeepsOnlyIndexAndDigest() {
+        let books = (0..<6).map { i in
+            Book(title: "Book \(i)", authors: ["A \(i)"],
+                 bookDescription: String(repeating: "detail \(i) ", count: 40),
+                 createdAt: Date(timeIntervalSince1970: Double(1000 + i)))
+        }
+        // An open-ended question has no retrieval match — no book's details
+        // ride along, so the request is tiny and cannot overflow even a 4k
+        // window, while the full title index still grounds the answer.
+        let snapshot = AILibrarySnapshot.build(books: books, users: [], query: "What should I read next?")
+
+        #expect(snapshot.contains("Total books in library: 6"))
+        for i in 0..<6 { #expect(snapshot.contains("Book \(i) (A \(i))")) }
+        #expect(!snapshot.contains("Description: detail"))
+        #expect(!snapshot.contains("truncated"))
+        #expect(snapshot.count < 4500)
+    }
+
+    @Test func retrievalRanksNamedAboveKeywordAndCapsAtTen() {
+        let books = (0..<15).map { i in
+            Book(title: "Book \(i)", authors: ["Author \(i)"],
+                 bookDescription: "A story set on the \(i == 0 ? "moon" : "sea") during a voyage.")
+        }
+        // "moon" is a whole title word here → named tier (3.0), outranking the
+        // keyword-tier description match (2.0).
+        let named = Book(title: "The Moon Is a Harsh Mistress",
+                         authors: ["Robert Heinlein"],
+                         bookDescription: "A lunar colony fights for independence.")
+
+        let hits = LibraryRetriever.retrieve(query: "books about the moon", books: books + [named])
+        #expect(hits.count <= 10) // hard cap
+        #expect(hits.first?.book.title == "The Moon Is a Harsh Mistress")
+        let ranked = hits.map(\.score)
+        #expect(ranked == ranked.sorted(by: >)) // strictly descending here
+    }
+
+    // The semantic tier uses on-device NaturalLanguage sentence embeddings and
+    // is calibrated against measured similarity (paraphrase ≈0.34 vs control
+    // ≈0.22/0.07, floor 0.28) — a thin contract on Apple's model, so CI
+    // without the embedding asset skips it via `semanticSearchAvailable`.
+    @Test func retrievalSemanticRecallsParaphrasedContent() {
+        let garden = Book(title: "Gardening for Beginners", authors: ["Anna Green"],
+                          bookDescription: "How to grow tomatoes and roses.")
+        let odyssey = Book(title: "The Odyssey", authors: ["Homer"],
+                           bookDescription: "An ancient Greek hero's long journey home after war.")
+        let physics = Book(title: "A Brief History of Time", authors: ["Stephen Hawking"],
+                           bookDescription: "Physics and cosmology for everyone.")
+
+        guard LibraryRetriever.semanticSearchAvailable else { return }
+        // The question shares NO literal word with "grow tomatoes and roses",
+        // so only the semantic tier can surface it.
+        let hits = LibraryRetriever.retrieve(
+            query: "A practical manual for cultivating vegetables and flowering plants at home",
+            books: [garden, odyssey, physics]
+        )
+        let titles = hits.map(\.book.title)
+        #expect(titles.contains("Gardening for Beginners"))
+        #expect(!titles.contains("The Odyssey"))
+        #expect(!titles.contains("A Brief History of Time"))
+    }
+
+    @Test func effectiveContextTokensUsesConfiguredWindow() async {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AIConfig.selectedEngine = .openAI
+        AIConfig.openAIBaseURL = "https://api.example.com/v1"
+        AIConfig.openAIAPIKey = "test-key"
+        AIConfig.maxContextTokens = 8192
+
+        let limit = await AIService.shared.effectiveContextTokens()
+        #expect(limit == 8192)
+    }
+
     // MARK: - Helpers
 
     private func baseContext() -> ModelContext {

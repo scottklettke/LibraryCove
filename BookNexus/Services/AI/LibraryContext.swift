@@ -4,14 +4,22 @@ import Foundation
 /// user's actual collection.
 enum AILibrarySnapshot {
 
-    /// A plain-text digest of the library, sized to fit the model's context
-    /// (`AIPromptFactory.contextCap`): the full title catalog first (every
-    /// title+author always included), then as much searchable detail
-    /// (summary/description/notes) as the budget allows split fairly across
-    /// books, then the compact digest buckets. When detail is cut, an explicit
-    /// note is appended so the model hedges instead of a confident "not found".
-    static func build(books: [Book], users: [User]) -> String {
-        let capacity = AIPromptFactory.contextCap
+    /// A plain-text digest of the library: the full title catalog first (every
+    /// title+author always included), then the compact digest buckets. With a
+    /// `query`, full searchable detail (summary/description/notes) is attached
+    /// only for the books the on-device `LibraryRetriever` matches — so the
+    /// whole library's descriptions never enter the model's context, and a
+    /// simple question carries just the slim index. Without a query, the
+    /// remaining budget is split fairly across books as before. When detail is
+    /// cut, an explicit note is appended so the model hedges instead of a
+    /// confident "not found".
+    static func build(
+        books: [Book],
+        users: [User],
+        query: String = "",
+        contextLimit: Int = AIConfig.maxContextTokens
+    ) -> String {
+        let capacity = AIPromptFactory.contextCap(limit: contextLimit)
         // Reserve room for the truncation note up front — it fires whenever
         // per-book detail has to be cut, and the total must never exceed cap.
         let contentBudget = max(1, capacity - truncationNote.count)
@@ -67,20 +75,28 @@ enum AILibrarySnapshot {
 
         let digestText = digests.joined(separator: "\n\n")
 
-        // Catalog: every book gets its full title line; the remaining budget is
-        // split evenly across books for detail (summary first — it's the text
-        // users most often ask to search — then description, then notes).
+        // Catalog: every book gets its full title line. With a query, the
+        // retriever picks which books carry full detail — giving all of it to
+        // the matches instead of spreading it thin — so each match's
+        // summary/description/notes reaches the model intact. Without a query,
+        // the remaining budget is split evenly across every book.
         let sortedBooks = books.sorted {
             $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
         let baseLines = sortedBooks.map(titleLine)
         let titlesCost = baseLines.reduce(0) { $0 + $1.count + 2 }
         let overhead = header.count + "All books:".count + digestText.count + 12
-        let detailBudget = max(0, contentBudget - titlesCost - overhead)
-        let perBook = sortedBooks.isEmpty ? 0 : detailBudget / sortedBooks.count
+
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hits = trimmedQuery.isEmpty ? [] : LibraryRetriever.retrieve(query: trimmedQuery, books: books)
+        let hitIDs = Set(hits.map { ObjectIdentifier($0.book) })
+        let detailCount = trimmedQuery.isEmpty ? sortedBooks.count : max(hits.count, 1)
+        let detailsBudget = max(0, contentBudget - titlesCost - overhead)
+        let perBook = detailCount == 0 ? 0 : detailsBudget / detailCount
 
         var didTruncate = false
         let catalogLines = zip(sortedBooks, baseLines).map { book, base -> String in
+            guard trimmedQuery.isEmpty || hitIDs.contains(ObjectIdentifier(book)) else { return base }
             let detail = detailSuffix(for: book)
             guard !detail.isEmpty else { return base }
             if perBook <= 0 {
@@ -97,8 +113,9 @@ enum AILibrarySnapshot {
         if !digestText.isEmpty { text.append(digestText) }
         let joined = text.joined(separator: "\n\n")
         let body = joined.count <= contentBudget ? joined : String(joined.prefix(contentBudget))
+        let wasCut = didTruncate || joined.count > contentBudget
 
-        return didTruncate ? body + truncationNote : body
+        return wasCut ? body + truncationNote : body
     }
 
     /// The message appended whenever detail was cut, so the model says it
@@ -154,16 +171,21 @@ enum AILibrarySnapshot {
 /// Builds system/user prompts for the Ask AI chat.
 enum AIPromptFactory {
 
-    /// Snapshot char budget = ~50% of the configured context window (~4
-    /// chars/token). Scales with `AIConfig.maxContextTokens` so it fits the
-    /// model instead of overflowing it.
-    static var contextCap: Int {
-        max(2000, Int(Double(AIConfig.maxContextTokens) * 2.0))
+    /// Snapshot char budget = ~50% of the model's context window (~4
+    /// chars/token). An explicit `limit` lets callers size the snapshot to the
+    /// engine's *reported* window (on-device reports Apple's fixed session
+    /// budget; OpenAI-compatible uses the configured one).
+    static var contextCap: Int { Self.contextCap(limit: AIConfig.maxContextTokens) }
+
+    static func contextCap(limit tokens: Int) -> Int {
+        max(2000, Int(Double(tokens) * 2.0))
     }
 
     /// Char budget for prior turns in a request (~30% of the context window).
-    static var transcriptBudget: Int {
-        max(1200, Int(Double(AIConfig.maxContextTokens) * 1.2))
+    static var transcriptBudget: Int { Self.transcriptBudget(limit: AIConfig.maxContextTokens) }
+
+    static func transcriptBudget(limit tokens: Int) -> Int {
+        max(1200, Int(Double(tokens) * 1.2))
     }
 
     /// How many prior turns are included as context with each message.

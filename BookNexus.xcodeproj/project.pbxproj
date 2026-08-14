@@ -16,6 +16,7 @@
 		3F6CDA65D5064229C183B4A9 /* ISBNScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06FB9E9C79C3D1AAF67B49B4 /* ISBNScannerView.swift */; };
 		44873906AE2241D5902C09CB /* PhotoCropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8D13E465719FF80F0A10F54 /* PhotoCropView.swift */; };
 		487826298A0FC7013B446583 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9F1799A7E99E9EE23090A3F /* User.swift */; };
+		48C184644350385B2C0D7829 /* AppleIntelligenceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B35B01FCD85BDC304C10910 /* AppleIntelligenceProvider.swift */; };
 		4AFD8127315354E6B8B70CD2 /* SyncSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FAAADB64DDB030CCC9F307E /* SyncSettings.swift */; };
 		4DED8832C0944E3A26296EF8 /* BookNexusApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */; };
 		5230248279AD3B3B56BB1AA5 /* LibraryDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00CDDBF2563BF734AC13F320 /* LibraryDataServiceTests.swift */; };
@@ -85,6 +86,7 @@
 		42BA645B8D9F8EE7D0843172 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
 		479F167FA4D4909D64A9776B /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		480760D116E0AAFEE7C9B87E /* BookNexus.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BookNexus.entitlements; sourceTree = "<group>"; };
+		4B35B01FCD85BDC304C10910 /* AppleIntelligenceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceProvider.swift; sourceTree = "<group>"; };
 		51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProvider.swift; sourceTree = "<group>"; };
 		5803E128FEAB5311F9F68675 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusTests.swift; sourceTree = "<group>"; };
@@ -238,6 +240,7 @@
 				42BA645B8D9F8EE7D0843172 /* AIConfig.swift */,
 				09BB017607934B8A1251606A /* AIModels.swift */,
 				14D52FCA11B8F9F348B3773A /* AIService.swift */,
+				4B35B01FCD85BDC304C10910 /* AppleIntelligenceProvider.swift */,
 				70D10C87BE8E0D0FD5C243BF /* OpenAICompatibleProvider.swift */,
 			);
 			path = AI;
@@ -383,6 +386,7 @@
 				5E2C3FA26AF1E3B3DCC4E499 /* AIModels.swift in Sources */,
 				5F4096B1A7BBC0CEE8E66DFF /* AIService.swift in Sources */,
 				8171B07342C8F77A5A081F94 /* AddBookView.swift in Sources */,
+				48C184644350385B2C0D7829 /* AppleIntelligenceProvider.swift in Sources */,
 				74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */,
 				8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */,
 				88A65217368FC591DC3B5396 /* BookDetailView.swift in Sources */,

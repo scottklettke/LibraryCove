@@ -84,7 +84,7 @@ final class OpenAICompatibleProvider: AIModelProviding {
         }
         messages.append(["role": "user", "content": prompt.user])
 
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "model": model,
             "messages": messages,
             "max_tokens": 1024,

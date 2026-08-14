@@ -182,7 +182,7 @@ struct SettingsView: View {
                 } header: {
                     Text("AI")
                 } footer: {
-                    Text("On-device & Private Cloud Compute arrive with the iOS 27 SDK upgrade.")
+                    Text("On-device runs on Apple Intelligence–capable devices. OpenAI uses any ChatGPT-compatible endpoint. Private Cloud Compute is coming later.")
                 }
             }
             .navigationTitle("Settings")

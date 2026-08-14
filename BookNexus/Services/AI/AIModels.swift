@@ -5,23 +5,26 @@ import Foundation
 /// Private Cloud Compute arrive with the iOS 27 SDK upgrade and will be added
 /// as cases here when that toolchain is available.
 enum AIEngine: String, Codable, CaseIterable, Identifiable, Sendable {
+    case onDevice
     case openAI
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .onDevice:
+            return "On-device (Apple Intelligence)"
         case .openAI:
             return "OpenAI"
         }
     }
 
-    /// Whether this engine can be used with the shipped toolchain. On-device /
-    /// Private Cloud Compute require FoundationModels (iOS 27), so only
-    /// `.openAI` is available now.
+    /// Whether this engine is available with the installed SDK. On-device
+    /// (FoundationModels text) works now; Private Cloud Compute + multimodal
+    /// need the newer SDK wave and are added later.
     var isAvailableNow: Bool {
         switch self {
-        case .openAI:
+        case .onDevice, .openAI:
             return true
         }
     }
@@ -61,6 +64,9 @@ protocol AIModelProviding {
 enum AIError: LocalizedError {
     /// No endpoint or key is configured (or the selected engine can't run yet).
     case notConfigured
+    /// The engine is chosen but can't run right now (e.g. Apple
+    /// Intelligence off, model assets still downloading).
+    case engineUnavailable(String)
     /// Transport-level failure reaching the endpoint.
     case network(Error)
     /// The endpoint answered with a non-2xx status and an optional body
@@ -75,6 +81,8 @@ enum AIError: LocalizedError {
         switch self {
         case .notConfigured:
             return "No AI endpoint is configured. Set your endpoint and API key in Settings."
+        case .engineUnavailable(let reason):
+            return reason
         case .network(let error):
             return "Could not reach the AI endpoint: \(error.localizedDescription)"
         case .server(let status, let body):

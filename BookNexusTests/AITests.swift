@@ -341,3 +341,38 @@ final class MockURLProtocol: URLProtocol {
         AIConfig.resetForTesting()
     }
 }
+
+@Suite struct AppleIntelligenceTests {
+
+    @available(iOS 26.0, *)
+    @Test func availabilityMappingCoversReasons() {
+        #expect(AppleIntelligenceProvider.map(.available) == .available)
+        #expect(AppleIntelligenceProvider.map(.unavailable(.deviceNotEligible)) ==
+                .unavailable("This device doesn't support Apple Intelligence."))
+        #expect(AppleIntelligenceProvider.map(.unavailable(.appleIntelligenceNotEnabled)) ==
+                .unavailable("Apple Intelligence is turned off. Enable it in Settings on this device."))
+        #expect(AppleIntelligenceProvider.map(.unavailable(.modelNotReady)) ==
+                .unavailable("The on-device model is still preparing. Try again shortly."))
+    }
+
+    @Test func enginesExposeOnDeviceAndOpenAI() {
+        #expect(AIEngine.allCases.contains(.onDevice))
+        #expect(AIEngine.allCases.contains(.openAI))
+        #expect(AIEngine.onDevice.isAvailableNow)
+        #expect(AIEngine.openAI.isAvailableNow)
+    }
+
+    @available(iOS 26.0, *)
+    @Test func providerRejectsImagePrompts() async {
+        let provider = AppleIntelligenceProvider()
+        let prompt = AIPrompt(user: "describe", images: [Data([0xFF])])
+        do {
+            _ = try await provider.generate(prompt)
+            Issue.record("expected unsupported error for image prompts")
+        } catch AIError.unsupported {
+            // expected — images are rejected before anything else
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+}

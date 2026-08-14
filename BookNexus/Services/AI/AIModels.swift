@@ -15,7 +15,7 @@ enum AIEngine: String, Codable, CaseIterable, Identifiable, Sendable {
         case .onDevice:
             return "On-device (Apple Intelligence)"
         case .openAI:
-            return "OpenAI"
+            return "OpenAI-compatible endpoint"
         }
     }
 

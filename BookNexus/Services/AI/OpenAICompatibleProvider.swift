@@ -23,8 +23,8 @@ final class OpenAICompatibleProvider: AIModelProviding {
     }
 
     func availability() async -> AIAvailability {
-        guard !baseURL.isEmpty, !apiKey.isEmpty else {
-            return .unavailable("Missing base URL or API key.")
+        guard !baseURL.isEmpty else {
+            return .unavailable("Missing base URL.")
         }
         return .available
     }
@@ -101,7 +101,11 @@ final class OpenAICompatibleProvider: AIModelProviding {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        // Local endpoints often need no API key — skip the (empty) header
+        // rather than sending a useless `Authorization: Bearer `.
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
     }

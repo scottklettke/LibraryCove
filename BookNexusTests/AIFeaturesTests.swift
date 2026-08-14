@@ -529,6 +529,46 @@ import SwiftData
         #expect(limit == 8192)
     }
 
+    // MARK: - AI connection logs
+
+    @Test func logStoreAppendsAndPersists() {
+        AILogStore.clear()
+        defer { AILogStore.clear() }
+
+        AILogStore.append(AILogEntry(engine: .openAI, kind: .attempt, detail: "Endpoint: x"))
+        AILogStore.append(AILogEntry(engine: .openAI, kind: .success, detail: "Received 5 characters.", latencyMs: 412))
+
+        let entries = AILogStore.entries()
+        #expect(entries.count == 2)
+        #expect(entries.map(\.kind) == [.attempt, .success])
+        #expect(entries[1].latencyMs == 412)
+        #expect(entries[1].engine == .openAI)
+        #expect(entries[0].date <= entries[1].date)
+    }
+
+    @Test func logStoreCapsAtMaxEntries() {
+        AILogStore.clear()
+        defer { AILogStore.clear() }
+
+        for i in 0..<(AILogStore.maxEntries + 5) {
+            AILogStore.append(AILogEntry(engine: .openAI, kind: .attempt, detail: "entry \(i)"))
+        }
+        let entries = AILogStore.entries()
+        #expect(entries.count == AILogStore.maxEntries)
+        #expect(entries.first?.detail == "entry 5")
+        #expect(entries.last?.detail == "entry 104")
+    }
+
+    @Test func logStoreClearRemovesEntries() {
+        AILogStore.clear()
+        defer { AILogStore.clear() }
+
+        AILogStore.append(AILogEntry(engine: .openAI, kind: .error, detail: "boom"))
+        #expect(!AILogStore.entries().isEmpty)
+        AILogStore.clear()
+        #expect(AILogStore.entries().isEmpty)
+    }
+
     // MARK: - Helpers
 
     private func baseContext() -> ModelContext {

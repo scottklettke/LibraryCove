@@ -361,6 +361,48 @@ final class BookNexusUITests: XCTestCase {
                       "Library tab not selected after exiting Ask AI")
     }
 
+    /// The OpenAI engine is now "OpenAI-compatible endpoint", needs only an
+    /// endpoint URL (API key optional, no save button — it persists as you
+    /// type), and Settings shows a connection-logs section. This is the
+    /// surface the user relies on to wire up a local endpoint.
+    func testAISettingsExposeKeylessOpenAIConfigAndLogs() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        app.tabBars.buttons["Settings"].tap()
+
+        // Engine is openAI by default → the picker reads the new name.
+        var scrolls = 0
+        while !app.staticTexts["OpenAI-compatible endpoint"].exists && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        XCTAssertTrue(app.staticTexts["OpenAI-compatible endpoint"].exists,
+                      "engine picker not showing OpenAI-compatible endpoint")
+
+        // Bring the endpoint fields fully into view, then assert the keyless
+        // configuration surface (no save button needed).
+        if scrolls < 2 { app.swipeUp() }
+        XCTAssertTrue(app.textFields["aiEndpointField"].waitForExistence(timeout: 5),
+                      "Endpoint URL field missing")
+        XCTAssertTrue(app.secureTextFields["aiAPIKeyField"].exists,
+                      "optional API key field missing")
+        XCTAssertTrue(app.buttons["Test connection"].exists,
+                      "Test connection button missing")
+        // LabeledContent("Saved") surfaces as one combined element.
+        XCTAssertTrue(app.staticTexts["Saved, Automatically as you type"].exists,
+                      "saved-automatically feedback missing")
+
+        // Connection logs section sits below the AI section.
+        scrolls = 0
+        while !app.staticTexts["AI connection logs"].exists && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        XCTAssertTrue(app.staticTexts["AI connection logs"].exists,
+                      "AI connection logs section missing")
+    }
+
     /// The AI settings must surface the tokens/second indicator option
     /// (persistence and the toggle binding are covered by unit tests).
     func testAISettingsExposesTokenRateToggle() throws {

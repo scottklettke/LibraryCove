@@ -7,8 +7,12 @@ import Security
 /// which needs no extra entitlement.
 enum AIConfig {
 
-    /// Default OpenAI-compatible endpoint.
-    static let defaultOpenAIBaseURL = "https://api.openai.com/v1"
+    /// The endpoint is unset until the user provides one (an OpenAI-compatible
+    /// server is required — e.g. a local Ollama/LM Studio instance, a
+    /// self-hosted server, or api.openai.com with an API key). An empty value
+    /// routes AI features to the Settings onboarding instead of silently
+    /// hammering a default host the user never chose.
+    static let defaultOpenAIBaseURL = ""
 
     private enum Keys {
         static let engine = "AI.selectedEngine"
@@ -60,9 +64,12 @@ enum AIConfig {
         }
     }
 
-    /// True when an OpenAI-compatible request could be attempted.
+    /// True when an OpenAI-compatible request could be attempted. The API key
+    /// is optional — local endpoints (Ollama, LM Studio, self-hosted servers)
+    /// often need only a base URL, and requests omit the Authorization header
+    /// when no key is set.
     static var isOpenAIConfigured: Bool {
-        !openAIBaseURL.isEmpty && !openAIAPIKey.isEmpty
+        !openAIBaseURL.isEmpty
     }
 
     // MARK: Chat indicator
@@ -105,6 +112,7 @@ enum AIConfig {
         UserDefaults.standard.removeObject(forKey: Keys.baseURL)
         UserDefaults.standard.removeObject(forKey: Keys.showTokenRate)
         UserDefaults.standard.removeObject(forKey: Keys.maxContextTokens)
+        AILogStore.clear()
         Keychain.delete(service: Keys.keychainService, account: Keys.keychainAccount)
     }
 }

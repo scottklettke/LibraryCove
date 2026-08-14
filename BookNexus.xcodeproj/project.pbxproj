@@ -43,6 +43,7 @@
 		BC4BEAE2416EE87718ACDC26 /* AIAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */; };
 		C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142ED389ED138762597BEC0F /* SettingsView.swift */; };
 		C1B5391196F9887E6C4EA087 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D10C87BE8E0D0FD5C243BF /* OpenAICompatibleProvider.swift */; };
+		C2186FBF883F33F9720E4C00 /* AILog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA352B2ACB33FB6DB3838EC8 /* AILog.swift */; };
 		CA6AEF54D4F207015ABD76C3 /* GenreCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979A367A45B0D87E6C7C617F /* GenreCleanup.swift */; };
 		E039256789524685544238F4 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BA645B8D9F8EE7D0843172 /* AIConfig.swift */; };
 		E31B410542DC6881F02A1807 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A30ADE0D20FEA1692E407CB /* SyncCoordinator.swift */; };
@@ -125,6 +126,7 @@
 		E3C1F5B0FFD72FCDC259B256 /* GenreCleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanupView.swift; sourceTree = "<group>"; };
 		E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		EA352B2ACB33FB6DB3838EC8 /* AILog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AILog.swift; sourceTree = "<group>"; };
 		F813FC7967B94AEFA911CF4E /* LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySync.swift; sourceTree = "<group>"; };
 		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAskView.swift; sourceTree = "<group>"; };
@@ -257,6 +259,7 @@
 			isa = PBXGroup;
 			children = (
 				42BA645B8D9F8EE7D0843172 /* AIConfig.swift */,
+				EA352B2ACB33FB6DB3838EC8 /* AILog.swift */,
 				09BB017607934B8A1251606A /* AIModels.swift */,
 				14D52FCA11B8F9F348B3773A /* AIService.swift */,
 				4B35B01FCD85BDC304C10910 /* AppleIntelligenceProvider.swift */,
@@ -408,6 +411,7 @@
 			files = (
 				BC4BEAE2416EE87718ACDC26 /* AIAskView.swift in Sources */,
 				E039256789524685544238F4 /* AIConfig.swift in Sources */,
+				C2186FBF883F33F9720E4C00 /* AILog.swift in Sources */,
 				5E2C3FA26AF1E3B3DCC4E499 /* AIModels.swift in Sources */,
 				5F4096B1A7BBC0CEE8E66DFF /* AIService.swift in Sources */,
 				8171B07342C8F77A5A081F94 /* AddBookView.swift in Sources */,

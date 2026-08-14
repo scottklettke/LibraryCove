@@ -322,20 +322,35 @@ final class MockURLProtocol: URLProtocol {
 
     // MARK: - OpenAI endpoint setup
 
-    @Test func missingKeyThroughAIServiceThrowsNotConfigured() async throws {
+    // API keys are optional for OpenAI-compatible endpoints (local servers
+    // like Ollama/lm-studio usually need none), so an empty key must not block
+    // a configured endpoint.
+    @Test func keylessEndpointIsConsideredConfigured() async {
         AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
         AIConfig.selectedEngine = .openAI
-        AIConfig.openAIBaseURL = "https://api.example.com/v1"
+        AIConfig.openAIBaseURL = "http://127.0.0.1:11434/v1"
         AIConfig.openAIAPIKey = "" // ensure empty
 
-        do {
-            _ = try await AIService.shared.generate(AIPrompt(user: "x"))
-            Issue.record("Expected notConfigured")
-        } catch AIError.notConfigured {
-            // Expected.
-        } catch {
-            Issue.record("Unexpected error type: \(error)")
+        let availability = await AIService.shared.availability()
+        #expect(availability == .available)
+        #expect(AIConfig.isOpenAIConfigured)
+    }
+
+    @Test func requestWithoutAPIKeySucceedsAndOmitsAuthHeader() async throws {
+        MockURLProtocol.handler = { request in
+            // Empty key → no Authorization header at all (not an empty bearer).
+            #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            return AITests.jsonResponse(request, status: 200,
+                body: #"{"choices":[{"message":{"content":"ok"}}]}"#)
         }
+        let provider = OpenAICompatibleProvider(
+            baseURL: "https://api.example.com/v1",
+            apiKey: "",
+            session: AITests.session()
+        )
+        let text = try await provider.generate(AIPrompt(user: "hi"))
+        #expect(text == "ok")
     }
 
     @Test func emptyBaseURLThroughAIServiceThrowsNotConfigured() async throws {
@@ -359,10 +374,14 @@ final class MockURLProtocol: URLProtocol {
         AIConfig.selectedEngine = .openAI
         AIConfig.openAIAPIKey = ""
         AIConfig.openAIBaseURL = ""
-        #expect(await AIService.shared.availability() == .unavailable("Missing base URL or API key."))
+        #expect(await AIService.shared.availability() == .unavailable("Missing base URL."))
+
+        // A key is optional: a base URL alone makes the endpoint available.
+        AIConfig.openAIAPIKey = ""
+        AIConfig.openAIBaseURL = "http://127.0.0.1:11434/v1"
+        #expect(await AIService.shared.availability() == .available)
 
         AIConfig.openAIAPIKey = "test-key"
-        AIConfig.openAIBaseURL = "https://api.example.com/v1"
         #expect(await AIService.shared.availability() == .available)
     }
 

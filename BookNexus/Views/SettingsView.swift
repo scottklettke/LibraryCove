@@ -40,6 +40,10 @@ struct SettingsView: View {
     @State private var aiBaseURL: String = AIConfig.openAIBaseURL
     @State private var aiAPIKey: String = AIConfig.openAIAPIKey
     @State private var aiAvailability: AIAvailability?
+    @State private var aiLogs: [AILogEntry] = []
+    @State private var isTesting = false
+    @State private var testResult: String?
+    @State private var testResultIsError = false
 
     // Feedback
     @State private var lastResult: String?
@@ -76,6 +80,10 @@ struct SettingsView: View {
         case nil, .unavailable:
             return .secondary
         }
+    }
+
+    private var trimmedBaseURL: String {
+        aiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -170,6 +178,37 @@ struct SettingsView: View {
                         Text(aiStatusText)
                             .foregroundStyle(aiStatusColor)
                     }
+                    if aiEngine == .openAI {
+                        TextField("Endpoint URL", text: $aiBaseURL, prompt: Text("http://localhost:11434/v1"))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .accessibilityIdentifier("aiEndpointField")
+                        SecureField("API key (optional)", text: $aiAPIKey)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("aiAPIKeyField")
+                        LabeledContent("Saved") {
+                            Text("Automatically as you type")
+                                .foregroundStyle(.secondary)
+                        }
+                        Button {
+                            Task { await testConnection() }
+                        } label: {
+                            Label(isTesting ? "Testing…" : "Test connection",
+                                  systemImage: isTesting ? "arrow.triangle.2.circlepath" : "bolt.fill")
+                        }
+                        .disabled(isTesting || trimmedBaseURL.isEmpty)
+                        if let testResult {
+                            LabeledContent(testResultIsError ? "Test failed" : "Test result") {
+                                Text(testResult)
+                                    .font(.caption)
+                                    .foregroundStyle(testResultIsError ? Color.red : Color.green)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
                     Toggle("Show tokens/second", isOn: Binding(
                         get: { AIConfig.showTokenRate },
                         set: { AIConfig.showTokenRate = $0 }
@@ -186,19 +225,29 @@ struct SettingsView: View {
                             Text("\(tokens / 1024)K tokens").tag(tokens)
                         }
                     }
-                    if aiEngine == .openAI {
-                        TextField("Base URL", text: $aiBaseURL)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                            .keyboardType(.URL)
-                        SecureField("API key", text: $aiAPIKey)
-                            .textInputAutocapitalization(.never)
-                            .disableAutocorrection(true)
-                    }
                 } header: {
                     Text("AI")
                 } footer: {
-                    Text("On-device runs on Apple Intelligence–capable devices. OpenAI uses any ChatGPT-compatible endpoint. Set the context window to match your model's limit — a larger window lets the AI search more of your library. Private Cloud Compute is coming later.")
+                    Text("OpenAI-compatible endpoints point at any server that speaks the OpenAI Chat Completions API (Ollama, LM Studio, self-hosted models). An API key is only needed when the server requires one. On-device runs on Apple Intelligence–capable devices. Set the context window to match your model's limit — a larger window lets the AI search more of your library.")
+                }
+
+                Section {
+                    if aiLogs.isEmpty {
+                        Text("No AI activity logged yet. Ask a question or tap Test connection to see request logs here.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(aiLogs.prefix(30))) { entry in
+                            logRow(entry)
+                        }
+                        Button("Clear logs", role: .destructive) {
+                            AILogStore.clear()
+                            reloadLogs()
+                        }
+                    }
+                } header: {
+                    Text("AI connection logs")
+                } footer: {
+                    Text("Shows the last 30 requests — endpoint, outcome, errors, and timing — so connection issues are visible. Logs stay on this device.")
                 }
             }
             .navigationTitle("Settings")
@@ -232,6 +281,9 @@ struct SettingsView: View {
             .task(id: aiConfigSignature) {
                 aiAvailability = await AIService.shared.availability()
             }
+            .onAppear {
+                reloadLogs()
+            }
             .onChange(of: aiEngine) { _, newValue in
                 AIConfig.selectedEngine = newValue
             }
@@ -259,6 +311,95 @@ struct SettingsView: View {
             } message: {
                 Text(lastError ?? "Something went wrong.")
             }
+        }
+    }
+
+    // MARK: - AI connection testing + logs
+
+    @MainActor
+    private func reloadLogs() {
+        aiLogs = AILogStore.entries()
+    }
+
+    /// Fires one real request through the selected engine so the user gets
+    /// immediate "did my endpoint actually work" feedback, and so the
+    /// connection log below it captures the exact outcome/error.
+    @MainActor
+    private func testConnection() async {
+        isTesting = true
+        testResult = nil
+        testResultIsError = false
+        defer { isTesting = false }
+        do {
+            let response = try await AIService.shared.generate(
+                AIPrompt(system: "You are a connectivity probe.",
+                         user: "Reply with a single word: OK.")
+            )
+            let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            let snippet = cleaned.prefix(160)
+            testResult = snippet.isEmpty
+                ? "Connected (empty reply)"
+                : "Connected — replied: \(snippet)\(cleaned.count > 160 ? "…" : "")"
+            testResultIsError = false
+        } catch let error as AIError {
+            testResult = Self.testFailureMessage(error)
+            testResultIsError = true
+        } catch {
+            testResult = error.localizedDescription
+            testResultIsError = true
+        }
+        reloadLogs()
+    }
+
+    private static func testFailureMessage(_ error: AIError) -> String {
+        switch error {
+        case .notConfigured:
+            return "Enter an endpoint URL first."
+        case .network(let underlying):
+            return "Could not reach the endpoint — \(underlying.localizedDescription). Check the URL and that the server is running."
+        default:
+            return error.errorDescription ?? "Connection failed."
+        }
+    }
+
+    private func logRow(_ entry: AILogEntry) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: Self.logIcon(for: entry.kind))
+                .foregroundStyle(Self.logColor(for: entry.kind))
+                .font(.caption)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.detail)
+                    .font(.caption)
+                    .textSelection(.enabled)
+                HStack(spacing: 6) {
+                    Text(entry.date.formatted(date: .omitted, time: .standard))
+                    Text("·")
+                    Text(entry.engine.displayName)
+                    if let latency = entry.latencyText {
+                        Text("·")
+                        Text(latency)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private static func logIcon(for kind: AILogEntry.Kind) -> String {
+        switch kind {
+        case .attempt: return "arrow.up.circle"
+        case .success: return "checkmark.circle"
+        case .error: return "exclamationmark.triangle"
+        }
+    }
+
+    private static func logColor(for kind: AILogEntry.Kind) -> Color {
+        switch kind {
+        case .attempt: return .secondary
+        case .success: return .green
+        case .error: return .red
         }
     }
 

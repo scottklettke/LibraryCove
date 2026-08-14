@@ -93,6 +93,10 @@ extension LibraryDataService {
       "pageCount": 412,
       "bookDescription": "A desert planet. Spice. Destiny.",
       "descriptionSource": "openlibrary",
+      "summary": null,
+      "originalDescription": null,
+      "originalDescriptionSource": null,
+      "hasImprovedDescription": false,
       "language": "en",
       "physicalLocation": "Shelf C",
       "status": "reading",
@@ -128,6 +132,10 @@ extension LibraryDataService {
     | `pageCount` | integer / null | Number of pages. |
     | `bookDescription` | string / null | Short summary or description. |
     | `descriptionSource` | string / null | Where the description came from (`openlibrary`, `googlebooks`, `wikipedia`, `none`). |
+    | `summary` | string / null | AI-generated summary of the book (“Summarize”). |
+    | `originalDescription` | string / null | The description before “Improve description” rewrote it (for reverting). |
+    | `originalDescriptionSource` | string / null | The description source before the AI rewrite. |
+    | `hasImprovedDescription` | boolean | True once “Improve description” has been applied. |
     | `language` | string / null | Language code, e.g. `en`. |
     | `physicalLocation` | string / null | Where the physical book lives, e.g. `Shelf C`. |
     | `status` | string | One of `to-read`, `reading`, `completed`, `donated`. |

@@ -61,18 +61,47 @@ struct LoginView: View {
     }
 }
 
-/// Main tab layout: Library, Notes, Lists, Graph, Settings.
+/// Main tab layout: Library, Ask AI, Settings.
 struct MainTabView: View {
     let user: User
 
+    @State private var selectedTab: AppTab = .library
+
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack {
                 LibraryView()
             }
             .tabItem { Label("Library", systemImage: "books.vertical") }
+            .tag(AppTab.library)
+            NavigationStack {
+                AIAskView()
+            }
+            .tabItem { Label("Ask AI", systemImage: "sparkles") }
+            .tag(AppTab.askAI)
+            .environment(\.openLibraryTab, { selectedTab = .library })
             SettingsView(user: user)
                 .tabItem { Label("Settings", systemImage: "gear") }
+                .tag(AppTab.settings)
         }
+    }
+}
+
+/// The top-level navigation destinations, used to switch tabs programmatically.
+enum AppTab: Hashable {
+    case library
+    case askAI
+    case settings
+}
+
+/// Lets a tab (e.g. "Ask AI") hand the user back to the Library tab.
+private struct OpenLibraryTabKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
+extension EnvironmentValues {
+    var openLibraryTab: () -> Void {
+        get { self[OpenLibraryTabKey.self] }
+        set { self[OpenLibraryTabKey.self] = newValue }
     }
 }

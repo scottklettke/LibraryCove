@@ -170,6 +170,10 @@ struct SettingsView: View {
                         Text(aiStatusText)
                             .foregroundStyle(aiStatusColor)
                     }
+                    Toggle("Show tokens/second", isOn: Binding(
+                        get: { AIConfig.showTokenRate },
+                        set: { AIConfig.showTokenRate = $0 }
+                    ))
                     if aiEngine == .openAI {
                         TextField("Base URL", text: $aiBaseURL)
                             .textInputAutocapitalization(.never)

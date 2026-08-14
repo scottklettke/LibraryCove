@@ -324,4 +324,83 @@ final class BookNexusUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Enter library"].waitForExistence(timeout: 10),
                       "library was not reset — login screen expected")
     }
+
+    /// The Ask AI tab must exist and, with no AI engine configured on the
+    /// simulator, sending a question surfaces the graceful settings-hint
+    /// error instead of crashing or hanging.
+    func testAskAIReachableAndShowsGracefulEngineError() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+
+        let tab = app.tabBars.buttons["Ask AI"]
+        XCTAssertTrue(tab.waitForExistence(timeout: 10), "Ask AI tab missing")
+        tab.tap()
+        XCTAssertTrue(app.navigationBars["Ask AI"].waitForExistence(timeout: 5),
+                      "Ask AI screen did not present")
+
+        // A suggestion chip pre-fills the input; send it.
+        let chip = app.buttons["What should I read next?"]
+        XCTAssertTrue(chip.waitForExistence(timeout: 5), "suggestion chip missing")
+        chip.tap()
+        let send = app.buttons["Send"]
+        XCTAssertTrue(send.isEnabled, "send should enable after a suggestion is picked")
+        send.tap()
+
+        // No engine configured → the graceful fallback error, not a hang.
+        XCTAssertTrue(app.staticTexts["AI isn't ready. Set up an engine in Settings → AI."]
+            .waitForExistence(timeout: 15), "graceful engine error did not appear")
+
+        // A visible way back to the library must exist and actually switch tabs.
+        let back = app.buttons["Back to library"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "no exit button on Ask AI")
+        back.tap()
+        XCTAssertTrue(app.navigationBars["Ask AI"].waitForNonExistence(timeout: 5),
+                      "still on Ask AI after pressing exit")
+        XCTAssertTrue(app.tabBars.buttons["Library"].isSelected,
+                      "Library tab not selected after exiting Ask AI")
+    }
+
+    /// The AI settings must surface the tokens/second indicator option
+    /// (persistence and the toggle binding are covered by unit tests).
+    func testAISettingsExposesTokenRateToggle() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        app.tabBars.buttons["Settings"].tap()
+
+        // The AI section sits below Profile/Data/Sync; scroll until the option
+        // comes into view.
+        let row = app.switches["Show tokens/second"]
+        var scrolls = 0
+        while !row.waitForExistence(timeout: 2) && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        XCTAssertTrue(row.exists, "token-rate toggle missing in AI settings")
+    }
+
+    /// Genre cleanup over an engine-less simulator must show the error state
+    /// with a Retry, not a blank sheet.
+    func testGenreCleanupShowsErrorStateWithRetry() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+
+        // "Clean up genres…" lives in the toolbar's Genre menu.
+        let genreMenu = app.buttons["Genre"]
+        XCTAssertTrue(genreMenu.waitForExistence(timeout: 10), "Genre menu missing in toolbar")
+        genreMenu.tap()
+        let cleanup = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Clean up genres'")
+        ).firstMatch
+        XCTAssertTrue(cleanup.waitForExistence(timeout: 5), "Clean up genres menu item missing")
+        cleanup.tap()
+
+        // With no engine configured the sheet shows the error state and Retry.
+        XCTAssertTrue(app.navigationBars["Clean up genres"].waitForExistence(timeout: 10),
+                      "clean-up sheet did not present")
+        XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 15),
+                      "error state with Retry did not appear")
+    }
 }

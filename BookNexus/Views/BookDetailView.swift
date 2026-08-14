@@ -21,11 +21,15 @@ struct BookDetailView: View {
     @State private var summaryCopied = false
     @State private var summaryError: String?
     @State private var showSummaryError = false
+    @State private var isImprovingDescription = false
+    @State private var improveError: String?
+    @State private var showImproveError = false
 
     var body: some View {
         List {
             headerSection
             infoSection
+            summarySection
             copiesSection
             notesSection
         }
@@ -40,8 +44,25 @@ struct BookDetailView: View {
                         Label("Summarize", systemImage: "wand.and.stars")
                     }
                     .disabled(isSummarizing)
+                    Button {
+                        Task { await improveDescription() }
+                    } label: {
+                        Label(
+                            isImprovingDescription ? "Improving…" : "Improve description",
+                            systemImage: "text.quote"
+                        )
+                    }
+                    .disabled(!canImproveDescription || book.hasImprovedDescription || isImprovingDescription)
+                    if book.hasImprovedDescription {
+                        Button {
+                            restoreOriginalDescription()
+                        } label: {
+                            Label("Restore original description", systemImage: "arrow.uturn.backward")
+                        }
+                        .disabled(isImprovingDescription)
+                    }
                 } label: {
-                    if isSummarizing {
+                    if isSummarizing || isImprovingDescription {
                         ProgressView()
                             .controlSize(.small)
                     } else {
@@ -89,6 +110,11 @@ struct BookDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(summaryError ?? "")
+        }
+        .alert("Improve Description", isPresented: $showImproveError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(improveError ?? "")
         }
         .sheet(isPresented: $showEdit) {
             NavigationStack {
@@ -183,6 +209,18 @@ struct BookDetailView: View {
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)
+                if book.hasImprovedDescription {
+                    HStack(spacing: 8) {
+                        Label("AI generated", systemImage: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Restore original") {
+                            restoreOriginalDescription()
+                        }
+                        .font(.caption)
+                    }
+                }
                 if let source = book.descriptionSource, source != "none" {
                     LabeledContent("Source", value: sourceLabel(source))
                         .font(.caption)
@@ -208,6 +246,22 @@ struct BookDetailView: View {
                 }
             }
         }
+    }
+
+    private var summarySection: some View {
+        if let summary = book.summary, !summary.isEmpty {
+            return AnyView(
+                Section("Summary") {
+                    Text(summary)
+                        .font(.body)
+                        .textSelection(.enabled)
+                    Label("AI generated", systemImage: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            )
+        }
+        return AnyView(EmptyView())
     }
 
     private var notesSection: some View {
@@ -294,6 +348,12 @@ struct BookDetailView: View {
             )
             summaryText = result
             summaryCopied = false
+            // Keep the generated summary in its own field (shown in the Summary
+            // section and searchable via the AI catalog) instead of overwriting
+            // the book description.
+            book.summary = result
+            book.updatedAt = Date()
+            try? modelContext.save()
             showSummarySheet = true
         } catch let error as AIError {
             switch error {
@@ -306,6 +366,44 @@ struct BookDetailView: View {
         } catch {
             summaryError = "The AI summary couldn't be generated: \(error.localizedDescription)"
             showSummaryError = true
+        }
+    }
+
+    /// "Improve description" needs either an existing description to rewrite
+    /// or an ISBN to fetch richer source text from the catalog.
+    private var canImproveDescription: Bool {
+        book.bookDescription != nil || book.isbn != nil
+    }
+
+    private func restoreOriginalDescription() {
+        AIDescriptionImprovement.revert(to: book)
+        try? modelContext.save()
+    }
+
+    private func improveDescription() async {
+        guard canImproveDescription else { return }
+
+        isImprovingDescription = true
+        defer { isImprovingDescription = false }
+
+        do {
+            let (raw, source) = await AIDescriptionImprovement.onlineText(for: book)
+            let rewritten = try await AIService.shared.generate(
+                AIDescriptionImprovement.prompt(raw: raw)
+            )
+            AIDescriptionImprovement.apply(rewritten, source: source, to: book)
+            try? modelContext.save()
+        } catch let error as AIError {
+            switch error {
+            case .notConfigured, .engineUnavailable:
+                improveError = "Set up an AI engine in Settings → AI first."
+            default:
+                improveError = error.localizedDescription
+            }
+            showImproveError = true
+        } catch {
+            improveError = error.localizedDescription
+            showImproveError = true
         }
     }
 

@@ -57,6 +57,11 @@ struct BookDTO: Codable {
     var pageCount: Int?
     var bookDescription: String?
     var descriptionSource: String?
+    var summary: String?
+    var originalDescription: String?
+    var originalDescriptionSource: String?
+    /// Optional so older archives (which lack the key) still decode.
+    var hasImprovedDescription: Bool?
     var language: String?
     var physicalLocation: String?
     var status: String
@@ -87,6 +92,10 @@ struct BookDTO: Codable {
         pageCount = model.pageCount
         bookDescription = model.bookDescription
         descriptionSource = model.descriptionSource
+        summary = model.summary
+        originalDescription = model.originalDescription
+        originalDescriptionSource = model.originalDescriptionSource
+        hasImprovedDescription = model.hasImprovedDescription
         language = model.language
         physicalLocation = model.physicalLocation
         status = model.status

@@ -18,6 +18,17 @@ final class Book {
     var pageCount: Int?
     var bookDescription: String?
     var descriptionSource: String?  // openlibrary | googlebooks | wikipedia | none
+    /// AI-generated summary of the book ("Summarize"), stored apart from
+    /// `bookDescription` and shown in its own Details section.
+    var summary: String?
+    /// The description as it was before "Improve description" rewrote it, so the
+    /// user can switch back to the original version (`nil` → nothing to restore).
+    var originalDescription: String?
+    /// The "Improve description" source before the rewrite, restored on revert.
+    var originalDescriptionSource: String?
+    /// True once "Improve description" has been applied, so it's offered only
+    /// once (Restore original is offered instead).
+    var hasImprovedDescription: Bool = false
     var language: String?
     var physicalLocation: String?
     var status: String = "to-read"  // reading | to-read | completed | donated
@@ -65,6 +76,10 @@ final class Book {
         pageCount: Int? = nil,
         bookDescription: String? = nil,
         descriptionSource: String? = nil,
+        summary: String? = nil,
+        originalDescription: String? = nil,
+        originalDescriptionSource: String? = nil,
+        hasImprovedDescription: Bool = false,
         language: String? = nil,
         physicalLocation: String? = nil,
         status: String = "to-read",
@@ -93,6 +108,10 @@ final class Book {
         self.pageCount = pageCount
         self.bookDescription = bookDescription
         self.descriptionSource = descriptionSource
+        self.summary = summary
+        self.originalDescription = originalDescription
+        self.originalDescriptionSource = originalDescriptionSource
+        self.hasImprovedDescription = hasImprovedDescription
         self.language = language
         self.physicalLocation = physicalLocation
         self.status = status

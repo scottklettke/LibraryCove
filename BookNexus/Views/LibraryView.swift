@@ -123,6 +123,7 @@ struct LibraryView: View {
     @State private var sortOrder: LibrarySort = .titleAsc
     @State private var isScrolled = false
     @State private var filteredSheet: FilteredSheet?
+    @State private var showGenreCleanup = false
 
     private var filteredBooks: [Book] {
         let visible = books.filter { $0.status != BookStatus.donated.rawValue }
@@ -271,6 +272,9 @@ struct LibraryView: View {
                             }
                         }
                         Button("Clear genre") { filterGenre = nil }
+                        Divider()
+                        // AI-assisted cleanup of the library's genre labels.
+                        Button("Clean up genres…") { showGenreCleanup = true }
                     } label: {
                         Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
                     }
@@ -308,6 +312,9 @@ struct LibraryView: View {
         }
         .sheet(item: $filteredSheet) { sheet in
             FilteredBooksSheet(sheet: sheet)
+        }
+        .sheet(isPresented: $showGenreCleanup) {
+            GenreCleanupView(books: visibleBooks)
         }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }

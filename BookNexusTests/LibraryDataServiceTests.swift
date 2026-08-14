@@ -20,7 +20,8 @@ import SwiftData
         context.insert(user)
 
         let b1 = Book(id: "b-1", title: "Dune", authors: ["Frank Herbert"], isbn: "9780441172719",
-                      publicationYear: 1965, genres: ["Science Fiction"], rating: 5,
+                      publicationYear: 1965, genres: ["Science Fiction"],
+                      summary: "A classic summary of Dune.", rating: 5,
                       ownerID: "u-1", createdAt: Date(timeIntervalSince1970: 1000))
         let b2 = Book(id: "b-2", title: "Solaris", authors: ["Stanislaw Lem"],
                       genres: ["Science Fiction"], status: "to-read", ownerID: "u-1",
@@ -85,6 +86,7 @@ import SwiftData
         #expect(envelope.connections.first?.book1ID == "b-1")
         #expect(envelope.connections.first?.book2ID == "b-2")
         #expect(envelope.books.first { $0.id == "b-1" }?.rating == 5)
+        #expect(envelope.books.first { $0.id == "b-1" }?.summary == "A classic summary of Dune.")
     }
 
     @Test func deleteAllClearsEverything() throws {
@@ -122,6 +124,7 @@ import SwiftData
         #expect(dune != nil)
         #expect(dune?.title == "Dune")
         #expect(dune?.rating == 5)
+        #expect(dune?.summary == "A classic summary of Dune.")
         #expect(dune?.authors == ["Frank Herbert"])
 
         // Relationships are rewired to the restored records.

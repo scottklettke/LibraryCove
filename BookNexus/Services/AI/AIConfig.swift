@@ -15,6 +15,7 @@ enum AIConfig {
         static let baseURL = "AI.openAIBaseURL"
         static let keychainService = "com.booknexus.app"
         static let keychainAccount = "OpenAIAPIKey"
+        static let showTokenRate = "AI.showTokenRate"
     }
 
     // MARK: Engine
@@ -63,12 +64,25 @@ enum AIConfig {
         !openAIBaseURL.isEmpty && !openAIAPIKey.isEmpty
     }
 
+    // MARK: Chat indicator
+
+    /// Whether the Ask AI chat shows a tokens/second estimate under each reply.
+    static var showTokenRate: Bool {
+        get {
+            UserDefaults.standard.bool(forKey: Keys.showTokenRate)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.showTokenRate)
+        }
+    }
+
     // MARK: Testing
 
     /// Clears every persisted value so tests start from a known state.
     static func resetForTesting() {
         UserDefaults.standard.removeObject(forKey: Keys.engine)
         UserDefaults.standard.removeObject(forKey: Keys.baseURL)
+        UserDefaults.standard.removeObject(forKey: Keys.showTokenRate)
         Keychain.delete(service: Keys.keychainService, account: Keys.keychainAccount)
     }
 }

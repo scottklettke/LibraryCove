@@ -16,6 +16,7 @@ enum AIConfig {
         static let keychainService = "com.booknexus.app"
         static let keychainAccount = "OpenAIAPIKey"
         static let showTokenRate = "AI.showTokenRate"
+        static let maxContextTokens = "AI.maxContextTokens"
     }
 
     // MARK: Engine
@@ -76,6 +77,26 @@ enum AIConfig {
         }
     }
 
+    // MARK: Context window
+
+    /// The model's context window in tokens, used to size the Ask AI snapshot
+    /// and transcript so requests never overflow it. Defaults conservatively to
+    /// fit on-device Apple Intelligence / small local models; raise it in
+    /// Settings → AI to match a larger model and get more of the library
+    /// searchable.
+    static let defaultMaxContextTokens = 4096
+
+    static var maxContextTokens: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: Keys.maxContextTokens)
+            guard stored >= 1024 else { return defaultMaxContextTokens }
+            return min(stored, 262_144)
+        }
+        set {
+            UserDefaults.standard.set(min(max(1024, newValue), 262_144), forKey: Keys.maxContextTokens)
+        }
+    }
+
     // MARK: Testing
 
     /// Clears every persisted value so tests start from a known state.
@@ -83,6 +104,7 @@ enum AIConfig {
         UserDefaults.standard.removeObject(forKey: Keys.engine)
         UserDefaults.standard.removeObject(forKey: Keys.baseURL)
         UserDefaults.standard.removeObject(forKey: Keys.showTokenRate)
+        UserDefaults.standard.removeObject(forKey: Keys.maxContextTokens)
         Keychain.delete(service: Keys.keychainService, account: Keys.keychainAccount)
     }
 }

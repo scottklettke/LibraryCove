@@ -165,6 +165,40 @@ import SwiftData
         #expect(snapshot.contains("truncated"))
     }
 
+    @Test func contextBudgetScalesWithConfiguredWindow() {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+
+        let small = AIPromptFactory.contextCap
+        AIConfig.maxContextTokens = 32768
+        #expect(AIPromptFactory.contextCap > small)
+        #expect(AIPromptFactory.transcriptBudget > 1200)
+        AIConfig.maxContextTokens = AIConfig.defaultMaxContextTokens
+        #expect(AIPromptFactory.contextCap == small)
+    }
+
+    @Test func transcriptTrimKeepsNewestAndFitsBudget() {
+        let turns = (0..<6).map { i in
+            AITurn(role: .user, text: String(repeating: "a", count: 120), date: Date(timeIntervalSince1970: Double(i)))
+        }
+        // 120-char turns; a 300-char budget fits the newest 2 (240), not 3 (360).
+        let trimmed = AIPromptFactory.transcript(for: turns, budget: 300)
+
+        #expect(trimmed.last?.text == turns.last?.text) // newest always kept
+        let total = trimmed.reduce(0) { $0 + $1.text.count }
+        #expect(total <= 300)
+        #expect(trimmed.count == 2)
+        #expect(trimmed.map(\.date) == Array(turns.suffix(2).map(\.date))) // chronological
+    }
+
+    @Test func transcriptKeepsNewestEvenWhenOverBudget() {
+        let turns = [AITurn(role: .user, text: "x", date: Date(timeIntervalSince1970: 0)),
+                     AITurn(role: .assistant, text: String(repeating: "y", count: 5000), date: Date(timeIntervalSince1970: 1))]
+        // Budget 100: the newest (5000 chars) must still be returned.
+        let trimmed = AIPromptFactory.transcript(for: turns, budget: 100)
+        #expect(trimmed == [turns.last!])
+    }
+
     @Test func snapshotCapsAtContextLimit() {
         let books = (0..<10).map { i in
             Book(title: "Book number \(i) with a very long padded title ".padding(toLength: 160, withPad: "x", startingAt: 0),

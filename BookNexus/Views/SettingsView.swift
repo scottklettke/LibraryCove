@@ -174,6 +174,18 @@ struct SettingsView: View {
                         get: { AIConfig.showTokenRate },
                         set: { AIConfig.showTokenRate = $0 }
                     ))
+                    Picker("Context window", selection: Binding(
+                        get: { AIConfig.maxContextTokens },
+                        set: { AIConfig.maxContextTokens = $0 }
+                    )) {
+                        let options = [2048, 4096, 8192, 16384, 32768, 65536]
+                        let present: [Int] = options.contains(AIConfig.maxContextTokens)
+                            ? options
+                            : (options + [AIConfig.maxContextTokens]).sorted()
+                        ForEach(present, id: \.self) { tokens in
+                            Text("\(tokens / 1024)K tokens").tag(tokens)
+                        }
+                    }
                     if aiEngine == .openAI {
                         TextField("Base URL", text: $aiBaseURL)
                             .textInputAutocapitalization(.never)
@@ -186,7 +198,7 @@ struct SettingsView: View {
                 } header: {
                     Text("AI")
                 } footer: {
-                    Text("On-device runs on Apple Intelligence–capable devices. OpenAI uses any ChatGPT-compatible endpoint. Private Cloud Compute is coming later.")
+                    Text("On-device runs on Apple Intelligence–capable devices. OpenAI uses any ChatGPT-compatible endpoint. Set the context window to match your model's limit — a larger window lets the AI search more of your library. Private Cloud Compute is coming later.")
                 }
             }
             .navigationTitle("Settings")

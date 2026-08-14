@@ -224,10 +224,11 @@ struct AIAskView: View {
             defer { isSending = false }
             do {
                 let snapshot = AILibrarySnapshot.build(books: books, users: users)
+                // Keep only as much prior conversation as fits the model's
+                // context window; the current turn is always included.
                 let window = memory.window(limit: AIPromptFactory.transcriptWindow)
-                // The current user turn is already in the window (it was
-                // appended before the request), so render it with the history.
-                let conversation = window
+                let scoped = AIPromptFactory.transcript(for: window, budget: AIPromptFactory.transcriptBudget)
+                let conversation = scoped
                     .map { "\($0.role == .user ? "User" : "Assistant"): \($0.text)" }
                     .joined(separator: "\n")
 
@@ -243,16 +244,27 @@ struct AIAskView: View {
                 let assistantTurn = AITurn(role: .assistant, text: response, date: Date())
                 turns.append(assistantTurn)
                 memory.append(assistantTurn)
-            } catch let error as AIError {
-                switch error {
-                case .notConfigured, .engineUnavailable:
-                    errorText = "AI isn't ready. Set up an engine in Settings → AI."
-                default:
-                    errorText = error.localizedDescription
-                }
             } catch {
-                errorText = error.localizedDescription
+                errorText = Self.contextOverflowHint(error) ?? Self.aiErrorText(error)
             }
+        }
+    }
+
+    private static func contextOverflowHint(_ error: Error) -> String? {
+        let text = error.localizedDescription.lowercased()
+        let isContext = text.contains("context")
+            && (text.contains("size") || text.contains("exceed") || text.contains("length") || text.contains("token"))
+        guard isContext else { return nil }
+        return "Your library is too large for this model's context window. In Settings → AI, raise the context window size to match your model, or clear the conversation and ask a shorter question."
+    }
+
+    private static func aiErrorText(_ error: Error) -> String {
+        guard let aiError = error as? AIError else { return error.localizedDescription }
+        switch aiError {
+        case .notConfigured, .engineUnavailable:
+            return "AI isn't ready. Set up an engine in Settings → AI."
+        default:
+            return aiError.localizedDescription
         }
     }
 }

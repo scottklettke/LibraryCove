@@ -142,6 +142,7 @@ struct LibraryView: View {
                     book.genres.joined(separator: " "),
                     book.physicalLocation ?? "",
                     book.bookDescription ?? "",
+                    book.summary ?? "",
                     (book.notes ?? []).map(\.content).joined(separator: " "),
                     book.ownerID.flatMap { namesByID[$0] } ?? activeName
                 ].joined(separator: " ").lowercased()

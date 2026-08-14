@@ -141,6 +141,30 @@ import SwiftData
         #expect(!snapshot.contains("Recently added:\nBook 00"))
     }
 
+    @Test func snapshotShipsFullSummaryBeyondOldTruncation() {
+        // A keyword placed past the old 200-char per-field cap must reach the
+        // model — regression for "AI couldn't find a word in my summary".
+        let summary = String(repeating: "m", count: 250) + "needle-of-proof"
+        let book = Book(title: "Dune", summary: summary)
+        let snapshot = AILibrarySnapshot.build(books: [book], users: [])
+
+        #expect(snapshot.contains("needle-of-proof"))
+    }
+
+    @Test func snapshotTruncationIsLoudNotSilent() {
+        // A catalog too big for the cap never hangs or silently drops content:
+        // it stays within budget and tells the model the text is incomplete.
+        let pad = String(repeating: "z", count: 2000)
+        let books = (0..<40).map { _ in
+            Book(title: "Book", authors: ["A"], genres: ["G"],
+                 bookDescription: pad, summary: pad)
+        }
+        let snapshot = AILibrarySnapshot.build(books: books, users: [])
+
+        #expect(snapshot.count <= AIPromptFactory.contextCap)
+        #expect(snapshot.contains("truncated"))
+    }
+
     @Test func snapshotCapsAtContextLimit() {
         let books = (0..<10).map { i in
             Book(title: "Book number \(i) with a very long padded title ".padding(toLength: 160, withPad: "x", startingAt: 0),

@@ -78,16 +78,26 @@ enum AILibrarySnapshot {
         }
 
         let text = sections.joined(separator: "\n\n")
-        if text.count <= AIPromptFactory.contextCap {
-            return text
-        }
-        return String(text.prefix(AIPromptFactory.contextCap))
+        guard text.count > AIPromptFactory.contextCap else { return text }
+
+        // Never drop book details silently: when the catalog crowds the cap,
+        // say so inside the snapshot so the model hedges instead of reporting
+        // a confident false "not found". Reserved space keeps output <= cap.
+        let note = "\n\n[The catalog above is truncated to fit the chat's size limit — some book details (including summaries) are omitted. If you can't find the exact text, say so rather than assuming it's absent.]"
+        let sliceLimit = max(0, AIPromptFactory.contextCap - note.count)
+        return String(text.prefix(sliceLimit)) + note
     }
+
+    /// Per-field character budget for description/summary/notes. Generous
+    /// enough that an AI-generated summary (2–3 sentences) ships in full so the
+    /// model can search words inside it; the overall `contextCap` still bounds
+    /// the prompt.
+    private static let fieldSnippetLimit = 2000
 
     /// One catalog row: the readable "Title (Author)" plus the fields the AI
     /// should be able to search, with long text truncated per field so the row
-    /// stays bounded. Description and notes carry the AI-summarized/AI-revised
-    /// text, keeping those searchable.
+    /// stays bounded. Description, summary and notes carry the AI text, keeping
+    /// it searchable.
     private static func catalogLine(for book: Book) -> String {
         var meta: [String] = []
         if !book.genres.isEmpty {
@@ -108,14 +118,14 @@ enum AILibrarySnapshot {
             line += " — " + meta.joined(separator: "; ")
         }
         if let description = book.bookDescription, !description.isEmpty {
-            line += "\n  Description: " + snippet(description, limit: 200)
+            line += "\n  Description: " + snippet(description, limit: fieldSnippetLimit)
         }
         if let summary = book.summary, !summary.isEmpty {
-            line += "\n  Summary: " + snippet(summary, limit: 200)
+            line += "\n  Summary: " + snippet(summary, limit: fieldSnippetLimit)
         }
         if let notes = book.notes, !notes.isEmpty {
             let text = notes.map(\.content).joined(separator: " | ")
-            line += "\n  Notes: " + snippet(text, limit: 200)
+            line += "\n  Notes: " + snippet(text, limit: fieldSnippetLimit)
         }
         return line
     }
@@ -129,10 +139,10 @@ enum AILibrarySnapshot {
 enum AIPromptFactory {
 
     /// Maximum characters of library snapshot sent to the model. Large enough
-    /// to carry every book's title plus its description/details for a typical
-    /// personal library, while still bounding prompt size (a 48-book library
-    /// with descriptions runs ~8–12k chars).
-    static let contextCap = 20000
+    /// to carry every book's full details (description, summary, notes) for a
+    /// typical personal library; oversized libraries truncate loudly rather
+    /// than silently (see `AILibrarySnapshot.build`).
+    static let contextCap = 60000
     /// How many prior turns are included as context with each message.
     static let transcriptWindow = 8
 
@@ -157,9 +167,11 @@ enum AIPromptFactory {
         they are in the library.
 
         'All books' below lists every book in the user's library — use it to \
-        list their books or answer questions like 'do I have…' or searches on \
-        title words. Answer truthfully from that list; if a book is not listed, \
-        the user does not own it.
+        list their books or to search words in their titles, authors, \
+        descriptions, summaries, and notes (e.g. 'do I have…'). Answer \
+        truthfully from that list; if a book is not listed, the user does not \
+        own it. If the snapshot is truncated, say so when you can't confirm, \
+        rather than inventing a match.
 
         LIBRARY SNAPSHOT
         \(snapshot)

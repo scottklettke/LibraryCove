@@ -41,6 +41,12 @@ targets:
         BGTaskSchedulerPermittedIdentifiers:
           - com.apple.coredata.cloudkit.activity.export
           - com.apple.coredata.cloudkit.activity.import
+        # The OpenAI-compatible endpoint is user-supplied and may be plain
+        # HTTP (local LAN or Tailscale hosts/IPs), which ATS blocks by
+        # default. Allow arbitrary insecure loads so any user endpoint works;
+        # all first-party traffic (OpenLibrary, CloudKit) is HTTPS anyway.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.booknexus.app

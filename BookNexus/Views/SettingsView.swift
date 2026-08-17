@@ -39,6 +39,8 @@ struct SettingsView: View {
     @State private var aiEngine: AIEngine = AIConfig.selectedEngine
     @State private var aiBaseURL: String = AIConfig.openAIBaseURL
     @State private var aiAPIKey: String = AIConfig.openAIAPIKey
+    @State private var availableModels: [String] = []
+    @State private var modelListNote: String?
     @State private var aiAvailability: AIAvailability?
     @State private var aiLogs: [AILogEntry] = []
     @State private var isTesting = false
@@ -84,6 +86,21 @@ struct SettingsView: View {
 
     private var trimmedBaseURL: String {
         aiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// The Model picker always lists a pinned value (so it stays visible after
+    /// an override is chosen) plus every id the server reported. Keeps the
+    /// value persistent and selectable even if the server list changes.
+    private var modelPickerOptions: [String] {
+        let override = AIConfig.openAIModel
+        guard !override.isEmpty else { return availableModels }
+        return [override] + availableModels.filter { $0 != override }
+    }
+
+    /// The auto-selected chat model the app would send right now, when the
+    /// server reported ids and no override is pinned.
+    private var autoChatModel: String? {
+        OpenAICompatibleProvider.chooseChatModel(from: availableModels)
     }
 
     var body: some View {
@@ -189,6 +206,33 @@ struct SettingsView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .accessibilityIdentifier("aiAPIKeyField")
+                        Picker("Model", selection: Binding(
+                            get: { AIConfig.openAIModel },
+                            set: { AIConfig.openAIModel = $0 }
+                        )) {
+                            Text("Auto (detect from server)").tag("")
+                            ForEach(modelPickerOptions, id: \.self) { id in
+                                Text(id).tag(id)
+                            }
+                        }
+                        .accessibilityIdentifier("aiModelPicker")
+                        // Since the server decides the model, show what the
+                        // app would send right now instead of hiding it.
+                        if AIConfig.openAIModel.isEmpty {
+                            if let note = modelListNote {
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if let auto = autoChatModel {
+                                Text("Will use \(auto) — discovered from this server.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Will ask the server which model it runs.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                         LabeledContent("Saved") {
                             Text("Automatically as you type")
                                 .foregroundStyle(.secondary)
@@ -280,6 +324,7 @@ struct SettingsView: View {
             }
             .task(id: aiConfigSignature) {
                 aiAvailability = await AIService.shared.availability()
+                await reloadModels()
             }
             .onAppear {
                 reloadLogs()
@@ -319,6 +364,35 @@ struct SettingsView: View {
     @MainActor
     private func reloadLogs() {
         aiLogs = AILogStore.entries()
+    }
+
+    /// Asks the configured endpoint for its model list so the Model picker and
+    /// the "Will use …" line reflect what the server actually reports. The
+    /// provider caches the answer briefly, so this isn't a network probe on
+    /// every keystroke. Failures surface as an explanatory note rather than an
+    /// alert — the endpoint may simply not implement GET /v1/models.
+    @MainActor
+    private func reloadModels() async {
+        guard aiEngine == .openAI else {
+            availableModels = []
+            modelListNote = nil
+            return
+        }
+        guard !trimmedBaseURL.isEmpty else {
+            availableModels = []
+            modelListNote = nil
+            return
+        }
+        do {
+            let provider = OpenAICompatibleProvider(baseURL: trimmedBaseURL,
+                                                    apiKey: AIConfig.openAIAPIKey)
+            availableModels = try await provider.listModels()
+            modelListNote = nil
+        } catch {
+            availableModels = []
+            let detail = (error as? AIError)?.errorDescription ?? "network error"
+            modelListNote = "Couldn't read the model list from this endpoint (\(detail)). It may not support GET /v1/models — pin a model above or check the URL."
+        }
     }
 
     /// Fires one real request through the selected engine so the user gets

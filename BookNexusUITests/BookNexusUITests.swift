@@ -389,6 +389,10 @@ final class BookNexusUITests: XCTestCase {
                       "optional API key field missing")
         XCTAssertTrue(app.buttons["Test connection"].exists,
                       "Test connection button missing")
+        // The Model picker (auto-detect / server-reported override) must be
+        // part of the keyless configuration surface.
+        XCTAssertTrue(app.descendants(matching: .any)["aiModelPicker"].firstMatch.exists,
+                      "Model picker missing in AI settings")
         // LabeledContent("Saved") surfaces as one combined element.
         XCTAssertTrue(app.staticTexts["Saved, Automatically as you type"].exists,
                       "saved-automatically feedback missing")

@@ -33,8 +33,11 @@ struct AIService {
             }
             let text = try await provider.generate(prompt)
             let latency = Date().timeIntervalSince(start) * 1000
+            let modelNote = Self.openAIModelNote()
+            let detail = modelNote.map { "Received \(text.count) characters. Model: \($0)." }
+                ?? "Received \(text.count) characters."
             AILogStore.append(AILogEntry(engine: engine, kind: .success,
-                                         detail: "Received \(text.count) characters.",
+                                         detail: detail,
                                          latencyMs: latency))
             return text
         } catch {
@@ -52,10 +55,24 @@ struct AIService {
         switch engine {
         case .openAI:
             let url = AIConfig.openAIBaseURL
-            return "Endpoint: \(url.isEmpty ? "(not set)" : url)"
+            var text = "Endpoint: \(url.isEmpty ? "(not set)" : url)"
+            let override = AIConfig.openAIModel
+            if !override.isEmpty {
+                text += " — pinned model: \(override)"
+            }
+            return text
         case .onDevice:
             return "Apple Intelligence on-device model"
         }
+    }
+
+    /// The model the last request actually carried on the wire — the pinned
+    /// override, or whatever auto-discovery resolved when no override is set.
+    /// Nil only when nothing has run yet.
+    private static func openAIModelNote() -> String? {
+        let override = AIConfig.openAIModel
+        if !override.isEmpty { return override }
+        return OpenAICompatibleProvider.lastResolvedModel
     }
 
     /// The chosen engine's real per-request context budget in tokens, falling
@@ -75,10 +92,9 @@ struct AIService {
                     reason: "On-device Apple Intelligence requires iOS 26 or later.")
             }
         case .openAI:
-            return OpenAICompatibleProvider(
-                baseURL: AIConfig.openAIBaseURL,
-                apiKey: AIConfig.openAIAPIKey
-            )
+            return OpenAICompatibleProvider(baseURL: AIConfig.openAIBaseURL,
+                                            apiKey: AIConfig.openAIAPIKey,
+                                            model: AIConfig.openAIModel)
         }
     }
 }

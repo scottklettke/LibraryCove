@@ -21,6 +21,7 @@ enum AIConfig {
         static let keychainAccount = "OpenAIAPIKey"
         static let showTokenRate = "AI.showTokenRate"
         static let maxContextTokens = "AI.maxContextTokens"
+        static let openAIModel = "AI.openAIModel"
     }
 
     // MARK: Engine
@@ -72,6 +73,23 @@ enum AIConfig {
         !openAIBaseURL.isEmpty
     }
 
+    // MARK: OpenAIModel override
+
+    /// The OpenAI-compatible model id to pin requests to. Empty ("") is the
+    /// default and means auto-detect: the app asks the server
+    /// `GET {base}/v1/models` and uses a chat-capable id it reports — the
+    /// model in use is never a hardcoded guess. Pinning a value here skips
+    /// discovery and sends that id verbatim.
+    static var openAIModel: String {
+        get {
+            UserDefaults.standard.string(forKey: Keys.openAIModel) ?? ""
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            UserDefaults.standard.set(trimmed, forKey: Keys.openAIModel)
+        }
+    }
+
     // MARK: Chat indicator
 
     /// Whether the Ask AI chat shows a tokens/second estimate under each reply.
@@ -112,6 +130,7 @@ enum AIConfig {
         UserDefaults.standard.removeObject(forKey: Keys.baseURL)
         UserDefaults.standard.removeObject(forKey: Keys.showTokenRate)
         UserDefaults.standard.removeObject(forKey: Keys.maxContextTokens)
+        UserDefaults.standard.removeObject(forKey: Keys.openAIModel)
         AILogStore.clear()
         Keychain.delete(service: Keys.keychainService, account: Keys.keychainAccount)
     }

@@ -45,6 +45,29 @@ final class MockURLProtocol: URLProtocol {
         )
     }
 
+    /// Auto-discovery caches per endpoint, and the suite is `.serialized` — a
+    /// plain static dictionary would silently leak one test's model list into
+    /// the next. Every test that routes a models probe flushes first so the
+    /// mock handler actually runs and the assertion is deterministic.
+    private static func resetDiscovery() {
+        OpenAICompatibleProvider.flushModelCache()
+    }
+
+    /// True when the request targets the model-list endpoint. Discovery and
+    /// chat traverse the same static `handler`; tests switch on this so the
+    /// mock never answers a chat request with a models payload (or vice versa).
+    private static func isModelsRequest(_ request: URLRequest) -> Bool {
+        request.url?.path.hasSuffix("/models") == true
+    }
+
+    /// A fake `GET {base}/v1/models` response carrying `ids`.
+    private static func modelsResponse(_ request: URLRequest, ids: [String]) -> (HTTPURLResponse, Data) {
+        let data = ids.map { ["id": $0, "object": "model"] }
+        let body: [String: Any] = ["object": "list", "data": data]
+        let json = try! JSONSerialization.data(withJSONObject: body)
+        return AITests.jsonResponse(request, status: 200, body: String(data: json, encoding: .utf8)!)
+    }
+
     private static func jsonResponse(_ request: URLRequest, status: Int, body: String) -> (HTTPURLResponse, Data) {
         let response = HTTPURLResponse(
             url: request.url!,
@@ -86,14 +109,23 @@ final class MockURLProtocol: URLProtocol {
     // MARK: - Provider: success path
 
     @Test func generateParsesContentAndBuildsCorrectRequest() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
+            // Auto-discovery: the models endpoint is consulted first, and the
+            // chat request then carries the id the server reported.
+            if AITests.isModelsRequest(request) {
+                // Includes an embedding id the chat heuristic must skip.
+                return AITests.modelsResponse(request, ids: ["text-embedding-3-small", "gpt-4o-2024-11-20"])
+            }
             #expect(request.url?.absoluteString == "https://api.example.com/v1/chat/completions")
             #expect(request.httpMethod == "POST")
             #expect(request.allHTTPHeaderFields?["Content-Type"] == "application/json")
             #expect(request.allHTTPHeaderFields?["Authorization"] == "Bearer test-key")
 
             let body = try AITests.bodyObject(request)
-            #expect(body["model"] as? String == "gpt-4o-mini")
+            // Not the old hardcoded gpt-4o-mini: it's the chat-capable id the
+            // server list actually contained.
+            #expect(body["model"] as? String == "gpt-4o-2024-11-20")
             #expect(body["max_tokens"] as? Int == 1024)
             let messages = try #require(body["messages"] as? [[String: String]])
             #expect(messages.count == 1)
@@ -110,7 +142,11 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func systemMessageIncludedOnlyWhenPresent() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
             let body = try AITests.bodyObject(request)
             let messages = try #require(body["messages"] as? [[String: String]])
             #expect(messages.count == 2)
@@ -145,7 +181,13 @@ final class MockURLProtocol: URLProtocol {
     // MARK: - Provider: error paths
 
     @Test func non2xxThrowsServerErrorWithBodySnippet() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
+            if AITests.isModelsRequest(request) {
+                // Discovery succeeds; the failure we're testing is on the chat
+                // call itself.
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
             let body = #"{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}"#
             return AITests.jsonResponse(request, status: 401, body: body)
         }
@@ -162,8 +204,12 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func serverErrorWithoutBodyUsesEmptySnippet() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
-            AITests.jsonResponse(request, status: 500, body: "   \n  ")
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
+            return AITests.jsonResponse(request, status: 500, body: "   \n  ")
         }
 
         do {
@@ -178,8 +224,12 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func malformedResponseThrowsDecoding() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
-            AITests.jsonResponse(request, status: 200, body: #"{}"#)
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
+            return AITests.jsonResponse(request, status: 200, body: #"{}"#)
         }
         do {
             _ = try await AITests.provider(session: AITests.session()).generate(AIPrompt(user: "x"))
@@ -192,8 +242,12 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func invalidJSONThrowsDecoding() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
-            AITests.jsonResponse(request, status: 200, body: "not json at all")
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
+            return AITests.jsonResponse(request, status: 200, body: "not json at all")
         }
         do {
             _ = try await AITests.provider(session: AITests.session()).generate(AIPrompt(user: "x"))
@@ -253,7 +307,12 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func bareBaseURLStillHitsV1Endpoint() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
+            if AITests.isModelsRequest(request) {
+                #expect(request.url?.absoluteString == "https://api.example.com/v1/models")
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
             #expect(request.url?.absoluteString == "https://api.example.com/v1/chat/completions")
             return AITests.jsonResponse(request, status: 200, body: #"{"choices":[{"message":{"content":"ok"}}]}"#)
         }
@@ -263,6 +322,80 @@ final class MockURLProtocol: URLProtocol {
             session: AITests.session()
         )
         #expect(try await provider.generate(AIPrompt(user: "x")) == "ok")
+    }
+
+    @Test func normalizesModelsURLVariants() {
+        #expect(OpenAICompatibleProvider.modelsURL(for: "https://api.example.com")?.absoluteString
+            == "https://api.example.com/v1/models")
+        #expect(OpenAICompatibleProvider.modelsURL(for: "https://api.example.com/v1")?.absoluteString
+            == "https://api.example.com/v1/models")
+        #expect(OpenAICompatibleProvider.modelsURL(for: "https://api.example.com/v1/")?.absoluteString
+            == "https://api.example.com/v1/models")
+        #expect(OpenAICompatibleProvider.modelsURL(for: "https://api.example.com/v1/models")?.absoluteString
+            == "https://api.example.com/v1/models")
+        #expect(OpenAICompatibleProvider.modelsURL(for: "https://api.example.com/models")?.absoluteString
+            == "https://api.example.com/models")
+        #expect(OpenAICompatibleProvider.modelsURL(for: "") == nil)
+        #expect(OpenAICompatibleProvider.modelsURL(for: "   ") == nil)
+    }
+
+    // The whole point of model discovery: never a hardcoded id. When the list
+    // contains nothing chat-capable, request a manual pin instead of guessing.
+    @Test func autoDiscoveryRejectsAllNonChatModelsWithGuidance() async throws {
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            AITests.modelsResponse(request, ids: ["text-embedding-3-small", "rerank-english-v3", "whisper-1"])
+        }
+        do {
+            _ = try await AITests.provider(session: AITests.session()).generate(AIPrompt(user: "x"))
+            Issue.record("Expected an unsupported error")
+        } catch AIError.unsupported(let reason) {
+            #expect(reason.contains("set one in Settings"))
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
+        }
+    }
+
+    // A pinned model is sent verbatim and discovery never runs (no models
+    // probe, first request is the chat call itself).
+    @Test func modelOverrideSkipsDiscoveryAndSendsOverride() async throws {
+        AITests.resetDiscovery()
+        var chatRequestSeen = false
+        MockURLProtocol.handler = { request in
+            #expect(!AITests.isModelsRequest(request),
+                    "override must skip the models probe")
+            chatRequestSeen = true
+            let body = try AITests.bodyObject(request)
+            #expect(body["model"] as? String == "custom-model")
+            return AITests.jsonResponse(request, status: 200, body: #"{"choices":[{"message":{"content":"ok"}}]}"#)
+        }
+        let provider = OpenAICompatibleProvider(
+            baseURL: "https://api.example.com/v1",
+            apiKey: "test-key",
+            model: "custom-model",
+            session: AITests.session()
+        )
+        let text = try await provider.generate(AIPrompt(user: "x"))
+        #expect(text == "ok")
+        #expect(chatRequestSeen)
+        // The resolved model is recorded so the request log can show what was
+        // actually sent — visibility requirement, not just internals.
+        #expect(OpenAICompatibleProvider.lastResolvedModel == "custom-model")
+    }
+
+    // The resolved (auto-discovered) model is exposed so logs/UI can show the
+    // user what the server actually said to use.
+    @Test func autoDiscoveryRecordsResolvedModelForVisibility() async throws {
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["text-embedding-3-small", "gpt-4o-2024-11-20"])
+            }
+            return AITests.jsonResponse(request, status: 200, body: #"{"choices":[{"message":{"content":"ok"}}]}"#)
+        }
+        _ = try await AITests.provider(session: AITests.session()).generate(AIPrompt(user: "x"))
+        // NOT gpt-4o-mini — the server-reported chat id, proving discovery ran.
+        #expect(OpenAICompatibleProvider.lastResolvedModel == "gpt-4o-2024-11-20")
     }
 
     // MARK: - AIService + AIConfig integration
@@ -282,9 +415,13 @@ final class MockURLProtocol: URLProtocol {
     @Test func contextLengthBodyMapsToContextSizeExceeded() async throws {
         AIConfig.resetForTesting()
         defer { AIConfig.resetForTesting() }
+        AITests.resetDiscovery()
 
         MockURLProtocol.handler = { request in
-            AITests.jsonResponse(request, status: 400,
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
+            return AITests.jsonResponse(request, status: 400,
                 body: #"{"error":{"message":"This model's maximum context length is 4096 tokens","type":"invalid_request_error"}}"#)
         }
         let provider = AITests.provider(session: AITests.session())
@@ -302,8 +439,15 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func nonContextServerBodyStaysServerError() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AITests.resetDiscovery()
+
         MockURLProtocol.handler = { request in
-            AITests.jsonResponse(request, status: 401,
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
+            return AITests.jsonResponse(request, status: 401,
                 body: #"{"error":{"message":"Incorrect API key provided","type":"invalid_request_error"}}"#)
         }
         let provider = AITests.provider(session: AITests.session())
@@ -338,9 +482,14 @@ final class MockURLProtocol: URLProtocol {
     }
 
     @Test func requestWithoutAPIKeySucceedsAndOmitsAuthHeader() async throws {
+        AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
-            // Empty key → no Authorization header at all (not an empty bearer).
+            // Empty key → no Authorization header at all (not an empty bearer),
+            // on either the models probe or the chat call.
             #expect(request.value(forHTTPHeaderField: "Authorization") == nil)
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, ids: ["gpt-4o"])
+            }
             return AITests.jsonResponse(request, status: 200,
                 body: #"{"choices":[{"message":{"content":"ok"}}]}"#)
         }
@@ -403,6 +552,19 @@ final class MockURLProtocol: URLProtocol {
     @Test func baseURLFallsBackToDefaultWhenUnset() {
         AIConfig.resetForTesting()
         #expect(AIConfig.openAIBaseURL == AIConfig.defaultOpenAIBaseURL)
+    }
+
+    @Test func modelOverrideFallsBackToAutoWhenUnset() {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        #expect(AIConfig.openAIModel == "") // default is auto-detect
+
+        AIConfig.openAIModel = "gpt-4o"
+        #expect(AIConfig.openAIModel == "gpt-4o")
+        #expect(AIConfig.openAIModel == "gpt-4o") // persisted round-trip
+
+        AIConfig.openAIModel = "   "
+        #expect(AIConfig.openAIModel == "") // whitespace trims back to auto
     }
 
     @Test func apiKeyRoundTripsThroughKeychain() {

@@ -18,7 +18,7 @@ struct AIService {
     /// URL); all other `AIError`s pass through untouched. Every call is
     /// recorded in the AI connection log (attempt → success/error), so the
     /// Settings logs section shows what the endpoint actually returned.
-    func generate(_ prompt: AIPrompt) async throws -> String {
+    func generate(_ prompt: AIPrompt) async throws -> AIGeneration {
         let engine = AIConfig.selectedEngine
         let provider = provider(for: engine)
         let start = Date()
@@ -31,15 +31,20 @@ struct AIService {
                case .unavailable = await provider.availability() {
                 throw AIError.notConfigured
             }
-            let text = try await provider.generate(prompt)
+            let generation = try await provider.generate(prompt)
+            let text = generation.text
             let latency = Date().timeIntervalSince(start) * 1000
-            let modelNote = Self.openAIModelNote()
+            // The resolved-model note only makes sense for the OpenAI-compatible
+            // endpoint. Apple Intelligence has no discovered id, and leaking the
+            // stale `lastResolvedModel` from a previous local-endpoint session
+            // into an on-device success line is misleading.
+            let modelNote = engine == .openAI ? Self.openAIModelNote() : nil
             let detail = modelNote.map { "Received \(text.count) characters. Model: \($0)." }
                 ?? "Received \(text.count) characters."
             AILogStore.append(AILogEntry(engine: engine, kind: .success,
                                          detail: detail,
                                          latencyMs: latency))
-            return text
+            return generation
         } catch {
             let latency = Date().timeIntervalSince(start) * 1000
             let detail = (error as? AIError)?.errorDescription ?? error.localizedDescription
@@ -112,5 +117,5 @@ private struct UnavailableEngineProvider: AIModelProviding {
     }
 
     func availability() async -> AIAvailability { .unavailable(reason) }
-    func generate(_ prompt: AIPrompt) async throws -> String { throw AIError.engineUnavailable(reason) }
+    func generate(_ prompt: AIPrompt) async throws -> AIGeneration { throw AIError.engineUnavailable(reason) }
 }

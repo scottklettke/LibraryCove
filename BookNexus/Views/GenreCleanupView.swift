@@ -143,7 +143,7 @@ struct GenreCleanupView: View {
                     user: GenreCleanupService.prompt(snapshot: snapshot)
                 )
             )
-            let parsed = try GenreCleanupService.parseSuggestions(from: Data(response.utf8))
+            let parsed = try GenreCleanupService.parseSuggestions(from: Data(response.text.utf8))
             suggestions = parsed
             selected = Set(parsed.indices)
             liveLog.append("Model returned \(parsed.count) suggestions; review below before applying.")

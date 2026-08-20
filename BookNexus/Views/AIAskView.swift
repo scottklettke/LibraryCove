@@ -14,6 +14,7 @@ struct AIAskView: View {
     @State private var isSending = false
     @State private var errorText: String?
     @State private var lastTokenRate: Double?
+    @State private var transientThinking: String?
     @State private var memory: any ConversationMemory = ConversationMemoryFactory.make()
     @Environment(\.openLibraryTab) private var openLibraryTab
 
@@ -38,6 +39,16 @@ struct AIAskView: View {
                                 bubble(turn)
                                     .id(index)
                             }
+                        }
+                        if let transientThinking {
+                            Text(transientThinking)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(10)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(uiColor: .secondarySystemBackground))
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .textSelection(.enabled)
                         }
                         if let errorText {
                             Text(errorText)
@@ -255,14 +266,36 @@ struct AIAskView: View {
                     )
                 )
                 let elapsed = Date().timeIntervalSince(start)
-                lastTokenRate = AIPromptFactory.tokensPerSecond(text: response, seconds: elapsed)
-                let assistantTurn = AITurn(role: .assistant, text: response, date: Date())
+                let text = response.text
+                lastTokenRate = AIPromptFactory.tokensPerSecond(text: text, seconds: elapsed)
+                let assistantTurn = AITurn(role: .assistant, text: text, date: Date())
                 turns.append(assistantTurn)
                 memory.append(assistantTurn)
+                // Surface a short slice of the model's chain-of-thought, then
+                // auto-clear it once the reply is on screen.
+                if let reasoning = response.reasoning, !reasoning.isEmpty {
+                    transientThinking = Self.thinkingPreview(reasoning)
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(1600))
+                        if !Task.isCancelled {
+                            transientThinking = nil
+                        }
+                    }
+                }
             } catch {
                 errorText = Self.aiErrorText(error, limit: limit)
             }
         }
+    }
+
+    private static func thinkingPreview(_ reasoning: String) -> String {
+        let lines = reasoning
+            .split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+            .prefix(3)
+            .joined(separator: "\n")
+        let trimmed = String(lines).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > 360 else { return trimmed }
+        return String(trimmed.prefix(360)) + "…"
     }
 
     private static func aiErrorText(_ error: Error, limit: Int) -> String {

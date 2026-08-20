@@ -397,7 +397,9 @@ struct SettingsView: View {
 
     @MainActor
     private func reloadLogs() {
-        aiLogs = AILogStore.entries()
+        // Newest first — the most recent request is what a user checking logs
+        // actually cares about; it goes at the top rather than off-screen.
+        aiLogs = AILogStore.entries().reversed()
     }
 
     /// Asks the configured endpoint for its model list so the Model picker and
@@ -443,7 +445,7 @@ struct SettingsView: View {
                 AIPrompt(system: "You are a connectivity probe.",
                          user: "Reply with a single word: OK.")
             )
-            let cleaned = response.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cleaned = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let snippet = cleaned.prefix(160)
             testResult = snippet.isEmpty
                 ? "Connected (empty reply)"

@@ -363,12 +363,12 @@ struct BookDetailView: View {
             let result = try await AIService.shared.generate(
                 AIPrompt(user: "Summarize this book description in 2-3 sentences:\n\(description)")
             )
-            summaryText = result
+            summaryText = result.text
             summaryCopied = false
             // Keep the generated summary in its own field (shown in the Summary
             // section and searchable via the AI catalog) instead of overwriting
             // the book description.
-            book.summary = result
+            book.summary = result.text
             book.updatedAt = Date()
             try? modelContext.save()
             showSummarySheet = true
@@ -408,7 +408,7 @@ struct BookDetailView: View {
             let rewritten = try await AIService.shared.generate(
                 AIDescriptionImprovement.prompt(raw: raw)
             )
-            AIDescriptionImprovement.apply(rewritten, source: source, to: book)
+            AIDescriptionImprovement.apply(rewritten.text, source: source, to: book)
             try? modelContext.save()
         } catch let error as AIError {
             switch error {

@@ -154,7 +154,7 @@ final class MockURLProtocol: URLProtocol {
 
         let result = try await AITests.provider(session: AITests.session())
             .generate(AIPrompt(user: "Hello there"))
-        #expect(result == "Hello, world!")
+        #expect(result.text == "Hello, world!")
     }
 
     @Test func systemMessageIncludedOnlyWhenPresent() async throws {
@@ -176,7 +176,7 @@ final class MockURLProtocol: URLProtocol {
         }
 
         let prompt = AIPrompt(system: "You are a helpful assistant.", user: "Summarize this")
-        #expect(try await AITests.provider(session: AITests.session()).generate(prompt) == "done")
+        #expect(try await AITests.provider(session: AITests.session()).generate(prompt).text == "done")
     }
 
     @Test func customModelFlowsThrough() async throws {
@@ -191,7 +191,7 @@ final class MockURLProtocol: URLProtocol {
             model: "custom-model",
             session: AITests.session()
         )
-        #expect(try await provider.generate(AIPrompt(user: "x")) == "ok")
+        #expect(try await provider.generate(AIPrompt(user: "x")).text == "ok")
     }
 
     // MARK: - Provider: error paths
@@ -337,7 +337,7 @@ final class MockURLProtocol: URLProtocol {
             apiKey: "test-key",
             session: AITests.session()
         )
-        #expect(try await provider.generate(AIPrompt(user: "x")) == "ok")
+        #expect(try await provider.generate(AIPrompt(user: "x")).text == "ok")
     }
 
     @Test func normalizesModelsURLVariants() {
@@ -392,7 +392,7 @@ final class MockURLProtocol: URLProtocol {
             session: AITests.session()
         )
         let text = try await provider.generate(AIPrompt(user: "x"))
-        #expect(text == "ok")
+        #expect(text.text == "ok")
         #expect(chatRequestSeen)
         // The resolved model is recorded so the request log can show what was
         // actually sent — visibility requirement, not just internals.
@@ -633,7 +633,7 @@ final class MockURLProtocol: URLProtocol {
             session: AITests.session()
         )
         let text = try await provider.generate(AIPrompt(user: "hi"))
-        #expect(text == "ok")
+        #expect(text.text == "ok")
     }
 
     @Test func emptyBaseURLThroughAIServiceThrowsNotConfigured() async throws {
@@ -754,13 +754,13 @@ final class MockURLProtocol: URLProtocol {
     @Test func decodeMessageAcceptsArrayContentParts() throws {
         let json = #"{"choices":[{"message":{"role":"assistant","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}}]}"#
         let text = try OpenAICompatibleProvider.decodeMessage(from: Data(json.utf8))
-        #expect(text == "first\nsecond")
+        #expect(text.text == "first\nsecond")
     }
 
     @Test func decodeMessageFallsBackToReasoningWhenContentMissing() throws {
         let json = #"{"choices":[{"message":{"role":"assistant","content":null,"reasoning_content":"some chain of thought"}}]}"#
         let text = try OpenAICompatibleProvider.decodeMessage(from: Data(json.utf8))
-        #expect(text.contains("chain of thought"))
+        #expect(text.text.contains("chain of thought"))
     }
 
     @Test func decodeMessageRejectsEmptyWithDescriptiveError() {

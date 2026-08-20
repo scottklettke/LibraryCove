@@ -22,11 +22,24 @@ final class OpenAICompatibleProvider: AIModelProviding {
     /// from `GET {base}/v1/models` instead of being hardcoded anywhere.
     private let model: String
 
-    init(baseURL: String, apiKey: String, model: String = "", session: URLSession = .shared) {
+    init(baseURL: String, apiKey: String, model: String = "", session: URLSession = OpenAICompatibleProvider.longTimeoutSession()) {
         self.baseURL = baseURL
         self.apiKey = apiKey
         self.model = model
         self.session = session
+    }
+
+    /// Local reasoning endpoints (e.g. a self-hosted DeepSeek) can take well
+    /// over a minute for long JSON requests that also spend budget on
+    /// chain-of-thought, so the transport must not inherit `URLSession.shared`'s
+    /// 60-second request timeout — that's what turned slow lookups into
+    /// "timeout after ~60 s" failures. Bound generously instead.
+    static func longTimeoutSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 300
+        config.timeoutIntervalForResource = 600
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
     }
 
     func availability() async -> AIAvailability {
@@ -255,7 +268,7 @@ final class OpenAICompatibleProvider: AIModelProviding {
         return min(length, AIConfig.maxContextTokensCeiling)
     }
 
-    func generate(_ prompt: AIPrompt) async throws -> String {
+    func generate(_ prompt: AIPrompt) async throws -> AIGeneration {
         guard prompt.images.isEmpty else {
             throw AIError.unsupported("Image input is not available yet.")
         }
@@ -353,9 +366,11 @@ final class OpenAICompatibleProvider: AIModelProviding {
             && (text.contains("length") || text.contains("size") || text.contains("exceed") || text.contains("token"))
     }
 
-    /// Pulls `choices[0].message.content` out of a non-streaming response,
-    /// or throws `.decoding` when the shape is wrong.
-    static func decodeMessage(from data: Data) throws -> String {
+    /// Pulls `choices[0].message.content` (and the model's chain-of-thought,
+    /// when the server exposes it) out of a non-streaming response, or throws
+    /// `.decoding` when the shape is wrong. Content and reasoning are kept
+    /// separate so callers can surface what the model was thinking.
+    static func decodeMessage(from data: Data) throws -> AIGeneration {
         let object: [String: Any]
         do {
             guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -379,7 +394,7 @@ final class OpenAICompatibleProvider: AIModelProviding {
         // return. A missing string content with only `reasoning`/CoT present is
         // surfaced as a precise error instead of "Missing text content".
         if let text = message["content"] as? String, !text.isEmpty {
-            return text
+            return AIGeneration(text: text, reasoning: extractReasoning(message))
         }
         if let parts = message["content"] as? [[String: Any]] {
             let joined = parts.compactMap { part -> String? in
@@ -387,16 +402,30 @@ final class OpenAICompatibleProvider: AIModelProviding {
                 guard let text = part["text"] as? String, !text.isEmpty else { return nil }
                 return text
             }.joined(separator: "\n")
-            if !joined.isEmpty { return joined }
+            if !joined.isEmpty {
+                return AIGeneration(text: joined, reasoning: extractReasoning(message))
+            }
         }
-        if let reasoning = message["reasoning_content"] as? String, !reasoning.isEmpty {
-            return reasoning
-        }
-        if let reasoning = message["reasoning"] as? String, !reasoning.isEmpty {
-            return reasoning
+        if let reasoning = extractReasoning(message), !reasoning.isEmpty {
+            // Only chain-of-thought came back (output budget exhausted); use it
+            // as the best available answer text and still surface it as
+            // reasoning.
+            return AIGeneration(text: reasoning, reasoning: reasoning)
         }
         throw AIError.decoding(
             "The model returned no visible text response — it likely ran out of output tokens. Retry and check Settings → AI.")
+    }
+
+    /// The chain-of-thought the server attached to the message, if any
+    /// (`reasoning` on some self-hosted reasoning models, `reasoning_content`
+    /// on others).
+    private static func extractReasoning(_ message: [String: Any]) -> String? {
+        for key in ["reasoning", "reasoning_content"] {
+            if let value = message[key] as? String, !value.isEmpty {
+                return value
+            }
+        }
+        return nil
     }
 
     private static func trimmedSnippet(_ body: String) -> String {

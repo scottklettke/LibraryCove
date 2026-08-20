@@ -136,6 +136,6 @@ enum FictionClassifier {
                 user: prompt(snapshot: snapshot(from: unclassified))
             )
         )
-        return try parseProposals(from: Data(response.utf8))
+        return try parseProposals(from: Data(response.text.utf8))
     }
 }

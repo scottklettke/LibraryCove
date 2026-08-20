@@ -209,7 +209,7 @@ enum ShelfCategorizer {
                 user: prompt(snapshot: snapshot(from: books))
             )
         )
-        let mappings = try parseMappings(from: Data(response.utf8))
+        let mappings = try parseMappings(from: Data(response.text.utf8))
         guard !mappings.isEmpty else { throw EmptyPlanError() }
         return ShelfCategoryPlan(mappings: mappings, fingerprint: fingerprint(of: tags), createdAt: Date())
     }

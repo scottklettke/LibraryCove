@@ -44,7 +44,7 @@ struct AppleIntelligenceProvider: AIModelProviding {
         return SystemLanguageModel.default.contextSize
     }
 
-    func generate(_ prompt: AIPrompt) async throws -> String {
+    func generate(_ prompt: AIPrompt) async throws -> AIGeneration {
         // Reject unsupported input before touching availability/model state.
         guard prompt.images.isEmpty else {
             throw AIError.unsupported("Image prompts need a FoundationModels-capable system that supports multimodal input; not available on this build yet.")
@@ -59,7 +59,7 @@ struct AppleIntelligenceProvider: AIModelProviding {
         session.prewarm()
         do {
             let response = try await session.respond(to: combinedText(for: prompt))
-            return response.content
+            return AIGeneration(text: response.content)
         } catch let error as LanguageModelSession.GenerationError {
             if case .exceededContextWindowSize = error {
                 // The request burst past the session's combined 4096-token (or

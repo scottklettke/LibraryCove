@@ -49,6 +49,16 @@ struct AIModelInfo: Equatable, Sendable {
     let contextLength: Int?
 }
 
+/// A generated completion plus whatever the model revealed about its reasoning
+/// (chain-of-thought / thinking). The reasoning is surfaced transiently where
+/// it's useful (Ask AI chat) and ignored elsewhere; it is not part of the
+/// answer text. Non-streaming transport returns it only with the final reply.
+struct AIGeneration: Equatable, Sendable {
+    var text: String
+    /// Chain-of-thought from the provider when it exposes one, else nil.
+    var reasoning: String? = nil
+}
+
 /// A single request to an inference provider.
 struct AIPrompt: Sendable {
     var system: String?
@@ -69,7 +79,7 @@ protocol AIModelProviding {
     var engine: AIEngine { get }
     static var engine: AIEngine { get }
     func availability() async -> AIAvailability
-    func generate(_ prompt: AIPrompt) async throws -> String
+    func generate(_ prompt: AIPrompt) async throws -> AIGeneration
 }
 
 extension AIModelProviding {

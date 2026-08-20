@@ -20,11 +20,11 @@ import SwiftData
         context.insert(user)
 
         let b1 = Book(id: "b-1", title: "Dune", authors: ["Frank Herbert"], isbn: "9780441172719",
-                      publicationYear: 1965, genres: ["Science Fiction"],
+                      publicationYear: 1965, tags: ["Science Fiction"],
                       summary: "A classic summary of Dune.", rating: 5,
                       ownerID: "u-1", createdAt: Date(timeIntervalSince1970: 1000))
         let b2 = Book(id: "b-2", title: "Solaris", authors: ["Stanislaw Lem"],
-                      genres: ["Science Fiction"], status: "to-read", ownerID: "u-1",
+                      tags: ["Science Fiction"], status: "to-read", ownerID: "u-1",
                       createdAt: Date(timeIntervalSince1970: 2000))
         context.insert(b1)
         context.insert(b2)
@@ -494,5 +494,24 @@ import SwiftData
         #expect(stub.title.isEmpty)           // must be typed by hand
         #expect(stub.authors.isEmpty)
         #expect(stub.id == "isbn-9781234567890")
+    }
+
+    /// Back-compat: archives exported before the `genres` → `tags` rename carry
+    /// the legacy `genres` key; import must restore those labels into `tags`
+    /// rather than throwing or dropping them.
+    @Test func legacyGenresKeyRestoresIntoTags() throws {
+        let legacy = """
+        {"id":"b-1","title":"Dune","authors":["Frank Herbert"],"isbn":null,
+         "publicationYear":1965,"genres":["Science Fiction","Fantasy"],
+         "coverImageURL":null,"coverImageFile":null,"publisher":null,
+         "pageCount":null,"bookDescription":null,"status":"to-read",
+         "isPersonal":true,"createdAt":"2026-01-01T00:00:00Z",
+         "updatedAt":"2026-01-01T00:00:00Z","syncState":"synced",
+         "syncUpdatedAt":"2026-01-01T00:00:00Z","syncDeviceID":"dev"}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let dto = try decoder.decode(BookDTO.self, from: Data(legacy.utf8))
+        #expect(dto.tags == ["Science Fiction", "Fantasy"])
     }
 }

@@ -5,12 +5,16 @@ import Foundation
 struct GenreTagMapping: Codable, Equatable {
     let tag: String
     let categories: [String]
+    /// Proposed classification of books carrying this tag: `fiction`,
+    /// `non-fiction`, or nil when the model gives no signal. Normalized to the
+    /// `BookKind` raw values the app stores.
+    var kind: String? = nil
 }
 
 /// A validated shelf-categorization plan: how every observed genre tag maps to
 /// canonical categories. `fingerprint` is derived from the exact (normalized,
 /// unique) tag set the plan was built from, so a plan is instantly detected as
-/// stale when the library gains or renames genres and can be regenerated.
+/// stale when the library gains or renames tags and can be regenerated.
 struct ShelfCategoryPlan: Codable, Equatable {
     var mappings: [GenreTagMapping]
     var fingerprint: String
@@ -33,7 +37,7 @@ enum ShelfCategorizer {
 
     /// Every non-empty raw genre tag in the library, trimmed, original case.
     static func allGenres(from books: [Book]) -> [String] {
-        books.flatMap(\.genres)
+        books.flatMap(\.tags)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
@@ -56,7 +60,7 @@ enum ShelfCategorizer {
             .joined(separator: "\n")
     }
 
-    /// Stable identifier for a set of genres: a deterministic canonical encoding
+    /// Stable identifier for a set of tags: a deterministic canonical encoding
     /// of the normalized unique tags (base64 of the UTF-8 sorted list joined by
     /// a unit separator). Content-addressed, so it is reproducible across
     /// launches and injectable in tests.
@@ -84,17 +88,19 @@ enum ShelfCategorizer {
         \(snapshot)
 
         Design a small set of top-level shelf categories that honestly cover THIS library's tags —
-        for example Fiction, Non-fiction, History, Children's, Science Fiction & Fantasy, Mystery & Thriller,
-        Romance, Reference & Study. Reuse exact category-name spellings across every tag so equivalent tags
-        coalesce into one shelf, keep the total category count between 4 and 12, and do not invent categories
-        that nothing maps to.
+        for example Fantasy, Children's, Animals, Books, Science, Mystery & Thriller (do NOT include an
+        "Other" category — the app handles unclassified books itself). Reuse exact category-name spellings
+        across every tag so equivalent tags coalesce into one shelf, keep the total category count between 4
+        and 12, and do not invent categories that nothing maps to.
 
         Then map EVERY tag to one or more of those categories — a book may legitimately belong to several
-        shelves. Treat placeholder tags ("none", "unknown", "--", junk) by mapping them to an "Other" category.
-        Keep category names and tag values in Title Case.
+        shelves. For every tag also decide whether books with that tag are Fiction or Non-fiction, based on the
+        content the tag describes (e.g. "fantasy" → Fiction, "gardening" → Non-fiction). A tag that describes
+        fiction and non-fiction alike may use either; when unclear, prefer Non-fiction. Keep category names and
+        tag values in Title Case; use exactly "fiction" or "non-fiction" (lowercase) for kind.
 
         Return ONLY a valid JSON array, with no prose and no markdown fences, each element shaped exactly as:
-        {"tag": "exact lowercased library tag", "categories": ["Category One", "Category Two"]}
+        {"tag": "exact lowercased library tag", "categories": ["Category One", "Category Two"], "kind": "fiction"}
         """
     }
 
@@ -174,7 +180,12 @@ enum ShelfCategorizer {
                 categories.append(cat)
             }
             guard !categories.isEmpty else { continue }
-            out.append(GenreTagMapping(tag: tag, categories: categories))
+            let kind = (row["kind"] as? String)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+                .flatMap { BookKind(rawValue: $0) } // "fiction"/"non-fiction", nil otherwise
+                .flatMap { $0 == .notSet ? nil : $0 }
+                .map(\.rawValue)
+            out.append(GenreTagMapping(tag: tag, categories: categories, kind: kind))
         }
         return out
     }
@@ -205,13 +216,102 @@ enum ShelfCategorizer {
 
     // MARK: - Shelf building
 
-    /// Builds ordered shelf sections from a plan. Every book appears under each
-    /// of its mapped categories (multi-membership — the user's chosen behavior);
-    /// books whose tags map nowhere are collected into a trailing "Other"
-    /// section so no book is unreachable. Returns nil when there is no usable
-    /// plan (the caller falls back to raw-tag grouping).
-    static func shelfSections(books: [Book], plan: ShelfCategoryPlan?) -> [(category: String, books: [Book])]? {
+    /// One level of shelf organization: a named section with its books.
+    struct ShelfSection {
+        let shelf: String
+        let books: [Book]
+    }
+
+    /// Builds ordered flat shelf sections from a plan (used by the preview).
+    /// Every book appears under each of its mapped shelves; books whose tags
+    /// map nowhere — or only to a model-emitted "Other" — are collected into a
+    /// single trailing "Other" section so every book stays reachable. Returns
+    /// nil when there is no usable plan.
+    static func shelfSections(books: [Book], plan: ShelfCategoryPlan?) -> [ShelfSection]? {
         guard let plan, !plan.mappings.isEmpty else { return nil }
+        let (members, other) = partition(books: books, plan: plan)
+        var sections = members
+            .map { ShelfSection(shelf: $0.key, books: $0.value) }
+            .sorted { $0.shelf.localizedCaseInsensitiveCompare($1.shelf) == .orderedAscending }
+        if !other.isEmpty { sections.append(ShelfSection(shelf: "Other", books: other)) }
+        return sections
+    }
+
+    /// The two-tier organization the user chose: top-level Fiction /
+    /// Non-fiction / Uncategorized groups (driven by the stored `Book.kind`),
+    /// each containing that library's AI shelves. A book appears under every
+    /// shelf its tags map to; unmapped-only books fall to a single "Other"
+    /// shelf inside the group for their kind. Returns nil with no usable plan.
+    static func twoTierSections(books: [Book], plan: ShelfCategoryPlan?) -> [(top: String, shelves: [ShelfSection])]? {
+        guard let plan, !plan.mappings.isEmpty else { return nil }
+        let (members, other) = partition(books: books, plan: plan)
+        var byTop: [String: [String: [Book]]] = [:]
+        var otherByTop: [String: [Book]] = [:]
+
+        func topName(for book: Book) -> String {
+            guard let k = BookKind(rawValue: book.kind), k != .notSet else { return "Uncategorized" }
+            return k.displayName
+        }
+
+        for (shelf, shelfBooks) in members {
+            for book in shelfBooks {
+                let top = topName(for: book)
+                byTop[top, default: [:]][shelf, default: []].append(book)
+            }
+        }
+        for book in other {
+            let top = topName(for: book)
+            otherByTop[top, default: []].append(book)
+        }
+
+        let order = ["Fiction", "Non-fiction", "Uncategorized"]
+        var result: [(top: String, shelves: [ShelfSection])] = []
+        let tops = Set(byTop.keys).union(otherByTop.keys)
+        for top in order where tops.contains(top) {
+            var shelves = (byTop[top] ?? [:])
+                .map { ShelfSection(shelf: $0.key, books: $0.value) }
+                .sorted { $0.shelf.localizedCaseInsensitiveCompare($1.shelf) == .orderedAscending }
+            if let others = otherByTop[top], !others.isEmpty {
+                shelves.append(ShelfSection(shelf: "Other", books: others))
+            }
+            result.append((top: top, shelves: shelves))
+        }
+        return result.isEmpty ? nil : result
+    }
+
+    /// Proposed Fiction/Non-fiction for a book, derived from its mapped tags'
+    /// kinds (majority; nil when no tag carries a kind). Written into
+    /// `Book.kind` by the reorganize action — the user can still override it
+    /// in the book form, which is the source of truth for grouping.
+    static func proposedKind(for book: Book, plan: ShelfCategoryPlan?) -> BookKind? {
+        guard let plan, !plan.mappings.isEmpty else { return nil }
+        var counts: [BookKind: Int] = [:]
+        for mapping in plan.mappings where mapping.kind != nil {
+            guard let value = BookKind(rawValue: mapping.kind!),
+                  value != .notSet else { continue }
+            let trimmed = mapping.tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            // Only count kinds for tags this book actually carries.
+            if book.tags.contains(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trimmed }) {
+                counts[value, default: 0] += 1
+            }
+        }
+        guard !counts.isEmpty else { return nil }
+        // Majority kind; ties prefer non-fiction (cautious default). Only
+        // propose when a clear majority exists, else leave the book uncategorized.
+        let best = counts.max { a, b in
+            if a.value != b.value { return a.value < b.value }
+            return a.key == .fiction // non-fiction wins ties
+        }!
+        let total = counts.values.reduce(0, +)
+        guard best.value > total / 2 else { return nil }
+        return best.key
+    }
+
+    /// Shared partition core: maps each book to its mapped shelves (skipping
+    /// model-emitted "Other"), and collects every unmapped book into `other`.
+    /// Guarantees at most one "Other" bucket in the whole plan.
+    private static func partition(books: [Book], plan: ShelfCategoryPlan)
+        -> (members: [String: [Book]], other: [Book]) {
         var byTag: [String: [String]] = [:]
         for mapping in plan.mappings {
             let key = mapping.tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -220,7 +320,6 @@ enum ShelfCategorizer {
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
             guard !cats.isEmpty else { continue }
-            // First mapping for a tag wins; later duplicates are ignored.
             if byTag[key] == nil { byTag[key] = cats }
         }
 
@@ -228,11 +327,12 @@ enum ShelfCategorizer {
         var other: [Book] = []
         for book in books {
             var matched = Set<String>()
-            for raw in book.genres {
-                let genre = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !genre.isEmpty else { continue }
-                guard let cats = byTag[genre.lowercased()], !cats.isEmpty else { continue }
+            for raw in book.tags {
+                let tag = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !tag.isEmpty else { continue }
+                guard let cats = byTag[tag.lowercased()], !cats.isEmpty else { continue }
                 for cat in cats {
+                    guard cat.lowercased() != "other" else { continue } // single Other bucket
                     guard !matched.contains(cat) else { continue }
                     matched.insert(cat)
                     members[cat, default: []].append(book)
@@ -240,12 +340,7 @@ enum ShelfCategorizer {
             }
             if matched.isEmpty { other.append(book) }
         }
-
-        var sections = members
-            .map { (category: $0.key, books: $0.value) }
-            .sorted { $0.category.localizedCaseInsensitiveCompare($1.category) == .orderedAscending }
-        if !other.isEmpty { sections.append((category: "Other", books: other)) }
-        return sections
+        return (members, other)
     }
 
     // MARK: - Persistence

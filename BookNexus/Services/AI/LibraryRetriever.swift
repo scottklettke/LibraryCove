@@ -172,7 +172,7 @@ enum LibraryRetriever {
     /// Precomputed per-book search fields so a single scan matches every tier.
     private struct Bag {
         let book: Book
-        /// Words a user would use to *name* the book: title, authors, genres,
+        /// Words a user would use to *name* the book: title, authors, tags,
         /// physical location. Matches here are the strongest signal.
         let namedTokens: Set<String>
         /// Named words plus everything searchable in the body text
@@ -185,13 +185,13 @@ enum LibraryRetriever {
             self.book = book
             let title = book.title
             let authors = book.authors.joined(separator: " ")
-            let genres = book.genres.joined(separator: " ")
+            let tags = book.tags.joined(separator: " ")
             let location = book.physicalLocation ?? ""
             let summary = book.summary ?? ""
             let description = book.bookDescription ?? ""
             let notes = book.notes?.map(\.content).joined(separator: " ") ?? ""
 
-            let named = Self.words(title + " " + authors + " " + genres + " " + location)
+            let named = Self.words(title + " " + authors + " " + tags + " " + location)
             // Fields are deliberately capped before tokenizing so one giant
             // description can't drown the index; the snapshot still carries
             // full detail for retrieved books.

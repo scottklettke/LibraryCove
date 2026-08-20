@@ -1,8 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// Sheets over the library's genres: asks the model for merge/remove
-/// suggestions and applies the user-approved ones to `Book.genres`.
+/// Sheets over the library's tags: asks the model for merge/remove
+/// suggestions and applies the user-approved ones to `Book.tags`.
 struct GenreCleanupView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -18,6 +18,8 @@ struct GenreCleanupView: View {
     @State private var selected = Set<Int>()
     @State private var phase: Phase = .loading
     @State private var completed = false
+    @State private var liveLog: [String] = []
+    @State private var outcome = ""
 
     var body: some View {
         NavigationStack {
@@ -26,15 +28,20 @@ struct GenreCleanupView: View {
                 case .loading:
                     VStack(spacing: 12) {
                         ProgressView()
-                        Text("Asking AI to tidy up your genres…")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(Array(liveLog.enumerated()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .error(let message):
                     ContentUnavailableView {
-                        Label("Couldn't clean up genres", systemImage: "exclamationmark.triangle")
+                        Label("Couldn't clean up tags", systemImage: "exclamationmark.triangle")
                     } description: {
                         Text(message)
                             .multilineTextAlignment(.center)
@@ -48,22 +55,29 @@ struct GenreCleanupView: View {
                         ContentUnavailableView(
                             "Nothing to clean up",
                             systemImage: "checkmark.seal",
-                            description: Text("Your genres already look tidy.")
+                            description: Text("Your tags already look tidy.")
                         )
                     } else {
                         List {
+                            if !outcome.isEmpty {
+                                Section {
+                                    Text(outcome)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             Section {
                                 ForEach(Array(suggestions.enumerated()), id: \.offset) { index, suggestion in
                                     row(index, suggestion)
                                 }
                             } footer: {
-                                Text("Review the suggestions and pick the ones to apply. Unselected rows are left untouched.")
+                                Text("Review the suggestions and pick the ones to apply. Unselected rows are left untouched. Full request/response detail is in Settings → AI logs.")
                             }
                         }
                     }
                 }
             }
-            .navigationTitle("Clean up genres")
+            .navigationTitle("Clean up tags")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -112,14 +126,17 @@ struct GenreCleanupView: View {
         let picked = selected.sorted().compactMap { index -> GenreSuggestion? in
             suggestions.indices.contains(index) ? suggestions[index] : nil
         }
-        GenreCleanupService.apply(picked, to: books, context: modelContext)
+        let changed = GenreCleanupService.apply(picked, to: books, context: modelContext)
+        outcome = "Applied. \(picked.count) suggestion\(picked.count == 1 ? "" : "s") changed \(changed) book\(changed == 1 ? "" : "s")."
         completed = true
     }
 
     private func load() async {
         phase = .loading
+        liveLog = ["Reading \(books.count) book\(books.count == 1 ? "" : "s")…"]
         let snapshot = GenreCleanupService.snapshot(from: books)
         do {
+            liveLog.append("Asking the AI model to find similar or duplicate tags…")
             let response = try await AIService.shared.generate(
                 AIPrompt(
                     system: "You are a careful book-cataloging assistant. Respond with only valid JSON and nothing else.",
@@ -129,6 +146,7 @@ struct GenreCleanupView: View {
             let parsed = try GenreCleanupService.parseSuggestions(from: Data(response.utf8))
             suggestions = parsed
             selected = Set(parsed.indices)
+            liveLog.append("Model returned \(parsed.count) suggestions; review below before applying.")
             phase = .ready
         } catch let error as AIError {
             switch error {

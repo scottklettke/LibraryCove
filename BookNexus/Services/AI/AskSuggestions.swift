@@ -76,11 +76,11 @@ enum AskSuggestions {
 
     /// The most common non-empty genre label, deterministically (count
     /// descending, then localized-case-insensitive alpha), matching how the
-    /// library snapshot counts genres so the signal stays consistent.
+    /// library snapshot counts tags so the signal stays consistent.
     static func mostCommonGenre(_ books: [Book]) -> String? {
         var counts: [String: (label: String, count: Int)] = [:]
         for book in books {
-            for genre in book.genres {
+            for genre in book.tags {
                 let cleaned = genre.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { continue }
                 let key = cleaned.lowercased()

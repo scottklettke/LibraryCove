@@ -12,7 +12,16 @@ final class Book {
     var authors: [String] = []
     var isbn: String?
     var publicationYear: Int?
+    /// Arbitrary user/AI-assigned labels (the shelf-organization input; a tag
+    /// is not a controlled vocabulary). Stored under `genres` because SwiftData
+    /// cannot rename stored properties in CloudKit-backed stores — so the
+    /// Swift API is `tags` (below) while the persistent field keeps its legacy
+    /// name. No migration is needed.
     var genres: [String] = []
+    /// Fiction / non-fiction classification. Values: `""` (not set),
+    /// `fiction`, `non-fiction`. Set by the user or proposed by the AI shelf
+    /// pass; it is the top-level partition of the two-tier shelf grouping.
+    var kind: String = ""
     var coverImageURL: String?
     var publisher: String?
     var pageCount: Int?
@@ -70,7 +79,8 @@ final class Book {
         authors: [String] = [],
         isbn: String? = nil,
         publicationYear: Int? = nil,
-        genres: [String] = [],
+        tags: [String] = [],
+        kind: String = "",
         coverImageURL: String? = nil,
         publisher: String? = nil,
         pageCount: Int? = nil,
@@ -102,7 +112,8 @@ final class Book {
         self.authors = authors
         self.isbn = isbn
         self.publicationYear = publicationYear
-        self.genres = genres
+        self.tags = tags
+        self.kind = kind
         self.coverImageURL = coverImageURL
         self.publisher = publisher
         self.pageCount = pageCount
@@ -136,6 +147,14 @@ final class Book {
 }
 
 extension Book {
+    /// App-wide name for the stored labels. `genres` is the CloudKit-safe
+    /// persistent field (SwiftData can't rename in CloudKit stores), so `tags`
+    /// is the canonical Swift spelling — reads/writes go through it everywhere.
+    var tags: [String] {
+        get { genres }
+        set { genres = newValue }
+    }
+
     /// Display authors joined by ", ".
     var authorsText: String {
         authors.isEmpty ? "Unknown" : authors.joined(separator: ", ")
@@ -161,6 +180,25 @@ extension Book {
             .replacingOccurrences(of: " ", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? nil : cleaned
+    }
+}
+
+/// Fiction / non-fiction classification of a book. Stored on the Book; set by
+/// the user when adding/editing or proposed by the AI shelf pass. `""` means
+/// not yet set and routes the book to the "Uncategorized" top group.
+enum BookKind: String, CaseIterable, Identifiable {
+    case fiction = "fiction"
+    case nonFiction = "non-fiction"
+    case notSet = ""
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .fiction: return "Fiction"
+        case .nonFiction: return "Non-fiction"
+        case .notSet: return "Not set"
+        }
     }
 }
 

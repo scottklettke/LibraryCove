@@ -8,9 +8,9 @@ struct GenreSuggestion: Codable, Equatable {
     let to: String?
 }
 
-/// Pure, testable logic behind the "Clean up genres" feature: builds a genre
+/// Pure, testable logic behind the "Clean up tags" feature: builds a genre
 /// snapshot for the model, parses its suggestions, and applies approved
-/// rewrites to `Book.genres`.
+/// rewrites to `Book.tags`.
 enum GenreCleanupService {
 
     /// Normalized genre lines (`lowercased genre: count`) for the model to
@@ -18,7 +18,7 @@ enum GenreCleanupService {
     static func snapshot(from books: [Book]) -> String {
         var counts: [String: Int] = [:]
         for book in books {
-            for genre in book.genres {
+            for genre in book.tags {
                 let cleaned = genre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 guard !cleaned.isEmpty else { continue }
                 counts[cleaned, default: 0] += 1
@@ -38,7 +38,7 @@ enum GenreCleanupService {
     /// response must be a JSON array of `{from, to}` objects.
     static func prompt(snapshot: String) -> String {
         """
-        Return ONLY a JSON array of {"from":...,"to":...} suggestions to clean these genres. \
+        Return ONLY a JSON array of {"from":...,"to":...} suggestions to clean these tags. \
         Combine exact synonyms (e.g. Sci-Fi → Science Fiction). Set to to null to remove \
         non-genre placeholders (e.g. 'unknown', 'none', '--'). Keep canonical genre names in \
         Title Case. Only suggest when confident.
@@ -68,8 +68,8 @@ enum GenreCleanupService {
     }
 
     /// Applies `suggestions` to every book. Matching is case-insensitive on
-    /// trimmed genres; a suggestion's `to` replaces the genre (nil drops it);
-    /// unmatched genres are kept. Genres are deduped (case-insensitive),
+    /// trimmed tags; a suggestion's `to` replaces the genre (nil drops it);
+    /// unmatched tags are kept. Genres are deduped (case-insensitive),
     /// preserving first-seen order. Returns how many books changed; saves once
     /// at the end when anything changed.
     @discardableResult
@@ -89,7 +89,7 @@ enum GenreCleanupService {
         var changed = 0
         for book in books {
             var newGenres: [String] = []
-            for genre in book.genres {
+            for genre in book.tags {
                 let trimmed = genre.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { continue }
                 let key = trimmed.lowercased()
@@ -105,8 +105,8 @@ enum GenreCleanupService {
             var seen = Set<String>()
             newGenres = newGenres.filter { seen.insert($0.lowercased()).inserted }
 
-            if newGenres != book.genres {
-                book.genres = newGenres
+            if newGenres != book.tags {
+                book.tags = newGenres
                 changed += 1
             }
         }

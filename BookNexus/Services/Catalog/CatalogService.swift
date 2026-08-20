@@ -7,7 +7,7 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
     let authors: [String]
     let isbn: String?
     let publicationYear: Int?
-    let genres: [String]
+    let tags: [String]
     let publisher: String?
     let pageCount: Int?
     var description: String?
@@ -30,7 +30,7 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
                            authors: [],
                            isbn: cleaned,
                            publicationYear: nil,
-                           genres: [],
+                           tags: [],
                            publisher: nil,
                            pageCount: nil,
                            description: nil,
@@ -114,7 +114,7 @@ final class OpenLibraryService: CatalogService {
                 coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-M.jpg")
                 coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-L.jpg")
             }
-            let genres = doc["subject"] as? [String] ?? []
+            let tags = doc["subject"] as? [String] ?? []
             let publishers = doc["publisher"] as? [String] ?? []
             let languageList = doc["language"] as? [String] ?? []
             let key = doc["key"] as? String ?? UUID().uuidString
@@ -125,7 +125,7 @@ final class OpenLibraryService: CatalogService {
                 authors: Array(authors.prefix(10)),
                 isbn: isbn,
                 publicationYear: doc["first_publish_year"] as? Int,
-                genres: Array(genres.prefix(10)),
+                tags: Array(tags.prefix(10)),
                 publisher: publishers.first,
                 pageCount: doc["number_of_pages_median"] as? Int,
                 description: nil,
@@ -168,7 +168,7 @@ final class OpenLibraryService: CatalogService {
             authors: authors,
             isbn: cleaned,
             publicationYear: Self.year(from: publishDate),
-            genres: subjects.compactMap { $0["name"] as? String }.prefix(10).map { $0 },
+            tags: subjects.compactMap { $0["name"] as? String }.prefix(10).map { $0 },
             publisher: publishers.first?["name"] as? String,
             pageCount: book?["number_of_pages"] as? Int,
             description: book?["description"] as? String,
@@ -188,7 +188,7 @@ final class OpenLibraryService: CatalogService {
                     authors: gb["authors"] as? [String] ?? [],
                     isbn: cleaned,
                     publicationYear: gb["year"] as? Int,
-                    genres: gb["categories"] as? [String] ?? [],
+                    tags: gb["categories"] as? [String] ?? [],
                     publisher: gb["publisher"] as? String,
                     pageCount: gb["pageCount"] as? Int,
                     description: gb["description"] as? String,
@@ -202,7 +202,7 @@ final class OpenLibraryService: CatalogService {
             var covers = catalog.coverURLs
             if let gcovers = gb["covers"] as? [String] { covers.append(contentsOf: gcovers) }
             let description = gb["description"] as? String ?? catalog.description
-            let genres = gb["categories"] as? [String] ?? catalog.genres
+            let tags = gb["categories"] as? [String] ?? catalog.tags
             let publisher = gb["publisher"] as? String ?? catalog.publisher
             let pageCount = gb["pageCount"] as? Int ?? catalog.pageCount
             let year = gb["year"] as? Int ?? catalog.publicationYear
@@ -213,7 +213,7 @@ final class OpenLibraryService: CatalogService {
                 authors: catalog.authors,
                 isbn: cleaned,
                 publicationYear: year,
-                genres: genres,
+                tags: tags,
                 publisher: publisher,
                 pageCount: pageCount,
                 description: description,
@@ -236,7 +236,7 @@ final class OpenLibraryService: CatalogService {
             }
             catalog = CatalogBook(
                 id: catalog.id, title: catalog.title, authors: catalog.authors, isbn: catalog.isbn,
-                publicationYear: catalog.publicationYear, genres: catalog.genres, publisher: catalog.publisher,
+                publicationYear: catalog.publicationYear, tags: catalog.tags, publisher: catalog.publisher,
                 pageCount: catalog.pageCount, description: catalog.description, language: catalog.language,
                 coverURLs: merged, descriptionSource: catalog.descriptionSource, source: catalog.source
             )
@@ -245,7 +245,7 @@ final class OpenLibraryService: CatalogService {
         if catalog.description == nil, let fetchedDesc = await fetchDescription(for: catalog.title, authors: catalog.authors, preferred: preferred) {
             catalog = CatalogBook(
                 id: catalog.id, title: catalog.title, authors: catalog.authors, isbn: catalog.isbn,
-                publicationYear: catalog.publicationYear, genres: catalog.genres, publisher: catalog.publisher,
+                publicationYear: catalog.publicationYear, tags: catalog.tags, publisher: catalog.publisher,
                 pageCount: catalog.pageCount, description: fetchedDesc, language: catalog.language,
                 coverURLs: catalog.coverURLs, descriptionSource: preferred.rawValue, source: catalog.source
             )

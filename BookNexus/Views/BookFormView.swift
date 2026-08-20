@@ -92,12 +92,13 @@ struct BookFormView: View {
     @State private var title = ""
     @State private var authorsText = ""
     @State private var yearText = ""
-    @State private var genresText = ""
+    @State private var tagsText = ""
     @State private var publisherText = ""
     @State private var pageCountText = ""
     @State private var description = ""
     @State private var locationText = ""
     @State private var status: BookStatus = .toRead
+    @State private var kind: BookKind = .notSet
     @State private var rating: Int?
     @State private var coverURLs: [String] = []
     @State private var selectedCover: String?
@@ -134,13 +135,14 @@ struct BookFormView: View {
         self.dismissOnSave = dismissOnSave
         self.showsToolbarDelete = showsToolbarDelete
         _status = State(initialValue: existing?.statusEnum ?? .toRead)
+        _kind = State(initialValue: existing.flatMap { BookKind(rawValue: $0.kind) } ?? .notSet)
         _rating = State(initialValue: existing?.rating)
 
         if let catalog {
             _title = State(initialValue: catalog.title)
             _authorsText = State(initialValue: catalog.authors.joined(separator: ", "))
             _yearText = State(initialValue: catalog.publicationYear.map { String($0) } ?? "")
-            _genresText = State(initialValue: "")
+            _tagsText = State(initialValue: "")
             _publisherText = State(initialValue: catalog.publisher ?? "")
             _pageCountText = State(initialValue: catalog.pageCount.map { String($0) } ?? "")
             _description = State(initialValue: catalog.description ?? "")
@@ -150,7 +152,7 @@ struct BookFormView: View {
             _title = State(initialValue: existing.title)
             _authorsText = State(initialValue: existing.authors.joined(separator: ", "))
             _yearText = State(initialValue: existing.publicationYear.map { String($0) } ?? "")
-            _genresText = State(initialValue: existing.genres.joined(separator: ", "))
+            _tagsText = State(initialValue: existing.tags.joined(separator: ", "))
             _publisherText = State(initialValue: existing.publisher ?? "")
             _pageCountText = State(initialValue: existing.pageCount.map { String($0) } ?? "")
             _description = State(initialValue: existing.bookDescription ?? "")
@@ -166,12 +168,13 @@ struct BookFormView: View {
         return title != book.title
             || authorsText != book.authors.joined(separator: ", ")
             || yearText != (book.publicationYear.map { String($0) } ?? "")
-            || genresText != book.genres.joined(separator: ", ")
+            || tagsText != book.tags.joined(separator: ", ")
             || publisherText != (book.publisher ?? "")
             || pageCountText != (book.pageCount.map { String($0) } ?? "")
             || description != (book.bookDescription ?? "")
             || locationText != (book.physicalLocation ?? "")
             || status != book.statusEnum
+            || kind != (BookKind(rawValue: book.kind) ?? .notSet)
             || rating != book.rating
             || loanedToText != (book.loanedTo ?? "")
             || selectedCover != book.coverImageURL
@@ -431,7 +434,7 @@ struct BookFormView: View {
                         genreQuery = ""
                     }
                 Menu {
-                    ForEach(genreStore.genres, id: \.self) { genre in
+                    ForEach(genreStore.tags, id: \.self) { genre in
                         Button {
                             toggleGenre(genre)
                         } label: {
@@ -461,6 +464,11 @@ struct BookFormView: View {
             Picker("Status", selection: $status) {
                 ForEach(BookStatus.allCases) { s in
                     Text(s.displayName).tag(s)
+                }
+            }
+            Picker("Type", selection: $kind) {
+                ForEach(BookKind.allCases) { k in
+                    Text(k.displayName).tag(k)
                 }
             }
             LabeledContent("Rating") {
@@ -613,7 +621,7 @@ struct BookFormView: View {
         }
 
         if let newDescription = found.description { description = newDescription }
-        if !found.genres.isEmpty { genresText = found.genres.joined(separator: ", ") }
+        if !found.tags.isEmpty { tagsText = found.tags.joined(separator: ", ") }
         if let publisher = found.publisher { publisherText = publisher }
         if let pages = found.pageCount { pageCountText = String(pages) }
         if let year = found.publicationYear { yearText = String(year) }
@@ -631,7 +639,7 @@ struct BookFormView: View {
     }
 
     private var selectedGenres: [String] {
-        genresText.split(separator: ",").map(String.init).map {
+        tagsText.split(separator: ",").map(String.init).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
     }
@@ -652,12 +660,12 @@ struct BookFormView: View {
         if !list.contains(where: { $0.caseInsensitiveCompare(canonical) == .orderedSame }) {
             list.append(canonical)
         }
-        genresText = list.joined(separator: ", ")
+        tagsText = list.joined(separator: ", ")
     }
 
     private func removeGenre(_ genre: String) {
         let list = selectedGenres.filter { $0.caseInsensitiveCompare(genre) != .orderedSame }
-        genresText = list.joined(separator: ", ")
+        tagsText = list.joined(separator: ", ")
     }
 
     private var addedDateFormatter: DateFormatter {
@@ -716,7 +724,7 @@ struct BookFormView: View {
             return
         }
         let authors = authorsText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-        let genres = genresText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+        let tags = tagsText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         let year = Int(yearText.trimmingCharacters(in: .whitespacesAndNewlines))
         let pageCount = Int(pageCountText.trimmingCharacters(in: .whitespacesAndNewlines))
         let location = locationText == "__new__" ? "" : locationText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -745,13 +753,14 @@ struct BookFormView: View {
             existing.title = trimmedTitle
             existing.authors = authors
             existing.publicationYear = year
-            existing.genres = genres
+            existing.tags = tags
             existing.publisher = publisherText.isEmpty ? nil : publisherText
             existing.pageCount = pageCount
             existing.bookDescription = description.isEmpty ? nil : description
             existing.descriptionSource = description.isEmpty ? nil : (catalog?.descriptionSource ?? existing.descriptionSource)
             existing.physicalLocation = location.isEmpty ? nil : location
             existing.status = status.rawValue
+            existing.kind = kind.rawValue
             existing.rating = rating
             existing.loanedTo = loanedToText.isEmpty ? nil : loanedToText
             existing.loanedDate = loanedDate
@@ -765,7 +774,8 @@ struct BookFormView: View {
                 authors: authors,
                 isbn: Book.normalizedISBN(catalog?.isbn),
                 publicationYear: year,
-                genres: genres,
+                tags: tags,
+                kind: kind.rawValue,
                 coverImageURL: cover,
                 publisher: publisherText.isEmpty ? nil : publisherText,
                 pageCount: pageCount,

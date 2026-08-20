@@ -21,7 +21,7 @@ final class MockCatalog: CatalogService, @unchecked Sendable {
 /// File scope (nonisolated) so it can be called freely from test closures.
 private func testBook(isbn: String, title: String = "Dune") -> CatalogBook {
     CatalogBook(id: "isbn-\(isbn)", title: title, authors: ["Frank Herbert"],
-                isbn: isbn, publicationYear: 1965, genres: ["Science Fiction"],
+                isbn: isbn, publicationYear: 1965, tags: ["Science Fiction"],
                 publisher: "Chilton", pageCount: 412, description: "Classic.",
                 language: "en", coverURLs: [], descriptionSource: "test", source: "test")
 }

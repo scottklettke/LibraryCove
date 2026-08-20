@@ -79,12 +79,12 @@ import SwiftData
 
     private func suggestionBooks() -> [Book] {
         [
-            Book(title: "Dune", authors: ["Frank Herbert"], genres: ["Sci-Fi"],
+            Book(title: "Dune", authors: ["Frank Herbert"], tags: ["Sci-Fi"],
                  status: "reading", rating: 5,
                  createdAt: Date(timeIntervalSince1970: 3000)),
-            Book(title: "The Hobbit", authors: ["J.R.R. Tolkien"], genres: ["Fantasy", "Fantasy"],
+            Book(title: "The Hobbit", authors: ["J.R.R. Tolkien"], tags: ["Fantasy", "Fantasy"],
                  rating: 4, createdAt: Date(timeIntervalSince1970: 2000)),
-            Book(title: "Meditations", authors: ["Marcus Aurelius"], genres: ["Philosophy"],
+            Book(title: "Meditations", authors: ["Marcus Aurelius"], tags: ["Philosophy"],
                  rating: 3, createdAt: Date(timeIntervalSince1970: 1000)),
         ]
     }
@@ -126,7 +126,7 @@ import SwiftData
 
     @Test func suggestionsNeverExceedStarterCount() {
         let huge = (0..<40).map { i in
-            Book(title: "Book \(i)", authors: ["A\(i)"], genres: ["Thriller"],
+            Book(title: "Book \(i)", authors: ["A\(i)"], tags: ["Thriller"],
                  status: i == 0 ? "reading" : "to-read", rating: 4)
         }
         let turns = [AITurn(role: .user, text: "Suggest something good", date: .init())]
@@ -137,11 +137,11 @@ import SwiftData
 
     @Test func mostCommonGenreIsDeterministic() {
         let books = [
-            Book(title: "A", authors: [], genres: ["Zebra", "Apples"]),
-            Book(title: "B", authors: [], genres: ["apples"]),
-            Book(title: "C", authors: [], genres: ["  Zebra  ", "Zebra"]),
+            Book(title: "A", authors: [], tags: ["Zebra", "Apples"]),
+            Book(title: "B", authors: [], tags: ["apples"]),
+            Book(title: "C", authors: [], tags: ["  Zebra  ", "Zebra"]),
         ]
-        // Zebra (each book's genres counted, case/whitespace normalized:
+        // Zebra (each book's tags counted, case/whitespace normalized:
         // 1 + 2) beats apples (1+1). Intra-book duplicates contribute within
         // that book, matching the library-snapshot counting.
         #expect(AskSuggestions.mostCommonGenre(books) == "Zebra")
@@ -149,8 +149,8 @@ import SwiftData
 
     @Test func mostCommonGenreTieBreaksAlphabetically() {
         let books = [
-            Book(title: "A", authors: [], genres: ["Zebra"]),
-            Book(title: "B", authors: [], genres: ["Apples"]),
+            Book(title: "A", authors: [], tags: ["Zebra"]),
+            Book(title: "B", authors: [], tags: ["Apples"]),
         ]
         // Equal counts → deterministic localized-case-insensitive alpha pick.
         #expect(AskSuggestions.mostCommonGenre(books) == "Apples")
@@ -161,18 +161,18 @@ import SwiftData
     @Test func snapshotIncludesReadingTopRatedGenresAndRecent() throws {
         let book1 = Book(
             title: "Dune", authors: ["Frank Herbert"],
-            genres: ["Sci-Fi", "Sci-Fi", "Science Fiction"],
+            tags: ["Sci-Fi", "Sci-Fi", "Science Fiction"],
             status: "reading", rating: 5,
             createdAt: Date(timeIntervalSince1970: 3000)
         )
         let book2 = Book(
             title: "Solaris", authors: ["Stanislaw Lem"],
-            genres: [],
+            tags: [],
             rating: 4, createdAt: Date(timeIntervalSince1970: 2000)
         )
         let book3 = Book(
             title: "Little House", authors: ["Laura Ingalls Wilder"],
-            genres: ["Kids"], rating: 3,
+            tags: ["Kids"], rating: 3,
             createdAt: Date(timeIntervalSince1970: 1000)
         )
 
@@ -237,7 +237,7 @@ import SwiftData
         // it stays within budget and tells the model the text is incomplete.
         let pad = String(repeating: "z", count: 2000)
         let books = (0..<40).map { _ in
-            Book(title: "Book", authors: ["A"], genres: ["G"],
+            Book(title: "Book", authors: ["A"], tags: ["G"],
                  bookDescription: pad, summary: pad)
         }
         let snapshot = AILibrarySnapshot.build(books: books, users: [])
@@ -284,7 +284,7 @@ import SwiftData
         let books = (0..<10).map { i in
             Book(title: "Book number \(i) with a very long padded title ".padding(toLength: 160, withPad: "x", startingAt: 0),
                  authors: ["An Author"],
-                 genres: ["Genre \(i)"],
+                 tags: ["Genre \(i)"],
                  rating: 5,
                  createdAt: Date(timeIntervalSince1970: TimeInterval(i)))
         }
@@ -294,7 +294,7 @@ import SwiftData
 
     @Test func userMessageIncludesBookCard() {
         let book = Book(title: "Dune", authors: ["Frank Herbert"], publicationYear: 1965,
-                        genres: ["Science Fiction"], bookDescription: "A desert epic.")
+                        tags: ["Science Fiction"], bookDescription: "A desert epic.")
         let message = AIPromptFactory.userMessage("Is this my favorite?", book: book)
         #expect(message.contains("Dune by Frank Herbert (1965 — Science Fiction)"))
         #expect(message.contains("Description: A desert epic."))
@@ -329,7 +329,7 @@ import SwiftData
         LibraryDataService.deleteAll(context: context)
         defer { LibraryDataService.deleteAll(context: context) }
 
-        let book = Book(title: "Gateway", genres: ["Sci-Fi", "none", "Drama"])
+        let book = Book(title: "Gateway", tags: ["Sci-Fi", "none", "Drama"])
         context.insert(book)
         try? context.save()
 
@@ -339,7 +339,7 @@ import SwiftData
         let changed = GenreCleanupService.apply(suggestions, to: [book], context: context)
 
         #expect(changed == 1)
-        #expect(book.genres == ["Science Fiction", "Drama"])
+        #expect(book.tags == ["Science Fiction", "Drama"])
     }
 
     @Test func applyIsCaseInsensitiveAndDedupes() throws {
@@ -348,7 +348,7 @@ import SwiftData
         defer { LibraryDataService.deleteAll(context: context) }
 
         // Mixed case and near-duplicates collapse into one canonical genre.
-        let book = Book(title: "Foundation", genres: ["sci-fi", "Sci-Fi", "Sci Fi"])
+        let book = Book(title: "Foundation", tags: ["sci-fi", "Sci-Fi", "Sci Fi"])
         context.insert(book)
         try? context.save()
 
@@ -357,7 +357,7 @@ import SwiftData
         let changed = GenreCleanupService.apply(suggestions, to: [book], context: context)
 
         #expect(changed == 1)
-        #expect(book.genres == ["Science Fiction"])
+        #expect(book.tags == ["Science Fiction"])
     }
 
     // MARK: - Description improvement
@@ -421,7 +421,7 @@ import SwiftData
     @Test func snapshotCatalogCarriesDescriptionAndDetail() {
         let book = Book(
             title: "Dune", authors: ["Frank Herbert"],
-            publicationYear: 1965, genres: ["Science Fiction"],
+            publicationYear: 1965, tags: ["Science Fiction"],
             bookDescription: "A deep-space epic about power, faith, and spice on Arrakis.",
             summary: "In two sentences: Dune follows House Atreides on Arrakis."
         )
@@ -498,10 +498,10 @@ import SwiftData
     }
 
     @Test func retrievalTargetsNamedBookAndKeepsSnapshotSlim() {
-        let dune = Book(title: "Dune", authors: ["Frank Herbert"], genres: ["Science Fiction"],
+        let dune = Book(title: "Dune", authors: ["Frank Herbert"], tags: ["Science Fiction"],
                         bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice.",
                         summary: "A desert epic about power, faith, and spice.")
-        let solaris = Book(title: "Solaris", authors: ["Stanislaw Lem"], genres: ["Science Fiction"],
+        let solaris = Book(title: "Solaris", authors: ["Stanislaw Lem"], tags: ["Science Fiction"],
                            bookDescription: "A psychologist studies an ocean that mirrors human minds.")
 
         let snapshot = AILibrarySnapshot.build(books: [dune, solaris], users: [], query: "Tell me about Dune")

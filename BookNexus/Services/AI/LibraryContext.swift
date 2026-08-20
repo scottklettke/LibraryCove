@@ -26,7 +26,7 @@ enum AILibrarySnapshot {
 
         let header = "Total books in library: \(books.count)"
 
-        // Compact digest buckets (status/ratings/genres/recency signal).
+        // Compact digest buckets (status/ratings/tags/recency signal).
         var digests: [String] = []
 
         let reading = books
@@ -48,7 +48,7 @@ enum AILibrarySnapshot {
         var genreCounts: [String: Int] = [:]
         var genreLabels: [String: String] = [:]
         for book in books {
-            for genre in book.genres {
+            for genre in book.tags {
                 let cleaned = genre.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !cleaned.isEmpty else { continue }
                 let key = cleaned.lowercased()
@@ -63,7 +63,7 @@ enum AILibrarySnapshot {
                     return lhs.key.localizedCaseInsensitiveCompare(rhs.key) == .orderedAscending
                 }
                 .map { "\(genreLabels[$0.key] ?? $0.key): \($0.value)" }
-            digests.append("Genres:\n" + lines.joined(separator: "\n"))
+            digests.append("Tags:\n" + lines.joined(separator: "\n"))
         }
 
         let recent = books
@@ -122,12 +122,12 @@ enum AILibrarySnapshot {
     /// can't confirm rather than reporting a confident false "not found".
     private static let truncationNote = "\n\n[The catalog above is truncated — some book details (including summaries) were cut to fit the model's context window. If you can't find the exact text, say so rather than assuming it's absent.]"
 
-    /// The readable "Title (Author)" plus compact metadata (year, genres,
+    /// The readable "Title (Author)" plus compact metadata (year, tags,
     /// publisher, location) — always included for every book.
     private static func titleLine(for book: Book) -> String {
         var meta: [String] = []
-        if !book.genres.isEmpty {
-            meta.append(book.genres.joined(separator: ", "))
+        if !book.tags.isEmpty {
+            meta.append(book.tags.joined(separator: ", "))
         }
         if let year = book.publicationYear {
             meta.append("\(year)")
@@ -244,8 +244,8 @@ enum AIPromptFactory {
         var message = ""
         if let book {
             let year = book.publicationYear.map(String.init) ?? "?"
-            let genres = book.genres.isEmpty ? "—" : book.genres.joined(separator: ", ")
-            message += "Book: \(book.title) by \(book.authorsText) (\(year) — \(genres))\n"
+            let tags = book.tags.isEmpty ? "—" : book.tags.joined(separator: ", ")
+            message += "Book: \(book.title) by \(book.authorsText) (\(year) — \(tags))\n"
             message += "Description: \(book.bookDescription ?? "none")\n\n"
         }
         message += text

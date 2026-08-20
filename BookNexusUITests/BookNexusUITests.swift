@@ -6,8 +6,8 @@ final class BookNexusUITests: XCTestCase {
     /// testable offline without a camera. Two books lets tests observe a
     /// drop from "2 remaining" to "1 remaining".
     private let pendingScansSeed = #"""
-    [{"id":"seed-1","title":"The Swift Programming Language","authors":["Apple Inc."],"isbn":"9780137463602","publicationYear":2021,"genres":["Programming"],"publisher":"Addison-Wesley","pageCount":560,"description":"The definitive guide.","language":"en","coverURLs":[],"descriptionSource":"openlibrary","source":"seed"},
-     {"id":"seed-2","title":"Designing Data-Intensive Applications","authors":["Martin Kleppmann"],"isbn":"9781449373320","publicationYear":2017,"genres":["Databases"],"publisher":"O'Reilly","pageCount":616,"description":"Reliable systems book.","language":"en","coverURLs":[],"descriptionSource":"openlibrary","source":"seed"}]
+    [{"id":"seed-1","title":"The Swift Programming Language","authors":["Apple Inc."],"isbn":"9780137463602","publicationYear":2021,"tags":["Programming"],"publisher":"Addison-Wesley","pageCount":560,"description":"The definitive guide.","language":"en","coverURLs":[],"descriptionSource":"openlibrary","source":"seed"},
+     {"id":"seed-2","title":"Designing Data-Intensive Applications","authors":["Martin Kleppmann"],"isbn":"9781449373320","publicationYear":2017,"tags":["Databases"],"publisher":"O'Reilly","pageCount":616,"description":"Reliable systems book.","language":"en","coverURLs":[],"descriptionSource":"openlibrary","source":"seed"}]
     """#
 
     override func setUpWithError() throws {
@@ -534,7 +534,7 @@ final class BookNexusUITests: XCTestCase {
         enterLibraryIfNeeded(app)
         addSeededBooks(app) // imports both seeded books → non-empty library
 
-        // "Clean up genres…" and "Reorganize shelves…" live in the dedicated AI
+        // "Clean up tags…" and "Reorganize shelves…" live in the dedicated AI
         // toolbar menu (not buried at the bottom of the genre filter).
         let aiMenu = app.buttons["AI tools"]
         XCTAssertTrue(aiMenu.waitForExistence(timeout: 10), "AI tools menu missing")
@@ -545,13 +545,13 @@ final class BookNexusUITests: XCTestCase {
         XCTAssertTrue(reorganize.waitForExistence(timeout: 5),
                       "Reorganize shelves missing from AI menu")
         let cleanup = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'Clean up genres'")
+            NSPredicate(format: "label CONTAINS 'Clean up tags'")
         ).firstMatch
-        XCTAssertTrue(cleanup.waitForExistence(timeout: 5), "Clean up genres menu item missing")
+        XCTAssertTrue(cleanup.waitForExistence(timeout: 5), "Clean up tags menu item missing")
         cleanup.tap()
 
         // With no engine configured the sheet shows the error state and Retry.
-        XCTAssertTrue(app.navigationBars["Clean up genres"].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.navigationBars["Clean up tags"].waitForExistence(timeout: 10),
                       "clean-up sheet did not present")
         XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 15),
                       "error state with Retry did not appear")

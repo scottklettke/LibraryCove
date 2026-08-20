@@ -71,7 +71,7 @@ extension LibraryDataService {
       (ends in `Z`) to be safe.
     - **Optional fields** are either a value or `null`. If a field is optional you may leave it
       out entirely; missing optional fields are treated as `null`.
-    - **List fields** (`authors`, `genres`, `mentions`) are arrays of strings.
+    - **List fields** (`authors`, `tags`, `mentions`) are arrays of strings.
     - **Relationships** (which book a note belongs to, which books a connection links, etc.) are
       stored as the *id* of the related object. Those ids must match the `id` of an object that
       actually exists in the file. A relationship can be `null`.
@@ -87,7 +87,7 @@ extension LibraryDataService {
       "authors": ["Frank Herbert"],
       "isbn": "9780441172719",
       "publicationYear": 1965,
-      "genres": ["Science Fiction"],
+      "tags": ["Science Fiction"],
       "coverImageURL": null,
       "publisher": "Ace Books",
       "pageCount": 412,
@@ -125,7 +125,7 @@ extension LibraryDataService {
     | `authors` | array of string | Author names. |
     | `isbn` | string / null | ISBN-10 or ISBN-13. |
     | `publicationYear` | integer / null | Year of publication. |
-    | `genres` | array of string | Genres or categories. |
+    | `tags` | array of string | Genres or categories. |
     | `coverImageFile` | string / null | Relative zip entry (`covers/<book id>.jpg`) that carries the cover's JPEG bytes. Set only by exports with an available cover. |
     | `coverImageURL` | string / null | URL of a cover, or local file path after an import. Cleared when a bundled `coverImageFile` takes over. |
     | `publisher` | string / null | Publisher name. |

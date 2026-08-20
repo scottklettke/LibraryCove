@@ -203,8 +203,8 @@ struct BookDetailView: View {
             if let isbn = book.isbn {
                 LabeledContent("ISBN", value: isbn)
             }
-            if !book.genres.isEmpty {
-                LabeledContent("Genres", value: book.genres.joined(separator: ", "))
+            if !book.tags.isEmpty {
+                LabeledContent("Tags", value: book.tags.joined(separator: ", "))
             }
             if let description = book.bookDescription {
                 Text(description)

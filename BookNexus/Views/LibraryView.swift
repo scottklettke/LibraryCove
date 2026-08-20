@@ -31,7 +31,7 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
         switch self {
         case .none: return "None"
         case .author: return "Author"
-        case .genre: return "Genre"
+        case .genre: return "Tags"
         }
     }
 }
@@ -144,7 +144,7 @@ struct LibraryView: View {
                 let haystack = [
                     book.title,
                     book.authorsText,
-                    book.genres.joined(separator: " "),
+                    book.tags.joined(separator: " "),
                     book.physicalLocation ?? "",
                     book.bookDescription ?? "",
                     book.summary ?? "",
@@ -162,7 +162,7 @@ struct LibraryView: View {
         }
         if let filterGenre {
             result = result.filter { book in
-                book.genres.contains { $0.localizedCaseInsensitiveCompare(filterGenre) == .orderedSame }
+                book.tags.contains { $0.localizedCaseInsensitiveCompare(filterGenre) == .orderedSame }
             }
         }
         return result.sorted { lhs, rhs in
@@ -220,14 +220,14 @@ struct LibraryView: View {
         }
     }
 
-    /// Canonical shelf sections for "Group by genre", derived from the active
-    /// plan. Multi-membership: a book appears under every category its tags map
-    /// to, and unmapped books land in a trailing "Other" shelf. Nil when there
-    /// is no valid plan — callers fall back to raw-tag grouping.
-    private var genreSections: [(category: String, books: [Book])]? {
+    /// The two-tier organization for "Group by tags": top-level Fiction /
+    /// Non-fiction / Uncategorized (from stored `Book.kind`), each containing
+    /// the AI shelves. Nil when there is no valid plan — callers fall back to
+    /// raw-tag grouping.
+    private var genreTiers: [(top: String, shelves: [ShelfCategorizer.ShelfSection])]? {
         guard grouping == .genre, let plan = shelfPlan,
               ShelfCategorizer.isValid(plan, forTags: ShelfCategorizer.allGenres(from: visibleBooks)) else { return nil }
-        return ShelfCategorizer.shelfSections(books: filteredBooks, plan: plan)
+        return ShelfCategorizer.twoTierSections(books: filteredBooks, plan: plan)
     }
 
     /// Loads a valid stored plan, or generates (and caches) a fresh one when
@@ -263,7 +263,7 @@ struct LibraryView: View {
     }
 
     private var allGenres: [String] {
-        Set(visibleBooks.flatMap(\.genres)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        Set(visibleBooks.flatMap(\.tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     var body: some View {
@@ -317,7 +317,7 @@ struct LibraryView: View {
                         Label(filterAuthor.map { "Author: \($0)" } ?? "Author", systemImage: "person")
                     }
                     Menu {
-                        Picker("Genre", selection: $filterGenre) {
+                        Picker("Tag", selection: $filterGenre) {
                             Text("All").tag(String?.none)
                             ForEach(allGenres, id: \.self) { genre in
                                 Text(genre).tag(String?.some(genre))
@@ -325,7 +325,7 @@ struct LibraryView: View {
                         }
                         Button("Clear genre") { filterGenre = nil }
                     } label: {
-                        Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
+                        Label(filterGenre.map { "Tag: \($0)" } ?? "Tag", systemImage: "tag")
                     }
                     Menu {
                         Button {
@@ -420,12 +420,12 @@ struct LibraryView: View {
         .fixedSize()
     }
 
-    /// The AI genre-maintenance actions (clean up genres, reorganize shelves)
+    /// The AI genre-maintenance actions (clean up tags, reorganize shelves)
     /// as a visible capsule. Hidden from the toolbar on purpose — see the
     /// content-area note in `body`.
     private var aiToolsMenu: some View {
         Menu {
-            Button("Clean up genres…") { showGenreCleanup = true }
+            Button("Clean up tags…") { showGenreCleanup = true }
             Button("Reorganize shelves…") { showShelfCategories = true }
         } label: {
             Label("AI tools", systemImage: "sparkles")
@@ -462,8 +462,8 @@ struct LibraryView: View {
                     isScrolled = offset < -30
                 }
             )
-        } else if grouping == .genre, genreSections != nil {
-            return AnyView(genreSectionGrid)
+        } else if grouping == .genre, genreTiers != nil {
+            return AnyView(genreTierGrid)
         } else {
             let grouped = Dictionary(grouping: filteredBooks) { book in
                 groupKey(for: book)
@@ -511,27 +511,39 @@ struct LibraryView: View {
         }
     }
 
-    private var genreSectionGrid: some View {
-        let sections = genreSections ?? []
+    private var genreTierGrid: some View {
+        let tiers = genreTiers ?? []
         return ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                ForEach(sections, id: \.category) { section in
+                ForEach(tiers, id: \.top) { tier in
                     Section {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
-                            ForEach(section.books) { book in
-                                NavigationLink {
-                                    BookDetailView(book: book)
-                                } label: {
-                                    BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
+                        ForEach(tier.shelves, id: \.shelf) { shelfSection in
+                            Section {
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
+                                    ForEach(shelfSection.books) { book in
+                                        NavigationLink {
+                                            BookDetailView(book: book)
+                                        } label: {
+                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
-                                .buttonStyle(.plain)
+                                .padding(.horizontal)
+                                .padding(.bottom, 4)
+                            } header: {
+                                Text(shelfSection.shelf)
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal)
+                                    .padding(.top, 4)
                             }
                         }
-                        .padding()
                     } header: {
-                        Text(section.category)
+                        Text(tier.top)
                             .font(.headline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal)
                             .padding(.vertical, 6)
@@ -558,18 +570,24 @@ struct LibraryView: View {
                     BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
                 }
             })
-        } else if grouping == .genre, genreSections != nil {
-            let sections = genreSections ?? []
+        } else if grouping == .genre, genreTiers != nil {
+            let tiers = genreTiers ?? []
             return AnyView(List {
-                ForEach(sections, id: \.category) { section in
-                    Section(section.category) {
-                        ForEach(section.books) { book in
-                            NavigationLink {
-                                BookDetailView(book: book)
-                            } label: {
-                                BookListRow(book: book)
+                ForEach(tiers, id: \.top) { tier in
+                    Section {
+                        ForEach(tier.shelves, id: \.shelf) { shelfSection in
+                            Section(shelfSection.shelf) {
+                                ForEach(shelfSection.books) { book in
+                                    NavigationLink {
+                                        BookDetailView(book: book)
+                                    } label: {
+                                        BookListRow(book: book)
+                                    }
+                                }
                             }
                         }
+                    } header: {
+                        Text(tier.top)
                     }
                 }
             })
@@ -599,7 +617,7 @@ struct LibraryView: View {
     private func groupKey(for book: Book) -> String? {
         switch grouping {
         case .author: return book.authors.first
-        case .genre: return book.genres.first
+        case .genre: return book.tags.first
         case .none: return nil
         }
     }
@@ -621,7 +639,7 @@ struct LibraryView: View {
                 }
             }
             if let filterGenre {
-                chip("Genre: \(filterGenre)", systemImage: "tag") {
+                chip("Tag: \(filterGenre)", systemImage: "tag") {
                     self.filterGenre = nil
                 }
             }

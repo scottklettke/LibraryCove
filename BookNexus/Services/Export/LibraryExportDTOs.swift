@@ -48,7 +48,10 @@ struct BookDTO: Codable {
     var authors: [String]
     var isbn: String?
     var publicationYear: Int?
-    var genres: [String]
+    var tags: [String]
+    /// Fiction / non-fiction classification (`nil` when unset). New field; old
+    /// archives won't have it.
+    var kind: String?
     var coverImageURL: String?
     /// Relative `covers/<bookID>.jpg` zip entry carrying the cover's JPEG
     /// bytes, set only on export. Presence tells import to restore from a file.
@@ -85,7 +88,8 @@ struct BookDTO: Codable {
         authors = model.authors
         isbn = model.isbn
         publicationYear = model.publicationYear
-        genres = model.genres
+        tags = model.tags
+        kind = model.kind.isEmpty ? nil : model.kind
         coverImageURL = model.coverImageURL
         coverImageFile = nil
         publisher = model.publisher
@@ -112,6 +116,100 @@ struct BookDTO: Codable {
         syncState = model.syncState
         syncUpdatedAt = model.syncUpdatedAt
         syncDeviceID = model.syncDeviceID
+    }
+
+    // Custom Codable: the tag field was renamed `genres` → `tags`. Exports emit
+    // only the canonical `tags` key; imports accept either `tags` or the legacy
+    // `genres` key so older archives still restore.
+    private enum CodingKeys: String, CodingKey {
+        case id, title, authors, isbn, publicationYear, tags, kind, coverImageURL
+        case coverImageFile, publisher, pageCount, bookDescription, descriptionSource
+        case summary, originalDescription, originalDescriptionSource, hasImprovedDescription
+        case language, physicalLocation, status, acquiredDate, purchasePrice, rating
+        case loanedTo, loanedDate, ownerID, sharedLibraryID, isPersonal, createdAt
+        case updatedAt, syncState, syncUpdatedAt, syncDeviceID
+        case legacyTags = "genres"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        authors = try c.decode([String].self, forKey: .authors)
+        isbn = try c.decodeIfPresent(String.self, forKey: .isbn)
+        publicationYear = try c.decodeIfPresent(Int.self, forKey: .publicationYear)
+        if let tags = try c.decodeIfPresent([String].self, forKey: .tags) {
+            self.tags = tags
+        } else if let legacy = try c.decodeIfPresent([String].self, forKey: .legacyTags) {
+            // Older archives exported the labels as `genres`.
+            self.tags = legacy
+        } else {
+            self.tags = []
+        }
+        kind = try c.decodeIfPresent(String.self, forKey: .kind)
+        coverImageURL = try c.decodeIfPresent(String.self, forKey: .coverImageURL)
+        coverImageFile = try c.decodeIfPresent(String.self, forKey: .coverImageFile)
+        publisher = try c.decodeIfPresent(String.self, forKey: .publisher)
+        pageCount = try c.decodeIfPresent(Int.self, forKey: .pageCount)
+        bookDescription = try c.decodeIfPresent(String.self, forKey: .bookDescription)
+        descriptionSource = try c.decodeIfPresent(String.self, forKey: .descriptionSource)
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
+        originalDescription = try c.decodeIfPresent(String.self, forKey: .originalDescription)
+        originalDescriptionSource = try c.decodeIfPresent(String.self, forKey: .originalDescriptionSource)
+        hasImprovedDescription = try c.decodeIfPresent(Bool.self, forKey: .hasImprovedDescription)
+        language = try c.decodeIfPresent(String.self, forKey: .language)
+        physicalLocation = try c.decodeIfPresent(String.self, forKey: .physicalLocation)
+        status = try c.decode(String.self, forKey: .status)
+        acquiredDate = try c.decodeIfPresent(Date.self, forKey: .acquiredDate)
+        purchasePrice = try c.decodeIfPresent(Double.self, forKey: .purchasePrice)
+        rating = try c.decodeIfPresent(Int.self, forKey: .rating)
+        loanedTo = try c.decodeIfPresent(String.self, forKey: .loanedTo)
+        loanedDate = try c.decodeIfPresent(Date.self, forKey: .loanedDate)
+        ownerID = try c.decodeIfPresent(String.self, forKey: .ownerID)
+        sharedLibraryID = try c.decodeIfPresent(String.self, forKey: .sharedLibraryID)
+        isPersonal = try c.decode(Bool.self, forKey: .isPersonal)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decode(Date.self, forKey: .updatedAt)
+        syncState = try c.decode(String.self, forKey: .syncState)
+        syncUpdatedAt = try c.decode(Date.self, forKey: .syncUpdatedAt)
+        syncDeviceID = try c.decode(String.self, forKey: .syncDeviceID)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(authors, forKey: .authors)
+        try c.encodeIfPresent(isbn, forKey: .isbn)
+        try c.encodeIfPresent(publicationYear, forKey: .publicationYear)
+        try c.encode(tags, forKey: .tags)
+        try c.encodeIfPresent(kind, forKey: .kind)
+        try c.encodeIfPresent(coverImageURL, forKey: .coverImageURL)
+        try c.encodeIfPresent(coverImageFile, forKey: .coverImageFile)
+        try c.encodeIfPresent(publisher, forKey: .publisher)
+        try c.encodeIfPresent(pageCount, forKey: .pageCount)
+        try c.encodeIfPresent(bookDescription, forKey: .bookDescription)
+        try c.encodeIfPresent(descriptionSource, forKey: .descriptionSource)
+        try c.encodeIfPresent(summary, forKey: .summary)
+        try c.encodeIfPresent(originalDescription, forKey: .originalDescription)
+        try c.encodeIfPresent(originalDescriptionSource, forKey: .originalDescriptionSource)
+        try c.encodeIfPresent(hasImprovedDescription, forKey: .hasImprovedDescription)
+        try c.encodeIfPresent(language, forKey: .language)
+        try c.encodeIfPresent(physicalLocation, forKey: .physicalLocation)
+        try c.encode(status, forKey: .status)
+        try c.encodeIfPresent(acquiredDate, forKey: .acquiredDate)
+        try c.encodeIfPresent(purchasePrice, forKey: .purchasePrice)
+        try c.encodeIfPresent(rating, forKey: .rating)
+        try c.encodeIfPresent(loanedTo, forKey: .loanedTo)
+        try c.encodeIfPresent(loanedDate, forKey: .loanedDate)
+        try c.encodeIfPresent(ownerID, forKey: .ownerID)
+        try c.encodeIfPresent(sharedLibraryID, forKey: .sharedLibraryID)
+        try c.encode(isPersonal, forKey: .isPersonal)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(updatedAt, forKey: .updatedAt)
+        try c.encode(syncState, forKey: .syncState)
+        try c.encode(syncUpdatedAt, forKey: .syncUpdatedAt)
+        try c.encode(syncDeviceID, forKey: .syncDeviceID)
     }
 }
 

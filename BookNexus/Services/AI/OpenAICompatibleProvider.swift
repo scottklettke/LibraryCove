@@ -319,10 +319,15 @@ final class OpenAICompatibleProvider: AIModelProviding {
         }
         messages.append(["role": "user", "content": prompt.user])
 
+        // Generous output budget: reasoning/thinking models consume part of the
+        // budget for chain-of-thought, and genre/shelf requests ask for long
+        // JSON. A small cap (1024) let thinking eat the whole budget, so the
+        // server returned `content` empty and every AI-assisted genre feature
+        // failed with "Missing text content in message."
         let body: [String: Any] = [
             "model": model,
             "messages": messages,
-            "max_tokens": 1024,
+            "max_tokens": 8192,
         ]
 
         var request = URLRequest(url: url)
@@ -369,10 +374,29 @@ final class OpenAICompatibleProvider: AIModelProviding {
         guard let message = first["message"] as? [String: Any] else {
             throw AIError.decoding("Missing message in first choice.")
         }
-        guard let content = message["content"] as? String else {
-            throw AIError.decoding("Missing text content in message.")
+        // Accept the standard string form, and the content-part array form
+        // (`[{"type":"text","text":…}, …]`) some OpenAI-compatible servers
+        // return. A missing string content with only `reasoning`/CoT present is
+        // surfaced as a precise error instead of "Missing text content".
+        if let text = message["content"] as? String, !text.isEmpty {
+            return text
         }
-        return content
+        if let parts = message["content"] as? [[String: Any]] {
+            let joined = parts.compactMap { part -> String? in
+                guard part["type"] as? String == "text" else { return nil }
+                guard let text = part["text"] as? String, !text.isEmpty else { return nil }
+                return text
+            }.joined(separator: "\n")
+            if !joined.isEmpty { return joined }
+        }
+        if let reasoning = message["reasoning_content"] as? String, !reasoning.isEmpty {
+            return reasoning
+        }
+        if let reasoning = message["reasoning"] as? String, !reasoning.isEmpty {
+            return reasoning
+        }
+        throw AIError.decoding(
+            "The model returned no visible text response — it likely ran out of output tokens. Retry and check Settings → AI.")
     }
 
     private static func trimmedSnippet(_ body: String) -> String {

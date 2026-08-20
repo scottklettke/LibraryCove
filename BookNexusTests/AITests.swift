@@ -140,7 +140,9 @@ final class MockURLProtocol: URLProtocol {
             // Not the old hardcoded gpt-4o-mini: it's the chat-capable id the
             // server list actually contained.
             #expect(body["model"] as? String == "gpt-4o-2024-11-20")
-            #expect(body["max_tokens"] as? Int == 1024)
+            // Generous output budget so reasoning/thinking models cannot burn
+            // the whole budget on chain-of-thought (see makeRequest).
+            #expect(body["max_tokens"] as? Int == 8192)
             let messages = try #require(body["messages"] as? [[String: String]])
             #expect(messages.count == 1)
             #expect(messages[0]["role"] == "user")
@@ -739,6 +741,35 @@ final class MockURLProtocol: URLProtocol {
             Issue.record("expected unsupported error for image prompts")
         } catch AIError.unsupported {
             // expected — images are rejected before anything else
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    // MARK: - Response decoding tolerance
+
+    // Reasoning models can emit `content` as a list of text parts or leave it
+    // absent with only chain-of-thought — decoding must not throw a cryptic
+    // "Missing text content" on those shapes.
+    @Test func decodeMessageAcceptsArrayContentParts() throws {
+        let json = #"{"choices":[{"message":{"role":"assistant","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}}]}"#
+        let text = try OpenAICompatibleProvider.decodeMessage(from: Data(json.utf8))
+        #expect(text == "first\nsecond")
+    }
+
+    @Test func decodeMessageFallsBackToReasoningWhenContentMissing() throws {
+        let json = #"{"choices":[{"message":{"role":"assistant","content":null,"reasoning_content":"some chain of thought"}}]}"#
+        let text = try OpenAICompatibleProvider.decodeMessage(from: Data(json.utf8))
+        #expect(text.contains("chain of thought"))
+    }
+
+    @Test func decodeMessageRejectsEmptyWithDescriptiveError() {
+        let json = #"{"choices":[{"message":{"role":"assistant"}}]}"#
+        do {
+            _ = try OpenAICompatibleProvider.decodeMessage(from: Data(json.utf8))
+            Issue.record("expected a decode failure for an empty assistant message")
+        } catch let error as AIError {
+            #expect(error.localizedDescription.contains("no visible text"))
         } catch {
             Issue.record("unexpected error: \(error)")
         }

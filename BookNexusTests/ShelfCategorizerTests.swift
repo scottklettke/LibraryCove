@@ -34,6 +34,19 @@ struct ShelfCategorizerTests {
         #expect(mappings.isEmpty)
     }
 
+    @Test func parseAcceptsSingleStringCategory() throws {
+        let data = try #require(Data(#"[{"tag":"history","categories":"History"}]"#.utf8))
+        let mappings = try ShelfCategorizer.parseMappings(from: data)
+        #expect(mappings == [GenreTagMapping(tag: "history", categories: ["History"])])
+    }
+
+    @Test func parseRecoversFromTruncatedJSON() throws {
+        // Model output cut off mid-element: the complete leading row survives.
+        let data = try #require(Data(#"[{"tag":"sci-fi","categories":["Fiction"]},{"tag":"history","categ"}]"#.utf8))
+        let mappings = try ShelfCategorizer.parseMappings(from: data)
+        #expect(mappings == [GenreTagMapping(tag: "sci-fi", categories: ["Fiction"])])
+    }
+
     // MARK: - Fingerprint
 
     @Test func fingerprintIsDeterministicAndOrderInsensitive() {

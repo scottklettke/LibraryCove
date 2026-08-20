@@ -271,6 +271,18 @@ struct LibraryView: View {
             if hasActiveFilters {
                 activeFiltersBar
             }
+            // AI genre maintenance. Deliberately in the content area, not the
+            // toolbar: on iPhone any extra toolbar item (trailing or leading)
+            // is folded into the hidden "More" overflow, which is the opposite
+            // of discoverable.
+            if !visibleBooks.isEmpty && viewMode != .dashboard {
+                HStack {
+                    Spacer()
+                    aiToolsMenu
+                }
+                .padding(.horizontal)
+                .padding(.top, 6)
+            }
             Group {
                 switch viewMode {
                 case .grid: gridView
@@ -312,11 +324,6 @@ struct LibraryView: View {
                             }
                         }
                         Button("Clear genre") { filterGenre = nil }
-                        Divider()
-                        // AI-assisted cleanup of the library's genre labels.
-                        Button("Clean up genres…") { showGenreCleanup = true }
-                        // AI-proposed canonical shelf categories for Group by genre.
-                        Button("Reorganize shelves…") { showShelfCategories = true }
                     } label: {
                         Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
                     }
@@ -411,6 +418,23 @@ struct LibraryView: View {
         }
         .pickerStyle(.menu)
         .fixedSize()
+    }
+
+    /// The AI genre-maintenance actions (clean up genres, reorganize shelves)
+    /// as a visible capsule. Hidden from the toolbar on purpose — see the
+    /// content-area note in `body`.
+    private var aiToolsMenu: some View {
+        Menu {
+            Button("Clean up genres…") { showGenreCleanup = true }
+            Button("Reorganize shelves…") { showShelfCategories = true }
+        } label: {
+            Label("AI tools", systemImage: "sparkles")
+                .font(.footnote.bold())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.thinMaterial)
+                .clipShape(Capsule())
+        }
     }
 
 

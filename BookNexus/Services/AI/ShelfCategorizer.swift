@@ -100,12 +100,49 @@ enum ShelfCategorizer {
 
     // MARK: - Parsing
 
+    /// Parses the model's JSON array, recovering from truncation: when the
+    /// payload is cut off mid-element (output-budget exhaustion, or a server
+    /// that stops before the closing bracket), a partial trailing element is
+    /// dropped and the array is closed with `]`. Complete leading mappings are
+    /// kept — a truncated plan still yields working shelves (unmapped tags fall
+    /// to "Other") instead of failing the whole feature. Returns nil when no
+    /// repair succeeds.
+    private static func reparsedJSONArray(from data: Data) -> [[String: Any]]? {
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        let full = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !full.isEmpty, full.hasPrefix("[") else { return nil }
+
+        func parse(_ s: String) -> [[String: Any]]? {
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(s.utf8)) else { return nil }
+            return obj as? [[String: Any]]
+        }
+
+        if let direct = parse(full) { return direct }
+
+        // Truncation repair. Only positions ending at a complete element
+        // boundary (`}` or `]`, after stripping trailing commas) can close the
+        // array, so the scan attempts few parses and stops at the longest
+        // recoverable prefix.
+        var candidate = full
+        while !candidate.isEmpty {
+            var closed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            while closed.hasSuffix(",") {
+                closed = String(closed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            if closed.hasSuffix("}") || closed.hasSuffix("]") {
+                if let arr = parse(closed + "]") { return arr }
+            }
+            if candidate == "[" { break }
+            candidate = String(candidate.dropLast())
+        }
+        return nil
+    }
+
     static func parseMappings(from data: Data) throws -> [GenreTagMapping] {
         // Tolerant on purpose: the input is free-form model output, so one
         // malformed row (missing key, empty tag, empty categories) must be
         // skipped rather than fail the whole plan.
-        let json = try JSONSerialization.jsonObject(with: data)
-        guard let rows = json as? [[String: Any]] else { return [] }
+        guard let rows = try? reparsedJSONArray(from: data) else { return [] }
         var seenTags = Set<String>()
         var out: [GenreTagMapping] = []
         for row in rows {
@@ -116,7 +153,16 @@ enum ShelfCategorizer {
             guard !seenTags.contains(tagKey) else { continue }
             seenTags.insert(tagKey)
 
-            guard let rawCategories = row["categories"] as? [String] else { continue }
+            // Accept both the array form and a single string (models sometimes
+            // emit one category as a bare string).
+            let rawCategories: [String]
+            if let array = row["categories"] as? [String] {
+                rawCategories = array
+            } else if let single = row["categories"] as? String, !single.isEmpty {
+                rawCategories = [single]
+            } else {
+                continue
+            }
             var categories: [String] = []
             var seenCategories = Set<String>()
             for raw in rawCategories {

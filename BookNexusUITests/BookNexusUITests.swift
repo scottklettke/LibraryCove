@@ -136,7 +136,12 @@ final class BookNexusUITests: XCTestCase {
             }
             guard addButton.isHittable else { break }
             let current = remainingCount(app) ?? 0
-            addButton.tap()
+            // The pager can re-render (element identities change) under slow
+            // first-run conditions; re-resolve and wait before tapping so a
+            // mid-transition query never finds nothing.
+            let target = app.buttons["Add to library"]
+            guard target.waitForExistence(timeout: 5), target.isHittable else { break }
+            target.tap()
             if current > 1 {
                 guard app.navigationBars["\(current - 1) remaining"].waitForExistence(timeout: 10) else { break }
             } else {
@@ -520,16 +525,25 @@ final class BookNexusUITests: XCTestCase {
     }
 
     /// Genre cleanup over an engine-less simulator must show the error state
-    /// with a Retry, not a blank sheet.
+    /// with a Retry, not a blank sheet. Runs on a populated library: the AI
+    /// tools menu lives in the trailing toolbar, which (like the Add button)
+    /// is only rendered when the library is non-empty.
     func testGenreCleanupShowsErrorStateWithRetry() throws {
-        let app = baseApp()
+        let app = pendingScansApp()
         app.launch()
         enterLibraryIfNeeded(app)
+        addSeededBooks(app) // imports both seeded books → non-empty library
 
-        // "Clean up genres…" lives in the toolbar's Genre menu.
-        let genreMenu = app.buttons["Genre"]
-        XCTAssertTrue(genreMenu.waitForExistence(timeout: 10), "Genre menu missing in toolbar")
-        genreMenu.tap()
+        // "Clean up genres…" and "Reorganize shelves…" live in the dedicated AI
+        // toolbar menu (not buried at the bottom of the genre filter).
+        let aiMenu = app.buttons["AI tools"]
+        XCTAssertTrue(aiMenu.waitForExistence(timeout: 10), "AI tools menu missing")
+        aiMenu.tap()
+        let reorganize = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Reorganize shelves'")
+        ).firstMatch
+        XCTAssertTrue(reorganize.waitForExistence(timeout: 5),
+                      "Reorganize shelves missing from AI menu")
         let cleanup = app.buttons.matching(
             NSPredicate(format: "label CONTAINS 'Clean up genres'")
         ).firstMatch

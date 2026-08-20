@@ -124,6 +124,11 @@ struct LibraryView: View {
     @State private var isScrolled = false
     @State private var filteredSheet: FilteredSheet?
     @State private var showGenreCleanup = false
+    @State private var showShelfCategories = false
+    /// The active canonical shelf plan for "Group by genre". Only set while it
+    /// matches the library's current tag set (fingerprint-validated); a stale
+    /// or missing plan makes genre grouping fall back to raw tags.
+    @State private var shelfPlan: ShelfCategoryPlan?
 
     private var filteredBooks: [Book] {
         let visible = books.filter { $0.status != BookStatus.donated.rawValue }
@@ -215,6 +220,40 @@ struct LibraryView: View {
         }
     }
 
+    /// Canonical shelf sections for "Group by genre", derived from the active
+    /// plan. Multi-membership: a book appears under every category its tags map
+    /// to, and unmapped books land in a trailing "Other" shelf. Nil when there
+    /// is no valid plan — callers fall back to raw-tag grouping.
+    private var genreSections: [(category: String, books: [Book])]? {
+        guard grouping == .genre, let plan = shelfPlan,
+              ShelfCategorizer.isValid(plan, forTags: ShelfCategorizer.allGenres(from: visibleBooks)) else { return nil }
+        return ShelfCategorizer.shelfSections(books: filteredBooks, plan: plan)
+    }
+
+    /// Loads a valid stored plan, or generates (and caches) a fresh one when
+    /// the library's tag set has changed. Model failures degrade gracefully to
+    /// raw-tag grouping instead of blocking the library.
+    private func refreshShelfPlanIfNeeded() async {
+        guard grouping == .genre else { return }
+        let tags = ShelfCategorizer.allGenres(from: visibleBooks)
+        guard !tags.isEmpty else {
+            shelfPlan = nil
+            return
+        }
+        if let stored = ShelfCategorizer.storedPlan(),
+           ShelfCategorizer.isValid(stored, forTags: tags) {
+            shelfPlan = stored
+            return
+        }
+        if let plan = try? await ShelfCategorizer.generatePlan(books: visibleBooks),
+           !plan.mappings.isEmpty {
+            shelfPlan = plan
+            ShelfCategorizer.store(plan)
+        } else {
+            shelfPlan = nil
+        }
+    }
+
     private var visibleBooks: [Book] {
         books.filter { $0.status != BookStatus.donated.rawValue }
     }
@@ -276,6 +315,8 @@ struct LibraryView: View {
                         Divider()
                         // AI-assisted cleanup of the library's genre labels.
                         Button("Clean up genres…") { showGenreCleanup = true }
+                        // AI-proposed canonical shelf categories for Group by genre.
+                        Button("Reorganize shelves…") { showShelfCategories = true }
                     } label: {
                         Label(filterGenre.map { "Genre: \($0)" } ?? "Genre", systemImage: "tag")
                     }
@@ -317,9 +358,18 @@ struct LibraryView: View {
         .sheet(isPresented: $showGenreCleanup) {
             GenreCleanupView(books: visibleBooks)
         }
+        .sheet(isPresented: $showShelfCategories) {
+            ShelfCategoriesView(books: visibleBooks)
+        }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }
         .onChange(of: grouping) { isScrolled = false }
+        // (Re)build the canonical shelf plan whenever genre grouping is used.
+        // Fingerprint gating means no AI call unless the library's tag set
+        // actually changed since the last valid plan.
+        .task(id: grouping) {
+            await refreshShelfPlanIfNeeded()
+        }
         .sheet(isPresented: $showAdd) {
             AddBookView()
         }
@@ -388,6 +438,8 @@ struct LibraryView: View {
                     isScrolled = offset < -30
                 }
             )
+        } else if grouping == .genre, genreSections != nil {
+            return AnyView(genreSectionGrid)
         } else {
             let grouped = Dictionary(grouping: filteredBooks) { book in
                 groupKey(for: book)
@@ -435,6 +487,42 @@ struct LibraryView: View {
         }
     }
 
+    private var genreSectionGrid: some View {
+        let sections = genreSections ?? []
+        return ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                ForEach(sections, id: \.category) { section in
+                    Section {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
+                            ForEach(section.books) { book in
+                                NavigationLink {
+                                    BookDetailView(book: book)
+                                } label: {
+                                    BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding()
+                    } header: {
+                        Text(section.category)
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal)
+                            .padding(.vertical, 6)
+                            .background(Color(uiColor: .systemGroupedBackground))
+                    }
+                }
+            }
+            .background(ScrollOffsetTracker())
+        }
+        .coordinateSpace(name: "libraryScroll")
+        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+            isScrolled = offset < -30
+        }
+    }
+
     // MARK: - List
 
     private var listView: some View {
@@ -444,6 +532,21 @@ struct LibraryView: View {
                     BookDetailView(book: book)
                 } label: {
                     BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
+                }
+            })
+        } else if grouping == .genre, genreSections != nil {
+            let sections = genreSections ?? []
+            return AnyView(List {
+                ForEach(sections, id: \.category) { section in
+                    Section(section.category) {
+                        ForEach(section.books) { book in
+                            NavigationLink {
+                                BookDetailView(book: book)
+                            } label: {
+                                BookListRow(book: book)
+                            }
+                        }
+                    }
                 }
             })
         } else {

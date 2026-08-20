@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import MarkdownUI
 
 /// "Ask AI" tab: a chat with recommendations and book answers, grounded in a
 /// snapshot of the library and a locally persisted short transcript.
@@ -16,11 +17,14 @@ struct AIAskView: View {
     @State private var memory: any ConversationMemory = ConversationMemoryFactory.make()
     @Environment(\.openLibraryTab) private var openLibraryTab
 
-    private static let suggestions = [
-        "What should I read next?",
-        "Recommend authors like my favorites",
-        "About my current book",
-    ]
+    /// Context-aware chips: fixed starters on an empty chat, then follow-ups
+    /// derived from the conversation and library. Tapping one fills the input
+    /// (it doesn't auto-send). Deterministic — no model call — so they update
+    /// instantly and the selected engine only runs when a chip is actually
+    /// sent.
+    private var suggestions: [String] {
+        AskSuggestions.forChat(turns: turns, books: books)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -139,11 +143,16 @@ struct AIAskView: View {
     private func bubble(_ turn: AITurn) -> some View {
         HStack {
             if turn.role == .user { Spacer(minLength: 48) }
-            Text(turn.text)
+            // Render markdown (bold, lists, headings) the model may emit; a
+            // parsed bubble keeps the transcript stored as plain text so the
+            // markdown survives re-rendering and copying verbatim.
+            Markdown(turn.text)
+                .markdownTextStyle {
+                    ForegroundColor(turn.role == .user ? Color(uiColor: .white) : Color.primary)
+                }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(turn.role == .user ? Color.accentColor : Color(uiColor: .secondarySystemFill))
-                .foregroundStyle(turn.role == .user ? .white : .primary)
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .textSelection(.enabled)
                 .frame(maxWidth: 340, alignment: turn.role == .user ? .trailing : .leading)
@@ -154,7 +163,7 @@ struct AIAskView: View {
     private var suggestionChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(Self.suggestions, id: \.self) { suggestion in
+                ForEach(suggestions, id: \.self) { suggestion in
                     Button {
                         input = suggestion
                     } label: {

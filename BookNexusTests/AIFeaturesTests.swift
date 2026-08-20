@@ -75,6 +75,87 @@ import SwiftData
         #expect(LocalTranscriptMemory(storageURL: url).load().isEmpty)
     }
 
+    // MARK: - Ask AI suggestions
+
+    private func suggestionBooks() -> [Book] {
+        [
+            Book(title: "Dune", authors: ["Frank Herbert"], genres: ["Sci-Fi"],
+                 status: "reading", rating: 5,
+                 createdAt: Date(timeIntervalSince1970: 3000)),
+            Book(title: "The Hobbit", authors: ["J.R.R. Tolkien"], genres: ["Fantasy", "Fantasy"],
+                 rating: 4, createdAt: Date(timeIntervalSince1970: 2000)),
+            Book(title: "Meditations", authors: ["Marcus Aurelius"], genres: ["Philosophy"],
+                 rating: 3, createdAt: Date(timeIntervalSince1970: 1000)),
+        ]
+    }
+
+    @Test func emptyConversationShowsStaticStarters() {
+        #expect(AskSuggestions.forChat(turns: [], books: suggestionBooks())
+                == AskSuggestions.starters)
+    }
+
+    @Test func recommendationThreadGetsContinuationAndLibraryGroundedChips() {
+        let turns = [
+            AITurn(role: .user, text: "What should I read next?", date: Date(timeIntervalSince1970: 10)),
+            AITurn(role: .assistant, text: "Something in Sci-Fi.", date: Date(timeIntervalSince1970: 11)),
+            AITurn(role: .user, text: "Recommend my next read", date: Date(timeIntervalSince1970: 12)),
+        ]
+        let suggestions = AskSuggestions.forChat(turns: turns, books: suggestionBooks())
+        // Continuation tied to the recommendation thread…
+        #expect(suggestions.contains("Which of those should I start with?"))
+        // …library grounding via the currently-reading book…
+        #expect(suggestions.contains("Find books similar to “Dune”"))
+        #expect(suggestions.count <= AskSuggestions.starters.count)
+        // …and never a duplicate.
+        #expect(Set(suggestions).count == suggestions.count)
+    }
+
+    @Test func authorAskYieldsAuthorContinuation() {
+        let turns = [AITurn(role: .user, text: "Recommend authors like my favorites", date: .init())]
+        let suggestions = AskSuggestions.forChat(turns: turns, books: suggestionBooks())
+        #expect(suggestions.contains("Recommend another author I'd like"))
+    }
+
+    @Test func themesAskYieldsThemesContinuation() {
+        let turns = [AITurn(role: .user, text: "Tell me about the themes in my books", date: .init())]
+        let suggestions = AskSuggestions.forChat(turns: turns, books: suggestionBooks())
+        // "about" and "theme" are both present; the theme branch wins and is
+        // more specific to the ask than the generic "Tell me more" fallback.
+        #expect(suggestions.first == "Break down the main themes of that book")
+    }
+
+    @Test func suggestionsNeverExceedStarterCount() {
+        let huge = (0..<40).map { i in
+            Book(title: "Book \(i)", authors: ["A\(i)"], genres: ["Thriller"],
+                 status: i == 0 ? "reading" : "to-read", rating: 4)
+        }
+        let turns = [AITurn(role: .user, text: "Suggest something good", date: .init())]
+        let suggestions = AskSuggestions.forChat(turns: turns, books: huge)
+        #expect(suggestions.count <= AskSuggestions.starters.count)
+        #expect(Set(suggestions).count == suggestions.count)
+    }
+
+    @Test func mostCommonGenreIsDeterministic() {
+        let books = [
+            Book(title: "A", authors: [], genres: ["Zebra", "Apples"]),
+            Book(title: "B", authors: [], genres: ["apples"]),
+            Book(title: "C", authors: [], genres: ["  Zebra  ", "Zebra"]),
+        ]
+        // Zebra (each book's genres counted, case/whitespace normalized:
+        // 1 + 2) beats apples (1+1). Intra-book duplicates contribute within
+        // that book, matching the library-snapshot counting.
+        #expect(AskSuggestions.mostCommonGenre(books) == "Zebra")
+    }
+
+    @Test func mostCommonGenreTieBreaksAlphabetically() {
+        let books = [
+            Book(title: "A", authors: [], genres: ["Zebra"]),
+            Book(title: "B", authors: [], genres: ["Apples"]),
+        ]
+        // Equal counts → deterministic localized-case-insensitive alpha pick.
+        #expect(AskSuggestions.mostCommonGenre(books) == "Apples")
+    }
+
     // MARK: - Library snapshot
 
     @Test func snapshotIncludesReadingTopRatedGenresAndRecent() throws {
@@ -521,9 +602,12 @@ import SwiftData
         AIConfig.resetForTesting()
         defer { AIConfig.resetForTesting() }
         AIConfig.selectedEngine = .openAI
-        AIConfig.openAIBaseURL = "https://api.example.com/v1"
+        // Unique host so this suite can't pick up a model list another suite's
+        // tests warmed in the shared discovery cache.
+        AIConfig.openAIBaseURL = "https://context-window-isolated.example/v1"
         AIConfig.openAIAPIKey = "test-key"
         AIConfig.maxContextTokens = 8192
+        OpenAICompatibleProvider.flushModelCache()
 
         let limit = await AIService.shared.effectiveContextTokens()
         #expect(limit == 8192)

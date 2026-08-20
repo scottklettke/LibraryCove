@@ -44,7 +44,7 @@ final class OpenAICompatibleProvider: AIModelProviding {
     private static let modelCacheTTL: TimeInterval = 300
 
     private struct CachedModelList {
-        let ids: [String]
+        let infos: [AIModelInfo]
         let fetchedAt: Date
     }
 
@@ -84,20 +84,20 @@ final class OpenAICompatibleProvider: AIModelProviding {
         return stripped.lowercased()
     }
 
-    private static func cachedModelList(forKey key: String) -> [String]? {
+    private static func cachedModelInfos(forKey key: String) -> [AIModelInfo]? {
         discoveryLock.lock()
         defer { discoveryLock.unlock() }
         guard let cached = modelListCache[key],
               Date().timeIntervalSince(cached.fetchedAt) < modelCacheTTL else {
             return nil
         }
-        return cached.ids
+        return cached.infos
     }
 
-    private static func storeModelList(_ ids: [String], forKey key: String) {
+    private static func storeModelInfos(_ infos: [AIModelInfo], forKey key: String) {
         discoveryLock.lock()
         defer { discoveryLock.unlock() }
-        modelListCache[key] = CachedModelList(ids: ids, fetchedAt: Date())
+        modelListCache[key] = CachedModelList(infos: infos, fetchedAt: Date())
     }
 
     /// Normalizes a user-typed base URL into a model-list endpoint, parallel
@@ -118,14 +118,15 @@ final class OpenAICompatibleProvider: AIModelProviding {
         return URL(string: "\(prefix)/models")
     }
 
-    /// GETs `{base}/v1/models` and returns the server's model ids sorted
-    /// alphabetically. Reuses the same status/decoding/network error mapping
-    /// as chat so failures surface consistently. Results are cached for
-    /// `modelCacheTTL` keyed on the normalized endpoint.
-    func listModels() async throws -> [String] {
+    /// GETs `{base}/v1/models` and returns the server's model entries (id plus
+    /// whatever metadata the server publishes — name, context window) sorted by
+    /// id. Reuses the same status/decoding/network error mapping as chat so
+    /// failures surface consistently. Results are cached for `modelCacheTTL`
+    /// keyed on the normalized endpoint.
+    func listModelInfos() async throws -> [AIModelInfo] {
         guard !baseURL.isEmpty else { throw AIError.notConfigured }
         let key = Self.cacheKey(for: baseURL)
-        if let cached = Self.cachedModelList(forKey: key) {
+        if let cached = Self.cachedModelInfos(forKey: key) {
             return cached
         }
         guard let url = Self.modelsURL(for: baseURL) else { throw AIError.notConfigured }
@@ -151,14 +152,16 @@ final class OpenAICompatibleProvider: AIModelProviding {
             let snippet = String(data: data, encoding: .utf8) ?? ""
             throw AIError.server(status: http.statusCode, body: Self.trimmedSnippet(snippet))
         }
-        let ids = try Self.decodeModelIDs(from: data)
-        Self.storeModelList(ids, forKey: key)
-        return ids
+        let infos = try Self.decodeModelInfos(from: data)
+        Self.storeModelInfos(infos, forKey: key)
+        return infos
     }
 
     /// Parses the OpenAI-compatible model list shape
-    /// (`{"data":[{"id":"…"},…]}`) and returns the sorted non-empty ids.
-    static func decodeModelIDs(from data: Data) throws -> [String] {
+    /// (`{"data":[{"id":"…", …},…]}`) and returns the entries sorted by id.
+    /// Only `id` is required; `name` and `context_length` are consumed when a
+    /// server (e.g. OpenRouter) publishes them and degrade to nil otherwise.
+    static func decodeModelInfos(from data: Data) throws -> [AIModelInfo] {
         let object: [String: Any]
         do {
             guard let parsed = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -173,13 +176,16 @@ final class OpenAICompatibleProvider: AIModelProviding {
         guard let dataArray = object["data"] as? [[String: Any]] else {
             throw AIError.decoding("Missing data array.")
         }
-        var ids: [String] = []
+        var infos: [AIModelInfo] = []
         for item in dataArray {
-            if let id = item["id"] as? String, !id.isEmpty {
-                ids.append(id)
-            }
+            guard let id = item["id"] as? String, !id.isEmpty else { continue }
+            let name = item["name"] as? String
+            // JSONSerialization yields an NSNumber for numeric JSON; `as? Int`
+            // bridges integer NSNumber values and drops fractional/string ones.
+            let contextLength = item["context_length"] as? Int
+            infos.append(AIModelInfo(id: id, name: name, contextLength: contextLength))
         }
-        return ids.sorted()
+        return infos.sorted { $0.id < $1.id }
     }
 
     /// Picks the id most likely to accept a Chat Completions request, so auto
@@ -210,7 +216,8 @@ final class OpenAICompatibleProvider: AIModelProviding {
         if !model.isEmpty {
             return model
         }
-        let ids = try await listModels()
+        let infos = try await listModelInfos()
+        let ids = infos.map(\.id)
         guard let chosen = Self.chooseChatModel(from: ids) else {
             throw AIError.unsupported(
                 "Could not identify a chat model — set one in Settings → AI.")
@@ -218,9 +225,35 @@ final class OpenAICompatibleProvider: AIModelProviding {
         return chosen
     }
 
-    /// The OpenAI-compatible server's window is whatever the user configured
-    /// in Settings → AI (this engine has no way to query the server for it).
-    var contextTokenLimit: Int? { AIConfig.maxContextTokens }
+    /// The window the server itself declared for the in-use model, when the
+    /// discovery cache knows it. Multi-model gateways (e.g. OpenRouter) publish
+    /// `context_length` per model in `GET /v1/models`, so once Settings has
+    /// fetched that list the app sizes requests to the real window instead of
+    /// the manual setting. Consults the discovery cache only — never blocks a
+    /// request on the network — and falls back to `AIConfig.maxContextTokens`
+    /// when the list isn't cached, the model isn't listed, the server declares
+    /// no window, or the value is out of the pipeline's safe range.
+    func contextTokenLimit() async -> Int? {
+        guard !baseURL.isEmpty else { return AIConfig.maxContextTokens }
+        guard let infos = Self.cachedModelInfos(forKey: Self.cacheKey(for: baseURL)) else {
+            return AIConfig.maxContextTokens
+        }
+        let target: AIModelInfo?
+        if !model.isEmpty {
+            target = infos.first { $0.id == model }
+        } else {
+            let ids = infos.map(\.id)
+            guard let chosen = Self.chooseChatModel(from: ids) else {
+                return AIConfig.maxContextTokens
+            }
+            target = infos.first { $0.id == chosen }
+        }
+        guard let length = target?.contextLength,
+              length >= AIConfig.minContextTokens else {
+            return AIConfig.maxContextTokens
+        }
+        return min(length, AIConfig.maxContextTokensCeiling)
+    }
 
     func generate(_ prompt: AIPrompt) async throws -> String {
         guard prompt.images.isEmpty else {

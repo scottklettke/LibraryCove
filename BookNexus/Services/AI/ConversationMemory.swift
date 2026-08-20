@@ -36,8 +36,22 @@ extension ConversationMemory {
 
 /// Provides the default memory implementation used by the app.
 enum ConversationMemoryFactory {
+    /// The live app always uses the local file transcript. UI tests can inject
+    /// a scenario via `UI_TEST_TRANSCRIPT` (JSON `[AITurn]`): the seeded chat
+    /// overwrites the transcript on disk so rendering/behavior tests start
+    /// deterministically instead of inheriting leftover simulator chat.
     static func make() -> any ConversationMemory {
-        LocalTranscriptMemory()
+        let memory = LocalTranscriptMemory()
+        guard let raw = ProcessInfo.processInfo.environment["UI_TEST_TRANSCRIPT"],
+              let data = raw.data(using: .utf8),
+              let turns = try? JSONDecoder().decode([AITurn].self, from: data) else {
+            return memory
+        }
+        memory.clear()
+        for turn in turns {
+            memory.append(turn)
+        }
+        return memory
     }
 }
 

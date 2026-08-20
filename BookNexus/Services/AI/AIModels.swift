@@ -36,6 +36,19 @@ enum AIAvailability: Equatable, Sendable {
     case unavailable(String) // explains why (not configured, error, etc.)
 }
 
+/// One entry in an OpenAI-compatible `GET /v1/models` response. Servers are
+/// only required to report `id`; richer ones (e.g. OpenRouter) also publish a
+/// human-readable name and the model's declared context window, which the app
+/// uses to label the Model picker and size requests. Optional fields parse as
+/// nil, so the plain id-only shape standard OpenAI endpoints return works
+/// unchanged.
+struct AIModelInfo: Equatable, Sendable {
+    let id: String
+    let name: String?
+    /// The model's total context window in tokens, when the server declared it.
+    let contextLength: Int?
+}
+
 /// A single request to an inference provider.
 struct AIPrompt: Sendable {
     var system: String?
@@ -64,8 +77,9 @@ extension AIModelProviding {
     /// it can't report one (callers then fall back to the user-configured
     /// `AIConfig.maxContextTokens`). The on-device provider reports Apple's
     /// fixed session limit; the OpenAI-compatible provider reports the
-    /// configured window.
-    var contextTokenLimit: Int? { nil }
+    /// server-declared window for the in-use model when the discovery cache
+    /// knows it, else the configured value.
+    func contextTokenLimit() async -> Int? { nil }
 }
 
 /// Errors surfaced by the AI layer. Localized so SwiftUI can present them

@@ -68,6 +68,20 @@ final class MockURLProtocol: URLProtocol {
         return AITests.jsonResponse(request, status: 200, body: String(data: json, encoding: .utf8)!)
     }
 
+    /// A fake `GET {base}/v1/models` response carrying rich `AIModelInfo`
+    /// entries (optional name and context window), like OpenRouter provides.
+    private static func modelsResponse(_ request: URLRequest, infos: [AIModelInfo]) -> (HTTPURLResponse, Data) {
+        let data = infos.map { info -> [String: Any] in
+            var item: [String: Any] = ["id": info.id, "object": "model"]
+            if let name = info.name { item["name"] = name }
+            if let contextLength = info.contextLength { item["context_length"] = contextLength }
+            return item
+        }
+        let body: [String: Any] = ["object": "list", "data": data]
+        let json = try! JSONSerialization.data(withJSONObject: body)
+        return AITests.jsonResponse(request, status: 200, body: String(data: json, encoding: .utf8)!)
+    }
+
     private static func jsonResponse(_ request: URLRequest, status: Int, body: String) -> (HTTPURLResponse, Data) {
         let response = HTTPURLResponse(
             url: request.url!,
@@ -399,6 +413,124 @@ final class MockURLProtocol: URLProtocol {
     }
 
     // MARK: - AIService + AIConfig integration
+
+    // MARK: - Provider: model metadata + server-declared context
+
+    @Test func decodeModelInfosReadsOptionalMetadata() throws {
+        let json = #"{"data":[{"id":"openai/gpt-4o-mini","name":"OpenAI: GPT-4o-mini","context_length":128000},{"id":"ollama/qwen","object":"model"},{"id":"legacy","context_length":"4096"}]}"#
+        let infos = try OpenAICompatibleProvider.decodeModelInfos(from: Data(json.utf8))
+
+        let named = infos.first { $0.id == "openai/gpt-4o-mini" }
+        #expect(named?.name == "OpenAI: GPT-4o-mini")
+        #expect(named?.contextLength == 128000)
+
+        // Plain id-only entries (API-key OpenAI, most local servers) parse fine.
+        let plain = infos.first { $0.id == "ollama/qwen" }
+        #expect(plain?.name == nil)
+        #expect(plain?.contextLength == nil)
+
+        // A string context_length degrades to nil rather than failing the parse.
+        let stringCtx = infos.first { $0.id == "legacy" }
+        #expect(stringCtx?.contextLength == nil)
+    }
+
+    // A server that publishes context_length (OpenRouter does) lets the app
+    // size requests to the real window once Settings has loaded the model list.
+    @Test func contextLimitUsesServerDeclaredWindowForPinnedModel() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AIConfig.maxContextTokens = 4096
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            AITests.modelsResponse(request, infos: [
+                AIModelInfo(id: "text-embedding-3-small", name: "Embeddings", contextLength: 9000),
+                AIModelInfo(id: "openai/gpt-4o-mini", name: "OpenAI: GPT-4o-mini", contextLength: 128000),
+            ])
+        }
+        let provider = OpenAICompatibleProvider(
+            baseURL: "https://api.example.com/v1",
+            apiKey: "test-key",
+            model: "openai/gpt-4o-mini",
+            session: AITests.session()
+        )
+        // Warm the discovery cache exactly as Settings does at connection time.
+        _ = try await provider.listModelInfos()
+        #expect(await provider.contextTokenLimit() == 128000)
+    }
+
+    @Test func contextLimitTracksAutoSelectedModelWhenUnpinned() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AIConfig.maxContextTokens = 2048
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            AITests.modelsResponse(request, infos: [
+                AIModelInfo(id: "text-embedding-3-small", name: nil, contextLength: 9000),
+                AIModelInfo(id: "openai/gpt-4o-mini", name: "OpenAI: GPT-4o-mini", contextLength: 128000),
+            ])
+        }
+        // Unpinned: the auto-selected chat model's window applies, not the
+        // embedding model's.
+        let provider = AITests.provider(session: AITests.session())
+        _ = try await provider.listModelInfos()
+        #expect(await provider.contextTokenLimit() == 128000)
+    }
+
+    @Test func contextLimitClampsHugeDeclaredWindowToPipelineCeiling() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AIConfig.maxContextTokens = 4096
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            AITests.modelsResponse(request, infos: [
+                AIModelInfo(id: "anthropic/claude-sonnet-4.5", name: "Anthropic: Claude Sonnet 4.5", contextLength: 2_000_000),
+            ])
+        }
+        let provider = OpenAICompatibleProvider(
+            baseURL: "https://api.example.com/v1",
+            apiKey: "test-key",
+            model: "anthropic/claude-sonnet-4.5",
+            session: AITests.session()
+        )
+        _ = try await provider.listModelInfos()
+        #expect(await provider.contextTokenLimit() == AIConfig.maxContextTokensCeiling)
+    }
+
+    @Test func contextLimitFallsBackToConfiguredWhenServerDeclaresNoWindow() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AIConfig.maxContextTokens = 8192
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            // Plain id-only entries — API-key OpenAI and local servers report
+            // no window, so the manual setting governs.
+            AITests.modelsResponse(request, ids: ["gpt-4o"])
+        }
+        let provider = OpenAICompatibleProvider(
+            baseURL: "https://api.example.com/v1",
+            apiKey: "test-key",
+            model: "gpt-4o",
+            session: AITests.session()
+        )
+        _ = try await provider.listModelInfos()
+        #expect(await provider.contextTokenLimit() == 8192)
+    }
+
+    @Test func contextLimitColdCacheFallsBackToConfiguredWithoutNetwork() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AIConfig.maxContextTokens = 4096
+        AITests.resetDiscovery()
+        // Never warms the cache, so contextTokenLimit must not touch the
+        // network — the mock handler would fail the test if it ran.
+        MockURLProtocol.handler = { _ in
+            Issue.record("contextTokenLimit must not fetch on a cold cache")
+            return AITests.jsonResponse(URLRequest(url: URL(string: "https://api.example.com")!),
+                                        status: 200, body: "{}")
+        }
+        let provider = AITests.provider(session: AITests.session())
+        #expect(await provider.contextTokenLimit() == 4096)
+    }
 
     // MARK: - Provider: context-window overflow
 

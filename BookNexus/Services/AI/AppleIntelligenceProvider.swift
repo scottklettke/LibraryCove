@@ -39,7 +39,7 @@ struct AppleIntelligenceProvider: AIModelProviding {
     /// count (system + prompts + history + the model's own output). The OS
     /// exposes it as a constant (currently 4096); query it at runtime rather
     /// than hard-coding it, in case a future OS version changes the limit.
-    var contextTokenLimit: Int? {
+    func contextTokenLimit() async -> Int? {
         guard SystemLanguageModel.default.isAvailable else { return nil }
         return SystemLanguageModel.default.contextSize
     }

@@ -111,14 +111,21 @@ enum AIConfig {
     /// searchable.
     static let defaultMaxContextTokens = 4096
 
+    /// Clamp bounds shared by the manual picker and windows a server declares
+    /// in its model list. A declared multi-million-token window still lands in
+    /// the range the request pipeline is tuned for.
+    static let minContextTokens = 1024
+    static let maxContextTokensCeiling = 262_144
+
     static var maxContextTokens: Int {
         get {
             let stored = UserDefaults.standard.integer(forKey: Keys.maxContextTokens)
-            guard stored >= 1024 else { return defaultMaxContextTokens }
-            return min(stored, 262_144)
+            guard stored >= minContextTokens else { return defaultMaxContextTokens }
+            return min(stored, maxContextTokensCeiling)
         }
         set {
-            UserDefaults.standard.set(min(max(1024, newValue), 262_144), forKey: Keys.maxContextTokens)
+            UserDefaults.standard.set(min(max(minContextTokens, newValue), maxContextTokensCeiling),
+                                      forKey: Keys.maxContextTokens)
         }
     }
 

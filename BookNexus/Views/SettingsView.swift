@@ -39,7 +39,7 @@ struct SettingsView: View {
     @State private var aiEngine: AIEngine = AIConfig.selectedEngine
     @State private var aiBaseURL: String = AIConfig.openAIBaseURL
     @State private var aiAPIKey: String = AIConfig.openAIAPIKey
-    @State private var availableModels: [String] = []
+    @State private var availableModelInfos: [AIModelInfo] = []
     @State private var modelListNote: String?
     @State private var aiAvailability: AIAvailability?
     @State private var aiLogs: [AILogEntry] = []
@@ -93,14 +93,43 @@ struct SettingsView: View {
     /// value persistent and selectable even if the server list changes.
     private var modelPickerOptions: [String] {
         let override = AIConfig.openAIModel
-        guard !override.isEmpty else { return availableModels }
-        return [override] + availableModels.filter { $0 != override }
+        let ids = availableModelInfos.map(\.id)
+        guard !override.isEmpty else { return ids }
+        return [override] + ids.filter { $0 != override }
     }
 
     /// The auto-selected chat model the app would send right now, when the
     /// server reported ids and no override is pinned.
     private var autoChatModel: String? {
-        OpenAICompatibleProvider.chooseChatModel(from: availableModels)
+        OpenAICompatibleProvider.chooseChatModel(from: availableModelInfos.map(\.id))
+    }
+
+    /// Label for a model row: the server-provided display name when one
+    /// exists, else the raw id (the value actually sent on the wire).
+    private func pickerLabel(for id: String) -> String {
+        guard let info = availableModelInfos.first(where: { $0.id == id }),
+              let name = info.name?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty else { return id }
+        return name
+    }
+
+    /// A user-facing note when the server declared a context window for the
+    /// model the app would actually use (pinned, or auto-selected). Requests
+    /// are then sized to that window; the manual picker below only governs
+    /// servers that don't report one.
+    private var detectedContextNote: String? {
+        let ids = availableModelInfos.map(\.id)
+        let inUse = AIConfig.openAIModel.isEmpty
+            ? OpenAICompatibleProvider.chooseChatModel(from: ids)
+            : AIConfig.openAIModel
+        guard let inUse,
+              let info = availableModelInfos.first(where: { $0.id == inUse }),
+              let declared = info.contextLength,
+              declared >= AIConfig.minContextTokens else {
+            return nil
+        }
+        let tokens = min(declared, AIConfig.maxContextTokensCeiling)
+        return "Using the \(tokens / 1024)K context window the server reports for \(pickerLabel(for: inUse)). The setting below is only a fallback when a server doesn't declare one."
     }
 
     var body: some View {
@@ -212,7 +241,7 @@ struct SettingsView: View {
                         )) {
                             Text("Auto (detect from server)").tag("")
                             ForEach(modelPickerOptions, id: \.self) { id in
-                                Text(id).tag(id)
+                                Text(pickerLabel(for: id)).tag(id)
                             }
                         }
                         .accessibilityIdentifier("aiModelPicker")
@@ -269,10 +298,15 @@ struct SettingsView: View {
                             Text("\(tokens / 1024)K tokens").tag(tokens)
                         }
                     }
+                    if let note = detectedContextNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } header: {
                     Text("AI")
                 } footer: {
-                    Text("OpenAI-compatible endpoints point at any server that speaks the OpenAI Chat Completions API (Ollama, LM Studio, self-hosted models). An API key is only needed when the server requires one. On-device runs on Apple Intelligence–capable devices. Set the context window to match your model's limit — a larger window lets the AI search more of your library.")
+                    Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library.")
                 }
 
                 Section {
@@ -374,22 +408,22 @@ struct SettingsView: View {
     @MainActor
     private func reloadModels() async {
         guard aiEngine == .openAI else {
-            availableModels = []
+            availableModelInfos = []
             modelListNote = nil
             return
         }
         guard !trimmedBaseURL.isEmpty else {
-            availableModels = []
+            availableModelInfos = []
             modelListNote = nil
             return
         }
         do {
             let provider = OpenAICompatibleProvider(baseURL: trimmedBaseURL,
                                                     apiKey: AIConfig.openAIAPIKey)
-            availableModels = try await provider.listModels()
+            availableModelInfos = try await provider.listModelInfos()
             modelListNote = nil
         } catch {
-            availableModels = []
+            availableModelInfos = []
             let detail = (error as? AIError)?.errorDescription ?? "network error"
             modelListNote = "Couldn't read the model list from this endpoint (\(detail)). It may not support GET /v1/models — pin a model above or check the URL."
         }

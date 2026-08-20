@@ -125,6 +125,7 @@ struct LibraryView: View {
     @State private var filteredSheet: FilteredSheet?
     @State private var showGenreCleanup = false
     @State private var showShelfCategories = false
+    @State private var showFictionClassifier = false
     /// The active canonical shelf plan for "Group by genre". Only set while it
     /// matches the library's current tag set (fingerprint-validated); a stale
     /// or missing plan makes genre grouping fall back to raw tags.
@@ -220,14 +221,31 @@ struct LibraryView: View {
         }
     }
 
-    /// The two-tier organization for "Group by tags": top-level Fiction /
+    /// The main grid/list shows only masters — one representative per ISBN —
+    /// so duplicate copies never flood the list. All copies remain reachable
+    /// through a master's detail page.
+    private var displayBooks: [Book] {
+        BookMastering.masters(of: filteredBooks)
+    }
+
+    /// Copies stored per normalized ISBN, for the "N copies" badge on masters.
+    private var copyCounts: [String: Int] {
+        BookMastering.copyCounts(byISBN: visibleBooks)
+    }
+
+    private func copyBadge(for book: Book) -> Int {
+        guard let normalized = Book.normalizedISBN(book.isbn) else { return 0 }
+        return copyCounts[normalized] ?? 1
+    }
+
+    /// Two-tier organization for "Group by tags": top-level Fiction /
     /// Non-fiction / Uncategorized (from stored `Book.kind`), each containing
     /// the AI shelves. Nil when there is no valid plan — callers fall back to
     /// raw-tag grouping.
     private var genreTiers: [(top: String, shelves: [ShelfCategorizer.ShelfSection])]? {
         guard grouping == .genre, let plan = shelfPlan,
               ShelfCategorizer.isValid(plan, forTags: ShelfCategorizer.allGenres(from: visibleBooks)) else { return nil }
-        return ShelfCategorizer.twoTierSections(books: filteredBooks, plan: plan)
+        return ShelfCategorizer.twoTierSections(books: displayBooks, plan: plan)
     }
 
     /// Loads a valid stored plan, or generates (and caches) a fresh one when
@@ -323,7 +341,7 @@ struct LibraryView: View {
                                 Text(genre).tag(String?.some(genre))
                             }
                         }
-                        Button("Clear genre") { filterGenre = nil }
+                        Button("Clear tags") { filterGenre = nil }
                     } label: {
                         Label(filterGenre.map { "Tag: \($0)" } ?? "Tag", systemImage: "tag")
                     }
@@ -367,6 +385,9 @@ struct LibraryView: View {
         }
         .sheet(isPresented: $showShelfCategories) {
             ShelfCategoriesView(books: visibleBooks)
+        }
+        .sheet(isPresented: $showFictionClassifier) {
+            FictionClassifierView(books: visibleBooks)
         }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }
@@ -425,6 +446,7 @@ struct LibraryView: View {
     /// content-area note in `body`.
     private var aiToolsMenu: some View {
         Menu {
+            Button("Classify fiction / non-fiction…") { showFictionClassifier = true }
             Button("Clean up tags…") { showGenreCleanup = true }
             Button("Reorganize shelves…") { showShelfCategories = true }
         } label: {
@@ -445,11 +467,11 @@ struct LibraryView: View {
             return AnyView(
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
-                        ForEach(filteredBooks) { book in
+                        ForEach(displayBooks) { book in
                             NavigationLink {
                                 BookDetailView(book: book)
                             } label: {
-                                BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
+                                BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
                             }
                             .buttonStyle(.plain)
                         }
@@ -465,7 +487,7 @@ struct LibraryView: View {
         } else if grouping == .genre, genreTiers != nil {
             return AnyView(genreTierGrid)
         } else {
-            let grouped = Dictionary(grouping: filteredBooks) { book in
+            let grouped = Dictionary(grouping: displayBooks) { book in
                 groupKey(for: book)
             }
             let keys = grouped.keys.sorted { lhs, rhs in
@@ -484,7 +506,7 @@ struct LibraryView: View {
                                         NavigationLink {
                                             BookDetailView(book: book)
                                         } label: {
-                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
+                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -524,7 +546,7 @@ struct LibraryView: View {
                                         NavigationLink {
                                             BookDetailView(book: book)
                                         } label: {
-                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate)
+                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -563,11 +585,11 @@ struct LibraryView: View {
 
     private var listView: some View {
         if grouping == .none {
-            return AnyView(List(filteredBooks) { book in
+            return AnyView(List(displayBooks) { book in
                 NavigationLink {
                     BookDetailView(book: book)
                 } label: {
-                    BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
+                    BookListRow(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
                 }
             })
         } else if grouping == .genre, genreTiers != nil {
@@ -581,7 +603,7 @@ struct LibraryView: View {
                                     NavigationLink {
                                         BookDetailView(book: book)
                                     } label: {
-                                        BookListRow(book: book)
+                                        BookListRow(book: book, copyCount: copyBadge(for: book))
                                     }
                                 }
                             }
@@ -592,7 +614,7 @@ struct LibraryView: View {
                 }
             })
         } else {
-            let grouped = Dictionary(grouping: filteredBooks) { book in
+            let grouped = Dictionary(grouping: displayBooks) { book in
                 groupKey(for: book)
             }
             let keys = grouped.keys.sorted {
@@ -605,7 +627,7 @@ struct LibraryView: View {
                             NavigationLink {
                                 BookDetailView(book: book)
                             } label: {
-                                BookListRow(book: book)
+                                BookListRow(book: book, copyCount: copyBadge(for: book))
                             }
                         }
                     }
@@ -783,6 +805,7 @@ struct LibraryView: View {
 struct BookGridCell: View {
     let book: Book
     var showAddedDate = false
+    var copyCount = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -790,6 +813,18 @@ struct BookGridCell: View {
                 .overlay(alignment: .topLeading) {
                     if book.isLoaned {
                         LoanBadge()
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if copyCount > 1 {
+                        Text("×\(copyCount)")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(.black.opacity(0.6))
+                            .clipShape(Capsule())
+                            .padding(3)
                     }
                 }
             Text(book.title)
@@ -824,6 +859,7 @@ struct LoanBadge: View {
 struct BookListRow: View {
     let book: Book
     var showAddedDate = false
+    var copyCount = 0
 
     var body: some View {
         HStack(spacing: 12) {
@@ -847,8 +883,14 @@ struct BookListRow: View {
                 }
             }
             Spacer()
-            Image(systemName: book.statusEnum.systemImage)
-                .foregroundStyle(.secondary)
+            if copyCount > 1 {
+                Text("\(copyCount) copies")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else {
+                Image(systemName: book.statusEnum.systemImage)
+                    .foregroundStyle(.secondary)
+            }
             if book.isLoaned {
                 Image(systemName: "person.fill")
                     .foregroundStyle(.blue)

@@ -127,35 +127,51 @@ struct BookDetailView: View {
     }
 
     private var copiesSection: some View {
-        let key = book.isbn
-        let copies: [Book]
-        if let key, !key.isEmpty {
-            copies = allCopies(isbn: key)
-        } else {
-            copies = allCopies(title: book.title)
-        }
+        let copies = allCopiesIncludingCurrent
         guard copies.count > 1 else { return AnyView(EmptyView()) }
         return AnyView(
-            Section("Copies") {
-                ForEach(copies) { copy in
-                    LabeledContent(copy.physicalLocation ?? "Unplaced") {
-                        Text(copy.createdAt, style: .date)
+            Section {
+                ForEach(Array(copies.enumerated()), id: \.offset) { index, copy in
+                    NavigationLink {
+                        BookDetailView(book: copy)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 4) {
+                                Text(copy.physicalLocation ?? "Unplaced")
+                                    .foregroundStyle(copy.physicalLocation == nil ? .secondary : .primary)
+                                if copy.id == book.id {
+                                    Text("(this copy)")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            if copy.isLoaned {
+                                Label(copy.loanedTo ?? "Loaned out", systemImage: "person.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                            } else {
+                                Text(copy.statusEnum.displayName)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
+            } header: {
+                Text("Copies")
+            } footer: {
+                Text("Every copy of this title, with its location and loan status. Open a copy to view or manage it.")
             }
         )
     }
 
-    private func allCopies(isbn: String) -> [Book] {
-        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.isbn == isbn })
-        guard let list = try? modelContext.fetch(descriptor) else { return [] }
-        return list.sorted { $0.createdAt < $1.createdAt }
-    }
-
-    private func allCopies(title: String) -> [Book] {
-        let descriptor = FetchDescriptor<Book>(predicate: #Predicate { $0.title == title })
-        guard let list = try? modelContext.fetch(descriptor) else { return [] }
-        return list.sorted { $0.createdAt < $1.createdAt }
+    /// Every copy of the current book's title: normalized-ISBN siblings, or
+    /// title-matched when there's no ISBN, plus the current copy itself.
+    private var allCopiesIncludingCurrent: [Book] {
+        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        var copies = BookMastering.otherCopies(of: book, in: all)
+        copies.append(book)
+        return copies.sorted { $0.createdAt < $1.createdAt }
     }
 
     private var headerSection: some View {
@@ -189,6 +205,7 @@ struct BookDetailView: View {
     private var infoSection: some View {
             Section("Details") {
                 LabeledContent("Status", value: book.statusEnum.displayName)
+                LabeledContent("Type", value: (BookKind(rawValue: book.kind).flatMap { $0 == .notSet ? nil : $0 }?.displayName) ?? "Not set")
                 LabeledContent("Date added", value: addedDateFormatter.string(from: book.createdAt))
                 LabeledContent("Added by", value: addedByName)
             if let location = book.physicalLocation, !location.isEmpty {

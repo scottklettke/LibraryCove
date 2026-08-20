@@ -1,0 +1,123 @@
+import Testing
+import Foundation
+import SwiftData
+@testable import BookNexus
+
+@Suite @MainActor
+struct FictionClassifierTests {
+
+    private func makeBook(_ id: String, _ title: String, _ tags: [String], kind: String = "") -> Book {
+        Book(id: id, title: title, authors: ["Someone"], publicationYear: 1999, tags: tags, kind: kind)
+    }
+
+    // MARK: - Parsing
+
+    @Test func parseProposalsIsTolerantAndNormalizes() throws {
+        let data = try #require(Data("""
+        [{"bookID":"b1","kind":"fiction"},
+         {"bookID":"b2","kind":"Non-fiction"},
+         {"bookID":""},
+         {"bookID":"b3","kind":" meh "}]
+        """.utf8))
+        let parsed = try FictionClassifier.parseProposals(from: data)
+        #expect(parsed == [
+            BookKindProposal(bookID: "b1", kind: "fiction"),
+            BookKindProposal(bookID: "b2", kind: "non-fiction"),
+            BookKindProposal(bookID: "b3", kind: nil), // unknown kind → no signal
+        ])
+    }
+
+    @Test func parseProposalsRecoversFromTruncatedArray() throws {
+        let data = try #require(Data(#"[{"bookID":"b1","kind":"fiction"},{"bookID":"b2","kind"}]"#.utf8))
+        let parsed = try FictionClassifier.parseProposals(from: data)
+        #expect(parsed == [BookKindProposal(bookID: "b1", kind: "fiction")])
+    }
+
+    // MARK: - Matching / apply
+
+    @Test func matchingNeverOverwritesUserSetKind() {
+        let books = [
+            makeBook("a", "Fantasy One", ["Fantasy"], kind: ""),
+            makeBook("b", "History Work", ["History"], kind: "non-fiction"), // user-set
+            makeBook("c", "Untagged", []),
+        ]
+        let proposals = [
+            BookKindProposal(bookID: "a", kind: "fiction"),
+            BookKindProposal(bookID: "b", kind: "fiction"), // should be ignored
+            BookKindProposal(bookID: "c", kind: "non-fiction"),
+            BookKindProposal(bookID: "missing", kind: "fiction"), // no book
+        ]
+        let matched = FictionClassifier.matching(proposals, to: books)
+        let byID = Dictionary(uniqueKeysWithValues: matched.map { ($0.book.id, $0.kind) })
+        #expect(byID["a"] == "fiction")
+        #expect(byID["c"] == "non-fiction")
+        #expect(byID["missing"] == nil)
+        // A proposal for an already-labeled book is dropped — never re-proposed.
+        #expect(matched.contains { $0.book.id == "b" } == false)
+        #expect(books.first { $0.id == "b" }?.kind == "non-fiction")
+    }
+
+    @Test func applyWritesKindsAndCountsChanges() throws {
+        let context = try #require(Persistence.inMemory.mainContext)
+        let a = makeBook("a", "Fantasy One", ["Fantasy"])
+        let b = makeBook("b", "Kept Label", [], kind: "non-fiction")
+        context.insert(a)
+        context.insert(b)
+        try context.save()
+
+        let changed = FictionClassifier.apply(
+            [BookKindProposal(bookID: "a", kind: "fiction"),
+             BookKindProposal(bookID: "b", kind: "fiction")], // ignored: user-set
+            to: [a, b], context: context)
+        #expect(changed == 1)
+        #expect(a.kind == "fiction")
+        #expect(b.kind == "non-fiction")
+    }
+}
+
+@Suite @MainActor
+struct BookMasteringTests {
+
+    private func makeBook(_ id: String, _ isbn: String?, createdAt: Double) -> Book {
+        let book = Book(id: id, title: "T", authors: [], isbn: isbn, createdAt: Date(timeIntervalSince1970: createdAt))
+        return book
+    }
+
+    @Test func mastersKeepsOldestPerISBNAndPassesISBNlessBooks() {
+        let books = [
+            makeBook("a", "978-0-441-17271-9", createdAt: 3000), // oldest → master
+            makeBook("b", "9780441172719", createdAt: 1000),
+            makeBook("c", "9780441172719", createdAt: 2000),
+            makeBook("d", nil, createdAt: 5000), // no ISBN → always shown
+        ]
+        let masters = BookMastering.masters(of: books)
+        // Oldest (by createdAt) of the group is the master; the ISBN-less book passes through.
+        #expect(Set(masters.map(\.id)) == ["b", "d"])
+    }
+
+    @Test func copyCountsGroupByNormalizedISBN() {
+        let books = [
+            makeBook("a", "978-0-441-17271-9", createdAt: 1000),
+            makeBook("b", "9780441172719", createdAt: 2000),
+            makeBook("c", nil, createdAt: 3000),
+        ]
+        let counts = BookMastering.copyCounts(byISBN: books)
+        #expect(counts["9780441172719"] == 2)
+        #expect(counts.count == 1)
+    }
+
+    @Test func otherCopiesUseNormalizedISBNAndFallbackToTitle() {
+        let books = [
+            makeBook("a", "978-0-441-17271-9", createdAt: 1000),
+            makeBook("b", "9780441172719", createdAt: 2000),
+            makeBook("c", "9780061120084", createdAt: 3000),
+        ]
+        #expect(Set(BookMastering.otherCopies(of: books[0], in: books).map(\.id)) == ["b"])
+        #expect(BookMastering.otherCopies(of: books[2], in: books).isEmpty)
+
+        // No ISBN → title fallback (same title, different ids).
+        let t1 = Book(id: "t1", title: "Shared Title")
+        let t2 = Book(id: "t2", title: " Shared Title ")
+        #expect(Set(BookMastering.otherCopies(of: t1, in: [t1, t2]).map(\.id)) == ["t2"])
+    }
+}

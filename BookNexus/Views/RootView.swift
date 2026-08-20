@@ -32,7 +32,7 @@ struct RootView: View {
         guard ProcessInfo.processInfo.environment["UI_TEST_RESET_DATA"] == "1" else { return }
         try? modelContext.delete(model: Book.self)
         try? modelContext.save()
-        PendingScanStore.clear()
+        ScanQueueStore.shared.clear()
     }
 }
 

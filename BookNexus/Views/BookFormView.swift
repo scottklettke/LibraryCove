@@ -83,6 +83,11 @@ struct BookFormView: View {
     var onSaved: () -> Void = {}
     var onDeleted: () -> Void = {}
     var dismissOnSave: Bool = true
+    /// Hides the form's own toolbar trash. Used inside the swipeable import
+    /// pager, where the pager owns a single trash for the whole flow instead —
+    /// several forms are live during a page transition and would each push a
+    /// trash into the same nav bar, flashing duplicates while swiping.
+    var showsToolbarDelete = true
 
     @State private var title = ""
     @State private var authorsText = ""
@@ -121,12 +126,13 @@ struct BookFormView: View {
     /// Bumped to scroll the title field into view on a failed save.
     @State private var scrollTrigger = 0
 
-    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true) {
+    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true, showsToolbarDelete: Bool = true) {
         self.catalog = catalog
         self.existing = existing
         self.onSaved = onSaved
         self.onDeleted = onDeleted
         self.dismissOnSave = dismissOnSave
+        self.showsToolbarDelete = showsToolbarDelete
         _status = State(initialValue: existing?.statusEnum ?? .toRead)
         _rating = State(initialValue: existing?.rating)
 
@@ -241,7 +247,7 @@ struct BookFormView: View {
                     Button("Save") { save() }
                 }
             }
-            if existing != nil || catalog != nil {
+            if (existing != nil || catalog != nil) && showsToolbarDelete {
                 ToolbarItem(placement: .primaryAction) {
                     Button(role: .destructive) {
                         showDeleteConfirmation = true

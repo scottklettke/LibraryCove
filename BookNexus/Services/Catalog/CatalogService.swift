@@ -68,7 +68,20 @@ final class OpenLibraryService: CatalogService {
     private let googleBooksURL = URL(string: "https://www.googleapis.com/books/v1/volumes")!
     private let session: URLSession
 
-    init(session: URLSession = .shared) {
+    /// Catalog lookups run in the background scan queue, so a request must
+    /// never hang the queue: bound every request with a short timeout instead
+    /// of `URLSession.shared`'s multi-minute defaults. A peer that blackholes
+    /// (connects but never responds) then becomes a `.failed` item the user can
+    /// retry rather than an infinite "looking up" spinner.
+    private static func boundedSession() -> URLSession {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 12
+        config.timeoutIntervalForResource = 25
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }
+
+    init(session: URLSession = OpenLibraryService.boundedSession()) {
         self.session = session
     }
 

@@ -1,7 +1,7 @@
 import XCTest
 
 final class BookNexusUITests: XCTestCase {
-    /// JSON matching `[CatalogBook]` used to seed `PendingScanStore` via the
+    /// JSON matching `[CatalogBook]` used to seed `ScanQueueStore` via the
     /// `UI_TEST_PENDING_SCANS` launch environment, so the import flow is
     /// testable offline without a camera. Two books lets tests observe a
     /// drop from "2 remaining" to "1 remaining".
@@ -210,9 +210,20 @@ final class BookNexusUITests: XCTestCase {
         XCTAssertTrue(link.waitForExistence(timeout: 10), "pending scan link missing")
         link.tap()
 
-        // Seeded with two pending books → the import pager shows "2 remaining".
-        XCTAssertTrue(app.navigationBars["2 remaining"].waitForExistence(timeout: 10),
-                      "import flow did not appear — pager hung")
+        // The banner always opens the pending-scan review list (every status —
+        // ready, resolving, or failed), not a no-op; "Add all" hands importable
+        // books to the pager. Seeded with two pending books → 2 remaining.
+        XCTAssertTrue(app.navigationBars["Pending scans"].waitForExistence(timeout: 10),
+                      "pending-scan review did not open")
+        let addAll = app.buttons["Add all"]
+        XCTAssertTrue(addAll.waitForExistence(timeout: 5), "Add all missing on review")
+        addAll.tap()
+
+        let twoRemaining = app.navigationBars["2 remaining"]
+        if !twoRemaining.waitForExistence(timeout: 10) {
+            print("IMPORT-FLOW STATE:\n\(app.debugDescription)")
+        }
+        XCTAssertTrue(twoRemaining.exists, "import flow did not appear — pager hung")
     }
 
     /// Reproduction: open +, tap the pending-scans link, and confirm the
@@ -254,6 +265,81 @@ final class BookNexusUITests: XCTestCase {
         // One book dropped → seeded two originals, remaining shows 1.
         XCTAssertTrue(app.navigationBars["1 remaining"].waitForExistence(timeout: 10),
                       "book was not dropped from the import queue")
+    }
+
+    /// Regression: tapping the pending-scans banner must always do something,
+    /// even when no scan has finished looking up. The old code silently
+    /// returned when nothing was importable. The review opens with every
+    /// non-importable scan visible and actionable (status review + Remove).
+    func testPendingScanBannerOpensReviewWhenLookupUnresolved() throws {
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_PENDING_ISBNS"] = "9780000000001"
+        app.launch()
+        enterLibraryIfNeeded(app)
+
+        openAddSheet(app)
+        let link = app.buttons.matching(NSPredicate(format: "label CONTAINS 'not yet added'")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "pending scan link missing")
+        link.tap()
+
+        // Review list presents even though nothing is importable — and "Add all"
+        // is correctly disabled (the previous no-op behavior is gone).
+        XCTAssertTrue(app.navigationBars["Pending scans"].waitForExistence(timeout: 10),
+                      "banner with unresolved scan did not open the review")
+        let addAll = app.buttons["Add all"]
+        XCTAssertTrue(addAll.exists, "Add all button missing")
+        XCTAssertFalse(addAll.isEnabled, "Add all must be disabled with nothing importable")
+
+        // The unresolved scan is visible and opens its status review sheet.
+        let failedRow = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Review ISBN 9780000000001'")
+        ).firstMatch
+        XCTAssertTrue(failedRow.waitForExistence(timeout: 10), "unresolved scan row missing")
+        failedRow.tap()
+        XCTAssertTrue(app.navigationBars["ISBN 9780000000001"].waitForExistence(timeout: 10),
+                      "status review did not open for unresolved scan")
+
+        // Removing from the scan list clears it; the review shows its empty state.
+        let remove = app.buttons["Remove from scan list"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), "remove action missing")
+        remove.tap()
+        XCTAssertTrue(app.staticTexts["No pending scans"].waitForExistence(timeout: 10),
+                      "review should show empty state after removing the last scan")
+    }
+
+    /// Regression for the reported "stuck looking up" bug: a real queued ISBN
+    /// background lookup must leave the "Looking up" state (ready, unavailable,
+    /// or failed) rather than spin forever. Seeded via the live-lookup seam so
+    /// the full camera→queue→catalog path runs without a camera. Any terminal
+    /// status is acceptable; the test fails only if the item is still resolving
+    /// after a generous window. Network is not required: an offline simulator
+    /// fails the lookup fast (.failed), which also leaves the state.
+    func testLiveLookupLeavesLookingUpState() throws {
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_LIVE_LOOKUP_ISBNS"] = "9780137463602"
+        app.launch()
+        enterLibraryIfNeeded(app)
+        openAddSheet(app)
+
+        let link = app.buttons.matching(NSPredicate(format: "label CONTAINS 'not yet added'")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "pending scan link missing")
+        link.tap()
+        XCTAssertTrue(app.navigationBars["Pending scans"].waitForExistence(timeout: 10),
+                      "pending-scan review did not open")
+
+        let row = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Review ISBN 9780137463602'")
+        ).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 10), "queued scan row missing")
+
+        let lookingUp = app.staticTexts["Looking up ISBN 9780137463602…"]
+        guard lookingUp.waitForExistence(timeout: 5) else { return } // already resolved
+        let deadline = Date().addingTimeInterval(45)
+        while lookingUp.exists && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+        }
+        XCTAssertFalse(lookingUp.exists,
+                       "lookup still spinning after 45s — background processor never resolved it")
     }
 
     /// Settings must expose all three data-management options.
@@ -338,6 +424,13 @@ final class BookNexusUITests: XCTestCase {
         tab.tap()
         XCTAssertTrue(app.navigationBars["Ask AI"].waitForExistence(timeout: 5),
                       "Ask AI screen did not present")
+
+        // The conversation persists across launches; clear any leftover chat so
+        // the chips deterministically start from the empty state.
+        let clear = app.buttons["Clear conversation"]
+        if clear.waitForExistence(timeout: 3), clear.isEnabled {
+            clear.tap()
+        }
 
         // A suggestion chip pre-fills the input; send it.
         let chip = app.buttons["What should I read next?"]
@@ -448,5 +541,141 @@ final class BookNexusUITests: XCTestCase {
                       "clean-up sheet did not present")
         XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 15),
                       "error state with Retry did not appear")
+    }
+
+    /// Ask AI suggestion chips must be context-aware: static starters on an
+    /// empty conversation, then follow-ups derived from what was asked — not
+    /// the same three starters forever. A chip tap fills the input; it does
+    /// not auto-send. A no-engine simulator still exercises the real surface:
+    /// chips update from the conversation even though the reply errors out
+    /// gracefully.
+    func testAskAISuggestionsAdaptToConversation() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        app.tabBars.buttons["Ask AI"].tap()
+
+        // The conversation is intentionally persisted across launches, so the
+        // simulator can carry a leftover chat from earlier runs. Reset it via
+        // the app's own clear affordance to start from the empty state.
+        XCTAssertTrue(app.navigationBars["Ask AI"].waitForExistence(timeout: 10),
+                      "Ask AI screen did not open")
+        let clear = app.buttons["Clear conversation"]
+        if clear.waitForExistence(timeout: 3), clear.isEnabled {
+            clear.tap()
+        }
+
+        // Empty conversation → the static starter chips are shown.
+        let starter = app.buttons["What should I read next?"]
+        XCTAssertTrue(starter.waitForExistence(timeout: 10),
+                      "starter chips not shown after clearing")
+
+        // Ask a recommendation question. No engine is configured on the
+        // simulator, so the reply will fail fast; the chips still update from
+        // the conversation the moment the user message is queued.
+        let field = app.textFields["Ask about your library…"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "no input field")
+        field.tap()
+        field.typeText("Recommend my next read")
+        app.buttons["Send"].tap()
+
+        // The thread-continuation chip must replace the generic starters —
+        // proof the suggestions now depend on conversation state.
+        let continuation = app.buttons["Which of those should I start with?"]
+        XCTAssertTrue(continuation.waitForExistence(timeout: 10),
+                      "chips did not adapt to the conversation")
+
+        // Wait out the failing reply so the chips are tappable, then verify a
+        // chip tap only fills the input rather than sending.
+        var attempts = 0
+        while !continuation.isEnabled && attempts < 20 {
+            sleep(1)
+            attempts += 1
+        }
+        continuation.tap()
+        // Once a field holds text, iOS stops exposing it via its placeholder,
+        // so re-resolve the (single) input rather than re-matching the prompt.
+        let input = app.textFields.firstMatch
+        XCTAssertTrue(input.waitForExistence(timeout: 3), "input field gone after chip tap")
+        XCTAssertEqual(input.value as? String, "Which of those should I start with?",
+                       "chip should fill the input, not send it")
+    }
+
+    /// A seeded assistant turn rich in markdown (heading, bold, bullets) — the
+    /// kind of output the model returns. The bubble must render it styled
+    /// (heading visible, no literal `**`/`##`/`- ` tokens), not leak raw
+    /// markdown as text.
+    func testAskAIRendersMarkdownInsteadOfRawTokens() throws {
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_TRANSCRIPT"] = markdownTranscriptSeed
+        app.launch()
+        enterLibraryIfNeeded(app)
+        app.tabBars.buttons["Ask AI"].tap()
+        XCTAssertTrue(app.navigationBars["Ask AI"].waitForExistence(timeout: 5),
+                      "Ask AI screen did not present")
+
+        // The heading is parsed into a styled element — not a literal "## ".
+        let heading = app.staticTexts["Reading Plan"]
+        XCTAssertTrue(heading.waitForExistence(timeout: 10),
+                      "heading not rendered from markdown:\n\(app.debugDescription)")
+
+        // No raw markdown tokens survive anywhere in the bubble set.
+        let raw = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS '**' OR label CONTAINS '##' OR label CONTAINS '- Dune'")
+        )
+        XCTAssertEqual(raw.count, 0,
+                       "raw markdown leaked into bubbles — render failed")
+
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "AskAI-markdown-rendered"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+
+    /// Tapping a scanned book in the strip opens its details in a review sheet
+    /// (editable form) with the delete option there — not a tap-to-delete-hit
+    /// on the strip. Deleting removes it from the scan list without adding.
+    func testScannedBookTapsToReviewAndDelete() throws {
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_SCANNED_BOOKS"] = pendingScansSeed
+        app.launch()
+        enterLibraryIfNeeded(app)
+        openAddSheet(app)
+        openScanner(app)
+
+        // The strip lists the seeded books as tappable review thumbnails.
+        let review1 = app.buttons["Review The Swift Programming Language"]
+        XCTAssertTrue(review1.waitForExistence(timeout: 10), "scan thumbnail missing")
+        review1.tap()
+
+        // Tapping opens details (editable form) in a sheet, not immediate delete.
+        XCTAssertTrue(app.navigationBars["Review scanned book"].waitForExistence(timeout: 10),
+                      "tap did not open review sheet")
+        XCTAssertTrue(app.textFields["Title *"].waitForExistence(timeout: 10),
+                      "review sheet should show the editable title field")
+
+        // The delete action lives on the review form, as requested.
+        let nav = app.navigationBars["Review scanned book"]
+        let trash = nav.buttons.matching(NSPredicate(format: "label CONTAINS 'rash'")).firstMatch
+        XCTAssertTrue(trash.waitForExistence(timeout: 5), "no delete button on review sheet")
+        trash.tap()
+        let alert = app.alerts["Delete this book?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "delete confirmation did not appear")
+        alert.buttons["Delete"].tap()
+
+        // Sheet dismissed and the strip shrank to the remaining book.
+        XCTAssertTrue(app.staticTexts["1 scanned"].waitForExistence(timeout: 10),
+                      "deleted book still listed in scan strip")
+        XCTAssertFalse(app.buttons["Review The Swift Programming Language"].exists,
+                       "deleted book still tappable in strip")
+    }
+
+    /// An assistant-only chat seeded with markdown, matching `[AITurn]` and
+    /// the JSONEncoder defaults `LocalTranscriptMemory` writes (seconds since
+    /// a reference date, "role"/"text"/"date" keys).
+    private var markdownTranscriptSeed: String {
+        #"""
+        [{"role":"assistant","text":"## Reading Plan\n\nHere are **three** suggestions:\n\n- Dune by Frank Herbert\n- The Handmaid's Tale\n\nLet's narrow it down.","date":700000000}]
+        """#
     }
 }

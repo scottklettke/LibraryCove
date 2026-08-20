@@ -13,6 +13,15 @@ private func saveSearchHistory(_ history: [String]) {
     }
 }
 
+/// Snapshots a batch of books set to the import/edit flow. Wrapping the array
+/// in an `Identifiable` value lets the flow present via `.sheet(item:)` (the
+/// same reliable pattern the scanner's review sheet uses) instead of an
+/// `isPresented` binding whose content closure can capture a stale queue.
+private struct ImportQueueDispatch: Identifiable {
+    let id = UUID()
+    let books: [CatalogBook]
+}
+
 /// Add a book: search the catalog, scan an ISBN, or import a result.
 struct AddBookView: View {
     @Environment(\.modelContext) private var modelContext
@@ -26,21 +35,22 @@ struct AddBookView: View {
     @State private var showScanner = false
     @State private var descriptionSource: DescriptionSource = .openlibrary
     @State private var selectedIDs = Set<String>()
-    @State private var importQueue = [CatalogBook]()
-    @State private var showImportFlow = false
+    @State private var importDispatch: ImportQueueDispatch?
     @State private var existingIsbns = Set<String>()
+    @State private var existingBookNames = [String: String]()
+    @State private var showScanReview = false
     @State private var searchHistory: [String] = loadSearchHistory()
-    @State private var pendingCount = 0
+    @StateObject private var scanQueue = ScanQueueStore.shared
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                if pendingCount > 0 {
+                if scanQueue.count > 0 {
                     Button {
                         resumePendingScans()
                     } label: {
                         HStack {
-                            Label("\(pendingCount) scanned book\(pendingCount == 1 ? "" : "s") not yet added",
+                            Label("\(scanQueue.count) scanned book\(scanQueue.count == 1 ? "" : "s") not yet added",
                                   systemImage: "barcode.viewfinder")
                                 .font(.body)
                                 .fontWeight(.semibold)
@@ -53,6 +63,7 @@ struct AddBookView: View {
                         .background(.thinMaterial)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
+                    .accessibilityValue("\(scanQueue.importableBooks.count) ready, \(scanQueue.isProcessing ? "processing" : "idle")")
                     .padding(.horizontal)
                     .padding(.top, 10)
                 }
@@ -84,23 +95,29 @@ struct AddBookView: View {
                 }
             }
             .fullScreenCover(isPresented: $showScanner) {
-                ScannerFlow(existingIsbns: existingIsbns, onFinished: {
+                ScannerFlow(existingIsbns: existingIsbns, existingBookNames: existingBookNames, onFinished: {
                     showScanner = false
                     dismiss()
                 })
             }
-            .sheet(isPresented: $showImportFlow) {
-                BookImportFlow(queue: importQueue,
-                               onEachSaved: { id in PendingScanStore.remove(id: id) },
+            .sheet(item: $importDispatch) { dispatch in
+                BookImportFlow(queue: dispatch.books,
+                               onEachSaved: { id in scanQueue.remove(id: id) },
                                onDone: {
-                    showImportFlow = false
+                    importDispatch = nil
                     showScanner = false
+                    dismiss()
+                })
+            }
+            .sheet(isPresented: $showScanReview) {
+                ScanQueueReviewListView(onAllImported: {
+                    showScanReview = false
                     dismiss()
                 })
             }
             .onAppear {
                 buildExistingSet()
-                loadPendingScans()
+                ScanQueueStore.shared.startProcessingIfNeeded()
             }
         }
     }
@@ -246,24 +263,30 @@ struct AddBookView: View {
 
 }
 
-/// Full-screen scanner that accumulates detected barcodes into a list.
+/// Full-screen scanner. The camera caches every ISBN into the background scan
+/// queue immediately — no scan ever waits on a network lookup, so the user can
+/// run through a whole stack of books and review them afterward.
 private struct ScannerFlow: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var catalog: CatalogService = OpenLibraryService()
-    @State private var scannedBooks: [CatalogBook] = []
-    @State private var isLookup = false
-    @State private var lookupError: String?
+    @StateObject private var queue = ScanQueueStore.shared
     @State private var rescanKey = 0
-    @State private var pendingDeleteID: String?
+    @State private var selectedScanItemID: String?
     @State private var flashISBN: String?
     @State private var flash = false
     @State private var flashPulse = false
-    @State private var lookupAlertMessage: String?
-    @State private var showLookupAlert = false
+    @State private var duplicateScan: DuplicateScan?
     @State private var importQueue: [CatalogBook] = []
     @State private var isImporting = false
     let existingIsbns: Set<String>
+    let existingBookNames: [String: String]
     let onFinished: () -> Void
+
+    /// A barcode scan rejected because a library book already has that ISBN.
+    private struct DuplicateScan: Equatable {
+        let isbn: String
+        /// Title of the matching library book, when one was resolvable.
+        let name: String?
+    }
 
     var body: some View {
         Group {
@@ -273,16 +296,27 @@ private struct ScannerFlow: View {
                 cameraView
             }
         }
+        .sheet(item: selectedScanItem) { item in
+            ScanQueueItemReviewView(itemID: item.id)
+        }
         .onAppear {
             seedScannedBooksForTesting()
+            queue.startProcessingIfNeeded()
         }
+    }
+
+    private var selectedScanItem: Binding<ScanQueueItem?> {
+        Binding(
+            get: { selectedScanItemID.flatMap { queue.item(id: $0) } },
+            set: { selectedScanItemID = $0?.id }
+        )
     }
 
     /// The import/edit/swipe screen, swapped in place of the camera so we never
     /// present a modal on top of the full-screen camera (that was unreliable).
     private var importFlow: some View {
         BookImportFlow(queue: importQueue,
-                       onEachSaved: { id in PendingScanStore.remove(id: id) },
+                       onEachSaved: { id in queue.remove(id: id) },
                        onDone: {
                            onFinished()
                        })
@@ -336,108 +370,84 @@ private struct ScannerFlow: View {
             .padding()
             .accessibilityLabel("Close scanner")
         }
-        .confirmationDialog(
-            "Remove scanned book?",
-            isPresented: .init(get: { pendingDeleteID != nil },
-                               set: { if !$0 { pendingDeleteID = nil } }),
-            presenting: pendingDeleteID
-        ) { id in
-            Button("Remove", role: .destructive) {
-                scannedBooks.removeAll { $0.id == id }
-                PendingScanStore.remove(id: id)
-            }
-            Button("Cancel", role: .cancel) { pendingDeleteID = nil }
-        } message: { _ in
-            Text("This book won't be added unless you scan it again.")
-        }
         .alert(
-            "Scan result",
-            isPresented: $showLookupAlert
+            "Already in library",
+            isPresented: .init(get: { duplicateScan != nil },
+                               set: { if !$0 { duplicateScan = nil } })
         ) {
+            Button("Add another copy") {
+                // Treat the scan as a normal enqueue: the ISBN resolves in the
+                // background and shows up in the scan strip/review. When it's
+                // saved, the form's existing duplicate detection offers the
+                // "add another copy / keep existing / cancel" choice — so no
+                // special copy path is needed here.
+                if let hit = duplicateScan {
+                    queue.enqueue(isbn: hit.isbn)
+                }
+            }
             Button("OK", role: .cancel) {}
         } message: {
-            Text(lookupAlertMessage ?? "The book lookup failed. Try again.")
+            if let hit = duplicateScan {
+                if let name = hit.name, !name.isEmpty {
+                    Text("“\(name)” (ISBN \(hit.isbn)) is already in your library. Add another copy from the scan list, or skip this scan.")
+                } else {
+                    Text("ISBN \(hit.isbn) is already in your library. Add another copy from the scan list, or skip this scan.")
+                }
+            }
         }
     }
 
     private var scannedBar: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(scannedBooks.isEmpty ? "No books scanned yet" : "\(scannedBooks.count) scanned")
+                Text(queue.items.isEmpty ? "No books scanned yet" : "\(queue.count) scanned")
                     .font(.caption)
                     .fontWeight(.semibold)
-                Text("Tap a book to remove it")
+                Text("Tap a book to review it")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
-            if !scannedBooks.isEmpty {
+            if !queue.items.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ForEach(scannedBooks) { book in
+                        ForEach(queue.items) { item in
+                            let title = item.book?.title.isEmpty == false ? item.book!.title : "ISBN \(item.isbn)"
                             Button {
-                                pendingDeleteID = book.id
+                                selectedScanItemID = item.id
                             } label: {
-                                AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.primaryCoverURL), width: 44, height: 64)
-                                    .overlay(alignment: .topLeading) {
-                                        if existingIsbns.contains(Book.normalizedISBN(book.isbn) ?? "") {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .font(.caption)
-                                                .foregroundStyle(.green)
-                                        }
-                                    }
-                                    .overlay(alignment: .bottom) {
-                                        // Not-found scans have no cover; label them
-                                        // so they're clearly awaiting manual details.
-                                        if book.title.isEmpty {
-                                            Text("manual")
-                                                .font(.system(size: 9, weight: .semibold))
-                                                .padding(.horizontal, 4)
-                                                .padding(.vertical, 1)
-                                                .background(.black.opacity(0.65))
-                                                .foregroundStyle(.white)
-                                                .clipShape(Capsule())
-                                        }
-                                    }
+                                ScanItemThumbnail(item: item)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("Review \(title)")
                         }
                     }
                 }
                 .frame(height: 64)
-            } else if isLookup {
-                ProgressView().controlSize(.small)
-            } else if let error = lookupError {
-                Text(error)
-                    .font(.caption2)
-                    .foregroundStyle(.red)
             }
             Button {
-                importQueue = scannedBooks
+                importQueue = queue.importableBooks
                 isImporting = true
             } label: {
                 Label("Add all", systemImage: "plus")
                     .font(.footnote)
                     .fontWeight(.semibold)
             }
-            .disabled(scannedBooks.isEmpty || isLookup)
+            .disabled(!queue.hasImportable)
         }
         .padding(10)
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    /// UI-test seam: seed scanned books from the launch environment so the
-    /// "Add all" hand-off to the import flow is testable without a camera.
+    /// UI-test seam: seed already-looked-up scanned books from the launch
+    /// environment so the "Add all" hand-off is testable without a camera.
     private func seedScannedBooksForTesting() {
         guard let raw = ProcessInfo.processInfo.environment["UI_TEST_SCANNED_BOOKS"],
               let data = raw.data(using: .utf8),
               let list = try? JSONDecoder().decode([CatalogBook].self, from: data) else { return }
-        scannedBooks = list
-        for book in list {
-            PendingScanStore.append(book)
-        }
+        queue.replaceAll(with: list)
     }
 
     private var scanFrameFlash: some View {
@@ -482,59 +492,280 @@ private struct ScannerFlow: View {
     }
 
     private func handleCode(_ code: String) {
-        lookupError = nil
-        isLookup = true
-        flashISBN = code
+        // Reject a scan whose ISBN is already in the library before it's queued.
+        if let normalized = Book.normalizedISBN(code),
+           existingIsbns.contains(normalized) {
+            duplicateScan = DuplicateScan(isbn: normalized, name: existingBookNames[normalized])
+        } else {
+            // Cache the ISBN immediately; the background processor looks it up.
+            queue.enqueue(isbn: code)
+        }
+        let flashCode = Book.normalizedISBN(code) ?? code
+        flashISBN = flashCode
         withAnimation(.easeOut(duration: 0.2)) {
             flash = true
         }
-        // Reject a scan whose ISBN is already in the library before it's queued.
-        if existingIsbns.contains(Book.normalizedISBN(code) ?? "") {
-            lookupAlertMessage = "ISBN \(code) is already in your library. It wasn't added to the scan list."
-            showLookupAlert = true
-            isLookup = false
-            rescanKey += 1
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    flash = false
-                }
-            }
-            return
-        }
-        Task { @MainActor in
-            do {
-                if let book = try await catalog.lookup(isbn: code, preferred: .openlibrary) {
-                    scannedBooks.removeAll { $0.id == book.id }
-                    scannedBooks.append(book)
-                    PendingScanStore.append(book)
-                } else {
-                    // No catalog entry: still let the user add the book, but
-                    // the details are entered by hand. Surface it clearly — a
-                    // bare generic cover in the scan list is too easy to miss.
-                    let stub = CatalogBook.manualStub(isbn: code)
-                    scannedBooks.removeAll { $0.id == stub.id }
-                    scannedBooks.append(stub)
-                    PendingScanStore.append(stub)
-                    lookupAlertMessage = "No online details for this ISBN. It was added to the scan list — when you tap Add all, enter the title and author manually."
-                    showLookupAlert = true
-                }
-            } catch {
-                lookupError = "Lookup failed: \(error.localizedDescription)"
-                lookupAlertMessage = "Lookup failed: \(error.localizedDescription). Try again."
-                showLookupAlert = true
-            }
-            isLookup = false
-            rescanKey += 1
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    flash = false
-                }
+        // Re-arm the camera instantly — scanning never waits on a lookup.
+        rescanKey += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            withAnimation(.easeOut(duration: 0.25)) {
+                flash = false
             }
         }
     }
 }
 
+/// Detail/review for a single scanned item, reached by tapping it in the scan
+/// strip. Importable items open the full edit+delete form; items still being
+/// looked up show their status with the option to remove (or retry a failure).
+private struct ScanQueueItemReviewView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var queue = ScanQueueStore.shared
+    let itemID: String
 
+    var body: some View {
+        Group {
+            if let item = queue.item(id: itemID), let book = item.book {
+                // Full editable details for the scanned book, including the
+                // trash action (BookFormView's delete/duplicate handling).
+                NavigationStack {
+                    BookFormView(catalog: book, existing: nil,
+                                 onSaved: { finish(itemID) },
+                                 onDeleted: { finish(itemID) },
+                                 dismissOnSave: false)
+                        .navigationTitle("Review scanned book")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            } else if let item = queue.item(id: itemID) {
+                NavigationStack {
+                    statusView(item)
+                }
+            } else {
+                // Item was removed while the sheet was open.
+                Color.clear.onAppear { dismiss() }
+            }
+        }
+    }
+
+    private func statusView(_ item: ScanQueueItem) -> some View {
+        VStack(spacing: 20) {
+            Spacer()
+            switch item.status {
+            case .queued, .processing:
+                ProgressView()
+                    .controlSize(.large)
+                Text("Looking up ISBN \(item.isbn)…")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            case .failed:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 34))
+                    .foregroundStyle(.orange)
+                Text("Couldn't reach the catalog for ISBN \(item.isbn).")
+                    .font(.callout)
+                if let error = item.error {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    queue.retry(id: itemID)
+                } label: {
+                    Label("Retry lookup", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+            case .ready, .unavailable:
+                EmptyView()
+            }
+            Button("Remove from scan list", role: .destructive) {
+                finish(itemID)
+            }
+            .padding(.top, 8)
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .navigationTitle("ISBN \(item.isbn)")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { dismiss() }
+            }
+        }
+    }
+
+    private func finish(_ id: String) {
+        queue.remove(id: id)
+        dismiss()
+    }
+}
+
+/// Compact cover thumbnail with a status overlay, shared by the scanner strip
+/// and the pending-scan review list.
+private struct ScanItemThumbnail: View {
+    let item: ScanQueueItem
+
+    var body: some View {
+        AsyncCoverView(url: item.book.flatMap { CoverImageStore.displayURL(forCover: $0.primaryCoverURL) },
+                       width: 44, height: 64)
+        .overlay {
+            switch item.status {
+            case .queued, .processing:
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(.black.opacity(0.35))
+                ProgressView()
+                    .tint(.white)
+            case .failed:
+                Image(systemName: "exclamationmark.circle.fill")
+                    .foregroundStyle(.red)
+                    .background(Circle().fill(.white))
+            case .ready:
+                EmptyView()
+            case .unavailable:
+                EmptyView()
+            }
+        }
+        .overlay(alignment: .bottom) {
+            // Not-found scans have no cover; label them so they're clearly
+            // awaiting manual details.
+            if item.status == .unavailable || (item.book?.title.isEmpty ?? false) {
+                Text("manual")
+                    .font(.system(size: 9, weight: .semibold))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(.black.opacity(0.65))
+                    .foregroundStyle(.white)
+                    .clipShape(Capsule())
+            }
+        }
+    }
+}
+
+/// Persistent review of everything the user scanned but hasn't added yet — the
+/// Add-screen banner always opens here, whether lookups finished, are still
+/// running, or failed. Every queued scan is visible with its status; rows open
+/// the same review/delete sheet as the scanner strip, and "Add all" hands
+/// eligible books to the import pager.
+private struct ScanQueueReviewListView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var queue = ScanQueueStore.shared
+    @State private var selectedScanItemID: String?
+    @State private var addAllDispatch: ImportQueueDispatch?
+    var onAllImported: () -> Void = {}
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if queue.items.isEmpty {
+                    ContentUnavailableView(
+                        "No pending scans",
+                        systemImage: "books.vertical",
+                        description: Text("Scanned books that aren't in your library yet appear here.")
+                    )
+                } else {
+                    List {
+                        ForEach(queue.items) { item in
+                            Button {
+                                selectedScanItemID = item.id
+                            } label: {
+                                row(item)
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel(reviewLabel(for: item))
+                        }
+                        .onDelete { offsets in
+                            for index in offsets {
+                                queue.remove(id: queue.items[index].id)
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle("Pending scans")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add all") {
+                        addAllDispatch = ImportQueueDispatch(books: queue.importableBooks)
+                    }
+                    .disabled(!queue.hasImportable)
+                }
+            }
+        }
+        .sheet(item: $addAllDispatch) { dispatch in
+            BookImportFlow(queue: dispatch.books,
+                           onEachSaved: { id in queue.remove(id: id) },
+                           onDone: {
+                               addAllDispatch = nil
+                               onAllImported()
+                           })
+        }
+        .sheet(item: selectedScanItem) { item in
+            ScanQueueItemReviewView(itemID: item.id)
+        }
+    }
+
+    private var selectedScanItem: Binding<ScanQueueItem?> {
+        Binding(
+            get: { selectedScanItemID.flatMap { queue.item(id: $0) } },
+            set: { selectedScanItemID = $0?.id }
+        )
+    }
+
+    private func reviewLabel(for item: ScanQueueItem) -> String {
+        if let title = item.book?.title, !title.isEmpty {
+            return "Review \(title)"
+        }
+        return "Review ISBN \(item.isbn)"
+    }
+
+    private func row(_ item: ScanQueueItem) -> some View {
+        HStack(spacing: 12) {
+            ScanItemThumbnail(item: item)
+                .frame(width: 44, height: 64)
+            VStack(alignment: .leading, spacing: 3) {
+                if let title = item.book?.title, !title.isEmpty {
+                    Text(title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                } else {
+                    switch item.status {
+                    case .queued, .processing:
+                        Text("Looking up ISBN \(item.isbn)…")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    case .failed:
+                        Text("Lookup failed")
+                            .font(.body)
+                            .foregroundStyle(.orange)
+                    case .unavailable:
+                        Text("Add details manually")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    case .ready:
+                        Text("ISBN \(item.isbn)")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(item.book?.authorsText ?? "ISBN \(item.isbn)")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
+    }
+}
 
 private struct CatalogRow: View {
     let book: CatalogBook
@@ -634,9 +865,10 @@ extension AddBookView {
     }
 
     private func startImportFlow() {
-        importQueue = results.filter { selectedIDs.contains($0.id) }
+        let books = results.filter { selectedIDs.contains($0.id) }
         selectedIDs = []
-        showImportFlow = true
+        guard !books.isEmpty else { return }
+        importDispatch = ImportQueueDispatch(books: books)
     }
 }
 
@@ -644,6 +876,7 @@ struct BookImportFlow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var remaining: [CatalogBook] = []
     @State private var currentID = ""
+    @State private var showDeleteConfirmation = false
     var onEachSaved: (String) -> Void = { _ in }
     var onDone: () -> Void = {}
 
@@ -670,7 +903,8 @@ struct BookImportFlow: View {
                         BookFormView(catalog: book, existing: nil,
                                     onSaved: { handleSaved(book.id) },
                                     onDeleted: { handleSaved(book.id) },
-                                    dismissOnSave: false)
+                                    dismissOnSave: false,
+                                    showsToolbarDelete: false)
                             .tag(book.id)
                     }
                 }
@@ -690,6 +924,26 @@ struct BookImportFlow: View {
                         .padding(.vertical, 6)
                         .background(.ultraThinMaterial)
                     }
+                }
+                // One trash for the whole flow, owned here — not one per page.
+                // Pages swap during a swipe transition, so per-page toolbar
+                // items flashed a duplicate delete button in the nav bar.
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(role: .destructive) {
+                            showDeleteConfirmation = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                    }
+                }
+                .alert("Delete this book?", isPresented: $showDeleteConfirmation) {
+                    Button("Delete", role: .destructive) {
+                        handleSaved(currentID)
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This book won't be added to your library.")
                 }
             }
         }
@@ -716,18 +970,24 @@ extension AddBookView {
         do {
             let books = try modelContext.fetch(descriptor)
             existingIsbns = Set(books.compactMap { Book.normalizedISBN($0.isbn) })
+            var names: [String: String] = [:]
+            for book in books {
+                if let normalized = Book.normalizedISBN(book.isbn), !book.title.isEmpty {
+                    names[normalized] = book.title
+                }
+            }
+            existingBookNames = names
         } catch {
             existingIsbns = []
+            existingBookNames = [:]
         }
     }
 
-    private func loadPendingScans() {
-        pendingCount = PendingScanStore.load().count
-    }
-
     private func resumePendingScans() {
-        importQueue = PendingScanStore.load()
-        pendingCount = 0
-        showImportFlow = true
+        // Always open the pending-scan review — whether a scan finished looking
+        // up, is still resolving, or failed. Every entry is actionable there
+        // (review/delete/retry, or "Add all" for the import pager), so tapping
+        // the banner never silently does nothing.
+        showScanReview = true
     }
 }

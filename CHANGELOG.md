@@ -1,26 +1,27 @@
 # Changelog
 
 All notable changes to BookNexus are tracked here, newest first. This file is
-intended to be updated with every meaningful change. Versioning: the initial
-public/GitHub release is **0.1**; patch fixes increment the last component
-(0.1.1, 0.1.2), new features raise the minor version (0.2.0), and major
-milestones raise the major version (1.0).
+intended to be updated with every meaningful change. Versioning follows the
+scheme documented in the README: the earliest release is **0.1**; patch-level
+fixes increment the last component (0.1.1, 0.1.2, …), new features raise the
+minor version (0.2, 0.3, …), and major milestones raise the major version (1.0).
 
 ## [Unreleased]
 
 ### Added
-- **Versioning** now starts at 0.1 (shown in About); later fixes bump 0.1.x,
-  features 0.2, major milestones 1.0.
+- **Re-versioning** of the release history: the earliest release is now 0.1 and
+  each subsequent release group increments from there; the current release is
+  **0.4** (shown in About).
 - Author and Tag filter search fields got a clear (**X**) button to reset them.
 
-## [0.1] — 2026-08-20
+## [0.4] — 2026-08-20
 
 ### Added
 - Searchable **multi-select Author and Tag filters** (search field, selected
   items grouped at the top, clear button, "All" row, live filtering with
   removable chips).
-- **About:** AI connection log is now **newest-first**.
-- Ask AI chat now shows a brief **chain-of-thought preview** (2–3 lines) that
+- AI connection log is now **newest-first**.
+- Ask AI chat shows a brief **chain-of-thought preview** (2–3 lines) that
   disappears once the reply renders (endpoints that expose reasoning only).
 - **Master-copy listing:** the main grid/list shows one master per ISBN with an
   "N copies" badge; a book's detail page lists all copies with location, loan
@@ -29,17 +30,17 @@ milestones raise the major version (1.0).
   books with a review-and-approve list (never overwrites a manual label).
 - **Fiction / Non-fiction field** on books: set when adding/editing, shown on
   the detail page, proposed by the AI shelf pass.
-- **Two-tier shelf organization:** Group by tags now shows Fiction /
-  Non-fiction / Uncategorized top groups, each containing the AI-proposed
-  shelves, with a single "Other" bucket.
+- **Two-tier shelf organization:** Group by tags shows Fiction / Non-fiction /
+  Uncategorized top groups, each containing the AI-proposed shelves, with a
+  single "Other" bucket.
 - "Reorganize shelves" previews the two-tier layout, explains what shelves are,
   and proposes fiction/non-fiction labels per book. All AI sheets show live
   progress steps and outcome summaries.
 
 ### Changed
 - "Genre" renamed to **"Tags"** throughout the app UI and Swift API (the
-  underlying persistent field keeps its legacy name for CloudKit
-  compatibility; exports use `tags`, imports accept both keys).
+  underlying persistent field keeps its legacy name for CloudKit compatibility;
+  exports use `tags`, imports accept both keys).
 - AI requests run on a generous-timeout transport (previously `URLSession`
   default 60s aborted long local-model requests).
 - Apple Intelligence successes no longer log a stale auto-discovered OpenAI
@@ -47,13 +48,13 @@ milestones raise the major version (1.0).
 
 ### Fixed
 - Catalog lookups are time-boxed so they never hang a scan; the background scan
-  queue now actually processes (a startup flag ordering bug left scans
-  "looking up" forever).
-- Scanned duplicates can be added as an **additional copy** (the duplicate
-  alert now offers it); duplicate alerts name the existing book.
+  queue actually processes (a startup flag-ordering bug left scans "looking up"
+  forever).
+- Scanned duplicates can be added as an **additional copy** (the duplicate alert
+  now offers it); duplicate alerts name the existing book.
 - Duplicate "Other" shelves and the import-pager duplicate delete button.
 
-## 2026-08-17 … 2026-08-14
+## [0.3] — 2026-08-17
 
 ### Added
 - **Ask AI** chat: grounded recommendations and answers, conversation memory,
@@ -66,7 +67,7 @@ milestones raise the major version (1.0).
   log in Settings.
 - Retrieval-first AI context that sizes requests to the model's context window.
 
-## 2026-08-13
+## [0.2] — 2026-08-13
 
 ### Added
 - **Catalog scanning & import:** scan an ISBN, rescan with an in-library check,
@@ -82,7 +83,7 @@ milestones raise the major version (1.0).
 - Cover rendering, the crop tool, the "cover never mutated" save warning,
   CloudKit startup errors (information property list), search result handling.
 
-## 2026-08-12 … 2026-08-07
+## [0.1] — 2026-08-12
 
 ### Added
 - Library with cover grid, list, by-location, and dashboard views; author/genre
@@ -90,7 +91,7 @@ milestones raise the major version (1.0).
 - **Add Books** flow with OpenLibrary/Google search, ISBN scanning, camera and
   photo cover capture, book editing with delete.
 - Import wizards with a remaining-count swipe hint and duplicate guards.
-- Search history; multiple cover options; descriptive-stat toggles where shown.
+- Search history; multiple cover options.
 
 ### Fixed
 - Crash when importing selected search results; stale-book display across the

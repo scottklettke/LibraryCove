@@ -1,19 +1,19 @@
 # Changelog
 
 All notable changes to BookNexus are tracked here, newest first. This file is
-intended to be updated with every meaningful change (see the FAQ in README).
+intended to be updated with every meaningful change. Versioning: the initial
+public/GitHub release is **0.1**; patch fixes increment the last component
+(0.1.1, 0.1.2), new features raise the minor version (0.2.0), and major
+milestones raise the major version (1.0).
 
 ## [Unreleased]
 
 ### Added
-- **About & Feedback** screen in Settings: app description, feature overview,
-  open-source attributions, GitHub link, this changelog (bundled with the app),
-  a "coming in the future" roadmap, and a one-tap feedback link to GitHub Issues.
-- Repository `README.md` for the project page.
-- **Changelog** (`CHANGELOG.md`) — this file, created retroactively from the
-  commit history and intended to be updated with every meaningful change.
+- **Versioning** now starts at 0.1 (shown in About); later fixes bump 0.1.x,
+  features 0.2, major milestones 1.0.
+- Author and Tag filter search fields got a clear (**X**) button to reset them.
 
-## 2026-08-20
+## [0.1] — 2026-08-20
 
 ### Added
 - Searchable **multi-select Author and Tag filters** (search field, selected

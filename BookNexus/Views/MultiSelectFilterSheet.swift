@@ -45,9 +45,23 @@ struct MultiSelectFilterSheet: View {
         NavigationStack {
             List {
                 Section {
-                    TextField("Search \(title.lowercased())", text: $searchText)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundStyle(.secondary)
+                        TextField("Search \(title.lowercased())", text: $searchText)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        if !searchText.isEmpty {
+                            Button {
+                                searchText = ""
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Clear search")
+                        }
+                    }
                 }
                 if !selectedSorted.isEmpty {
                     Section("Selected") {

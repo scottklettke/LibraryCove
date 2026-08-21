@@ -74,6 +74,13 @@ See the "Coming in the future" section inside the app's **About** screen. In
 short: additional AI providers (multi-model selection), web-search grounding
 for Ask AI, streaming chat, and deeper iCloud-synced metadata.
 
+## Versioning
+
+Public/GitHub releases start at **0.1**. Patch-level fixes increment the last
+component (`0.1.1`, `0.1.2`, …), new features raise the minor version
+(`0.2.0`), and major milestones raise the major version (`1.0`). The current
+version is shown in the app under Settings → About & Feedback.
+
 ## Feedback
 
 Found a bug or want a feature? Open an issue:

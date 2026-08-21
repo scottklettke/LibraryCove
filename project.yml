@@ -31,6 +31,8 @@ targets:
     info:
       path: BookNexus/Info.plist
       properties:
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:

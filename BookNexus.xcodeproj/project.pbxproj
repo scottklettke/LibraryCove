@@ -43,6 +43,7 @@
 		987B77E5B2E31037BAF2CA4F /* GenreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FCBC84DCB9CD2FF86A129E /* GenreStore.swift */; };
 		997C6E71BD43FA6B85E0D476 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 04ACE7F5E353C06A2D8C9B02 /* MarkdownUI */; };
 		A2DFF5BFD4AEDAEE000410A7 /* BookMastering.swift in Sources */ = {isa = PBXBuildFile; fileRef = A126CA4210748B50B74F5BB7 /* BookMastering.swift */; };
+		A4A36BD3D84F4A90250627CF /* MultiSelectFilterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94147EFCA1D0C58FBFE6CD81 /* MultiSelectFilterSheet.swift */; };
 		A4D5526BA0DDA1751D1D7225 /* LibraryRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = B83183F1412034C5249A5C93 /* LibraryRetriever.swift */; };
 		AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */; };
 		AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7A776C41705A6CB7A15A49 /* RootView.swift */; };
@@ -121,6 +122,7 @@
 		8E86167FD5411E0B5D28F468 /* LibraryContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryContext.swift; sourceTree = "<group>"; };
 		93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 		93FCBC84DCB9CD2FF86A129E /* GenreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreStore.swift; sourceTree = "<group>"; };
+		94147EFCA1D0C58FBFE6CD81 /* MultiSelectFilterSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultiSelectFilterSheet.swift; sourceTree = "<group>"; };
 		941B2DD1050ACAE4E9745A98 /* BookNexusApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusApp.swift; sourceTree = "<group>"; };
 		979A367A45B0D87E6C7C617F /* GenreCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanup.swift; sourceTree = "<group>"; };
 		9B80C9AE1045CF5DCCDEDF2F /* SyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTests.swift; sourceTree = "<group>"; };
@@ -147,7 +149,7 @@
 		EA352B2ACB33FB6DB3838EC8 /* AILog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AILog.swift; sourceTree = "<group>"; };
 		F58856651ED12B7821246983 /* ShelfCategorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfCategorizer.swift; sourceTree = "<group>"; };
 		F813FC7967B94AEFA911CF4E /* LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySync.swift; sourceTree = "<group>"; };
-		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAskView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -185,6 +187,7 @@
 				E3C1F5B0FFD72FCDC259B256 /* GenreCleanupView.swift */,
 				06FB9E9C79C3D1AAF67B49B4 /* ISBNScannerView.swift */,
 				479F167FA4D4909D64A9776B /* LibraryView.swift */,
+				94147EFCA1D0C58FBFE6CD81 /* MultiSelectFilterSheet.swift */,
 				D8D13E465719FF80F0A10F54 /* PhotoCropView.swift */,
 				8B7A776C41705A6CB7A15A49 /* RootView.swift */,
 				142ED389ED138762597BEC0F /* SettingsView.swift */,
@@ -487,6 +490,7 @@
 				3E1B70428ED02FC7ADECABA2 /* LibraryView.swift in Sources */,
 				213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */,
 				86A583012566B0E63489B2DC /* LocationStore.swift in Sources */,
+				A4A36BD3D84F4A90250627CF /* MultiSelectFilterSheet.swift in Sources */,
 				AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */,
 				C1B5391196F9887E6C4EA087 /* OpenAICompatibleProvider.swift in Sources */,
 				23446AA2093D6D1DF964DCE2 /* Persistence.swift in Sources */,
@@ -569,7 +573,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = BookNexus/BookNexus.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = BookNexus/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -766,7 +769,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = BookNexus/BookNexus.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = BookNexus/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

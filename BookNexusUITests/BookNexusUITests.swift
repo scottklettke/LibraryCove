@@ -524,6 +524,49 @@ final class BookNexusUITests: XCTestCase {
         XCTAssertTrue(row.exists, "token-rate toggle missing in AI settings")
     }
 
+    /// The Author filter is a searchable multi-select sheet: search, tap a
+    /// result, and the selection filters the library with a removable chip.
+    func testAuthorFilterSearchAndMultiSelect() throws {
+        let app = pendingScansApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        addSeededBooks(app) // imports "Apple Inc." + "Martin Kleppmann"
+
+        let author = app.buttons["Author"]
+        XCTAssertTrue(author.waitForExistence(timeout: 10), "Author filter button missing")
+        author.tap()
+        // A first-run tap can be swallowed while the toolbar settles — retry once.
+        if !app.navigationBars["Authors"].waitForExistence(timeout: 3) {
+            author.tap()
+        }
+        XCTAssertTrue(app.navigationBars["Authors"].waitForExistence(timeout: 10),
+                      "author filter sheet did not open")
+        let search = app.textFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5), "search field missing in filter")
+        search.tap()
+        search.typeText("Martin")
+
+        let martin = app.buttons["Martin Kleppmann"]
+        XCTAssertTrue(martin.waitForExistence(timeout: 5), "search result not shown")
+        martin.tap()
+        app.buttons["Done"].tap()
+
+        // Only the matching book remains, with a removable chip.
+        XCTAssertTrue(app.staticTexts["Designing Data-Intensive Applications"].waitForExistence(timeout: 10),
+                      "matching book missing after filter")
+        XCTAssertTrue(app.staticTexts["Author: Martin Kleppmann"].waitForExistence(timeout: 5),
+                      "selected-author chip missing")
+        XCTAssertFalse(app.staticTexts["The Swift Programming Language"].exists,
+                       "non-matching book should be filtered out")
+
+        // Removing the chip clears the filter.
+        let remove = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Remove Author'")).firstMatch
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), "chip remove button missing")
+        remove.tap()
+        XCTAssertTrue(app.staticTexts["The Swift Programming Language"].waitForExistence(timeout: 10),
+                      "filter not cleared after removing chip")
+    }
+
     /// Genre cleanup over an engine-less simulator must show the error state
     /// with a Retry, not a blank sheet. Runs on a populated library: the AI
     /// tools menu lives in the trailing toolbar, which (like the Add button)

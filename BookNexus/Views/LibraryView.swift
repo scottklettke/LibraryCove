@@ -118,8 +118,10 @@ struct LibraryView: View {
     @State private var searchText = ""
     @State private var showAdd = false
     @State private var grouping: LibraryGrouping = .none
-    @State private var filterAuthor: String?
-    @State private var filterGenre: String?
+    @State private var filteredAuthors = Set<String>()
+    @State private var filteredTags = Set<String>()
+    @State private var showAuthorFilter = false
+    @State private var showTagFilter = false
     @State private var sortOrder: LibrarySort = .titleAsc
     @State private var isScrolled = false
     @State private var filteredSheet: FilteredSheet?
@@ -156,14 +158,18 @@ struct LibraryView: View {
             }
         }
         var result = searched
-        if let filterAuthor {
+        if !filteredAuthors.isEmpty {
             result = result.filter { book in
-                book.authors.contains { $0.localizedCaseInsensitiveCompare(filterAuthor) == .orderedSame }
+                filteredAuthors.contains { wanted in
+                    book.authors.contains { $0.localizedCaseInsensitiveCompare(wanted) == .orderedSame }
+                }
             }
         }
-        if let filterGenre {
+        if !filteredTags.isEmpty {
             result = result.filter { book in
-                book.tags.contains { $0.localizedCaseInsensitiveCompare(filterGenre) == .orderedSame }
+                filteredTags.contains { wanted in
+                    book.tags.contains { $0.localizedCaseInsensitiveCompare(wanted) == .orderedSame }
+                }
             }
         }
         return result.sorted { lhs, rhs in
@@ -323,27 +329,15 @@ struct LibraryView: View {
                     } label: {
                         Label(grouping == .none ? "Group" : "Group: \(grouping.displayName)", systemImage: "rectangle.3.group")
                     }
-                    Menu {
-                        Picker("Author", selection: $filterAuthor) {
-                            Text("All").tag(String?.none)
-                            ForEach(allAuthors, id: \.self) { author in
-                                Text(author).tag(String?.some(author))
-                            }
-                        }
-                        Button("Clear author") { filterAuthor = nil }
+                    Button {
+                        showAuthorFilter = true
                     } label: {
-                        Label(filterAuthor.map { "Author: \($0)" } ?? "Author", systemImage: "person")
+                        Label(filteredAuthors.isEmpty ? "Author" : "Author (\(filteredAuthors.count))", systemImage: "person")
                     }
-                    Menu {
-                        Picker("Tag", selection: $filterGenre) {
-                            Text("All").tag(String?.none)
-                            ForEach(allGenres, id: \.self) { genre in
-                                Text(genre).tag(String?.some(genre))
-                            }
-                        }
-                        Button("Clear tags") { filterGenre = nil }
+                    Button {
+                        showTagFilter = true
                     } label: {
-                        Label(filterGenre.map { "Tag: \($0)" } ?? "Tag", systemImage: "tag")
+                        Label(filteredTags.isEmpty ? "Tag" : "Tag (\(filteredTags.count))", systemImage: "tag")
                     }
                     Menu {
                         Button {
@@ -388,6 +382,16 @@ struct LibraryView: View {
         }
         .sheet(isPresented: $showFictionClassifier) {
             FictionClassifierView(books: visibleBooks)
+        }
+        .sheet(isPresented: $showAuthorFilter) {
+            MultiSelectFilterSheet(title: "Authors", items: allAuthors, selection: filteredAuthors) {
+                filteredAuthors = $0
+            }
+        }
+        .sheet(isPresented: $showTagFilter) {
+            MultiSelectFilterSheet(title: "Tags", items: allGenres, selection: filteredTags) {
+                filteredTags = $0
+            }
         }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }
@@ -645,38 +649,40 @@ struct LibraryView: View {
     }
 
     private var hasActiveFilters: Bool {
-        grouping != .none || filterAuthor != nil || filterGenre != nil
+        grouping != .none || !filteredAuthors.isEmpty || !filteredTags.isEmpty
     }
 
     private var activeFiltersBar: some View {
-        HStack(spacing: 10) {
-            if grouping != .none {
-                chip("Grouped by \(grouping.displayName)", systemImage: "rectangle.3.group") {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if grouping != .none {
+                    chip("Grouped by \(grouping.displayName)", systemImage: "rectangle.3.group") {
+                        grouping = .none
+                    }
+                }
+                ForEach(filteredAuthors.sorted(), id: \.self) { author in
+                    chip("Author: \(author)", systemImage: "person") {
+                        filteredAuthors.remove(author)
+                    }
+                }
+                ForEach(filteredTags.sorted(), id: \.self) { tag in
+                    chip("Tag: \(tag)", systemImage: "tag") {
+                        filteredTags.remove(tag)
+                    }
+                }
+                Spacer()
+                Button("Clear all filters") {
                     grouping = .none
+                    filteredAuthors = []
+                    filteredTags = []
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            if let filterAuthor {
-                chip("Author: \(filterAuthor)", systemImage: "person") {
-                    self.filterAuthor = nil
-                }
-            }
-            if let filterGenre {
-                chip("Tag: \(filterGenre)", systemImage: "tag") {
-                    self.filterGenre = nil
-                }
-            }
-            Spacer()
-            Button("Clear all") {
-                grouping = .none
-                filterAuthor = nil
-                filterGenre = nil
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            .background(.bar)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 6)
-        .background(.bar)
     }
 
     private func chip(_ text: String, systemImage: String, onClear: @escaping () -> Void) -> some View {

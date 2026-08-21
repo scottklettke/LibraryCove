@@ -611,37 +611,48 @@ final class BookNexusUITests: XCTestCase {
         ).firstMatch.waitForExistence(timeout: 5), "changelog did not render")
     }
 
-    /// Genre cleanup over an engine-less simulator must show the error state
-    /// with a Retry, not a blank sheet. Runs on a populated library: the AI
-    /// tools menu lives in the trailing toolbar, which (like the Add button)
-    /// is only rendered when the library is non-empty.
-    func testGenreCleanupShowsErrorStateWithRetry() throws {
+    /// Long-pressing a grid book opens a manual assignment menu: create a new
+    /// shelf for that book, then Group by Shelf must show it under that shelf
+    /// (the manual shelf workflow that replaced the AI tools entry).
+    func testLongPressAssignsShelfAndGroupsByIt() throws {
         let app = pendingScansApp()
         app.launch()
         enterLibraryIfNeeded(app)
-        addSeededBooks(app) // imports both seeded books → non-empty library
+        addSeededBooks(app) // two seeded books → populated grid
 
-        // "Clean up tags…" and "Reorganize shelves…" live in the dedicated AI
-        // toolbar menu (not buried at the bottom of the genre filter).
-        let aiMenu = app.buttons["AI tools"]
-        XCTAssertTrue(aiMenu.waitForExistence(timeout: 10), "AI tools menu missing")
-        aiMenu.tap()
-        let reorganize = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'Reorganize shelves'")
-        ).firstMatch
-        XCTAssertTrue(reorganize.waitForExistence(timeout: 5),
-                      "Reorganize shelves missing from AI menu")
-        let cleanup = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'Clean up tags'")
-        ).firstMatch
-        XCTAssertTrue(cleanup.waitForExistence(timeout: 5), "Clean up tags menu item missing")
-        cleanup.tap()
+        // Long-press the first book's cell (its title text) → action menu.
+        let book = app.staticTexts["The Swift Programming Language"]
+        XCTAssertTrue(book.waitForExistence(timeout: 10), "book cell missing")
+        book.press(forDuration: 1.2)
 
-        // With no engine configured the sheet shows the error state and Retry.
-        XCTAssertTrue(app.navigationBars["Clean up tags"].waitForExistence(timeout: 10),
-                      "clean-up sheet did not present")
-        XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 15),
-                      "error state with Retry did not appear")
+        // Long-press opens the action dialog (assign shelf / edit tags / delete).
+        let assign = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Assign to shelf'")
+        ).firstMatch
+        XCTAssertTrue(assign.waitForExistence(timeout: 5), "assign-to-shelf menu missing")
+        assign.tap()
+
+        XCTAssertTrue(app.navigationBars["Assign to shelf"].waitForExistence(timeout: 10),
+                      "assign sheet did not open")
+        // Create a brand-new shelf inline.
+        let newField = app.textFields["New shelf…"]
+        XCTAssertTrue(newField.waitForExistence(timeout: 5), "new-shelf field missing")
+        newField.tap()
+        newField.typeText("Home")
+        app.buttons["Add"].tap()
+        app.buttons["Done"].tap()
+
+        // Group by Shelf to confirm the assignment took effect.
+        let group = app.buttons["Group"]
+        XCTAssertTrue(group.waitForExistence(timeout: 10), "Group menu missing")
+        group.tap()
+        let shelfGroup = app.buttons["Shelf"]
+        XCTAssertTrue(shelfGroup.waitForExistence(timeout: 5), "Shelf grouping missing")
+        shelfGroup.tap()
+
+        XCTAssertTrue(app.staticTexts["Home"].waitForExistence(timeout: 10),
+                      "assigned shelf section missing after grouping by shelf")
+        XCTAssertTrue(book.exists, "book must appear under its assigned shelf")
     }
 
     /// Ask AI suggestion chips must be context-aware: static starters on an

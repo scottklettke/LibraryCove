@@ -22,6 +22,9 @@ final class Book {
     /// `fiction`, `non-fiction`. Set by the user or proposed by the AI shelf
     /// pass; it is the top-level partition of the two-tier shelf grouping.
     var kind: String = ""
+    /// Manual shelf assignments — a user-curated shelf name, not an AI
+    /// taxonomy. Multi-select; managed without AI.
+    var shelves: [String] = []
     var coverImageURL: String?
     var publisher: String?
     var pageCount: Int?
@@ -105,7 +108,8 @@ final class Book {
         updatedAt: Date = Date(),
         syncState: String = "modified",
         syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
-        syncDeviceID: String = ""
+        syncDeviceID: String = "",
+        shelves: [String] = []
     ) {
         self.id = id
         self.title = title
@@ -139,6 +143,7 @@ final class Book {
         self.syncState = syncState
         self.syncUpdatedAt = syncUpdatedAt
         self.syncDeviceID = syncDeviceID
+        self.shelves = shelves
         self.notes = []
         self.listItems = []
         self.connectionsAsBook1 = []

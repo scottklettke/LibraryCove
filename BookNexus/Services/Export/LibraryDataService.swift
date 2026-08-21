@@ -392,7 +392,8 @@ enum LibraryDataService {
                             updatedAt: dto.updatedAt,
                             syncState: dto.syncState,
                             syncUpdatedAt: dto.syncUpdatedAt,
-                            syncDeviceID: dto.syncDeviceID)
+                            syncDeviceID: dto.syncDeviceID,
+                            shelves: dto.shelves ?? [])
             context.insert(book)
             books[dto.id] = book
         }

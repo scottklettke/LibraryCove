@@ -49,11 +49,13 @@
 		AA4D8795F2164997CE6875B4 /* BookNexusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */; };
 		AAE9A9A710C8C766BA660B19 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B7A776C41705A6CB7A15A49 /* RootView.swift */; };
 		AB61CE21B31CF6C32CE2A043 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07E94C93E532B33EA592F1EB /* Note.swift */; };
+		ABBCB5CEBB25ED93A19C1ABB /* AssignValuesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F238BEF5572D210674A7F12 /* AssignValuesSheet.swift */; };
 		BC4BEAE2416EE87718ACDC26 /* AIAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */; };
 		C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142ED389ED138762597BEC0F /* SettingsView.swift */; };
 		C1B5391196F9887E6C4EA087 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D10C87BE8E0D0FD5C243BF /* OpenAICompatibleProvider.swift */; };
 		C2186FBF883F33F9720E4C00 /* AILog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA352B2ACB33FB6DB3838EC8 /* AILog.swift */; };
 		CA6AEF54D4F207015ABD76C3 /* GenreCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979A367A45B0D87E6C7C617F /* GenreCleanup.swift */; };
+		CF21973143B4131429B7C82E /* ShelfStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27B064FD29B6434D0AE513C0 /* ShelfStore.swift */; };
 		D75EB4CEC5E1DE28618DA595 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = FC78AF2954C3C19364FFD29E /* CHANGELOG.md */; };
 		DC446481A878EFABD9DDA09B /* ScanQueueStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B82E0D75EF283F5BC56D521A /* ScanQueueStoreTests.swift */; };
 		E039256789524685544238F4 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BA645B8D9F8EE7D0843172 /* AIConfig.swift */; };
@@ -99,6 +101,7 @@
 		14D52FCA11B8F9F348B3773A /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
 		19F634236D2E25996ABFAF7E /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusUITests.swift; sourceTree = "<group>"; };
+		27B064FD29B6434D0AE513C0 /* ShelfStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfStore.swift; sourceTree = "<group>"; };
 		2B0405C54238ECDC073B5E73 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		2D0B3560429372162C83A82A /* ReadingList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingList.swift; sourceTree = "<group>"; };
 		2E8C04994346C17F17BD4FDB /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
@@ -114,6 +117,7 @@
 		4B35B01FCD85BDC304C10910 /* AppleIntelligenceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceProvider.swift; sourceTree = "<group>"; };
 		51A8B5BBCEC34C88F6C07C88 /* SyncProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProvider.swift; sourceTree = "<group>"; };
 		5803E128FEAB5311F9F68675 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		5F238BEF5572D210674A7F12 /* AssignValuesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignValuesSheet.swift; sourceTree = "<group>"; };
 		65813D2A2D5A312DFCED7CF9 /* BookNexusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusTests.swift; sourceTree = "<group>"; };
 		65CB04629C627D51DCBFC9CF /* ConversationMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMemory.swift; sourceTree = "<group>"; };
 		70D10C87BE8E0D0FD5C243BF /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
@@ -188,6 +192,7 @@
 				2E8C04994346C17F17BD4FDB /* AboutView.swift */,
 				07963244E0A5CBAFF3685B76 /* AddBookView.swift */,
 				FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */,
+				5F238BEF5572D210674A7F12 /* AssignValuesSheet.swift */,
 				AA71BCA2022D2862829348EC /* BookDetailView.swift */,
 				33EF2D5991F14BE64B336D96 /* BookFormView.swift */,
 				BBB706E6DB5CB6DCFAD16A82 /* FictionClassifierView.swift */,
@@ -355,6 +360,7 @@
 				A126CA4210748B50B74F5BB7 /* BookMastering.swift */,
 				AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */,
 				2B0405C54238ECDC073B5E73 /* ScanQueueStore.swift */,
+				27B064FD29B6434D0AE513C0 /* ShelfStore.swift */,
 				D210360B8AA99C125E5896FB /* AI */,
 				36C7F8DD9CEF6776262061DD /* Auth */,
 				F0007BCC6179F88F3F5B1096 /* Catalog */,
@@ -486,6 +492,7 @@
 				8171B07342C8F77A5A081F94 /* AddBookView.swift in Sources */,
 				48C184644350385B2C0D7829 /* AppleIntelligenceProvider.swift in Sources */,
 				08F145FA5011259A60A2BC05 /* AskSuggestions.swift in Sources */,
+				ABBCB5CEBB25ED93A19C1ABB /* AssignValuesSheet.swift in Sources */,
 				74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */,
 				8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */,
 				21033AD1870A74ECF2251FD7 /* BookDateRepair.swift in Sources */,
@@ -524,6 +531,7 @@
 				C14ADE649CE118927A9375DE /* SettingsView.swift in Sources */,
 				920C82DAD50165D12BCE721B /* ShelfCategoriesView.swift in Sources */,
 				3721FF80627B5972661BC096 /* ShelfCategorizer.swift in Sources */,
+				CF21973143B4131429B7C82E /* ShelfStore.swift in Sources */,
 				E31B410542DC6881F02A1807 /* SyncCoordinator.swift in Sources */,
 				F1FFA880481D050874F2CC74 /* SyncProvider.swift in Sources */,
 				4AFD8127315354E6B8B70CD2 /* SyncSettings.swift in Sources */,

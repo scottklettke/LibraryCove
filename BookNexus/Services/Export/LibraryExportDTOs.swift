@@ -52,6 +52,8 @@ struct BookDTO: Codable {
     /// Fiction / non-fiction classification (`nil` when unset). New field; old
     /// archives won't have it.
     var kind: String?
+    /// Manual shelf assignments (`nil` when the book has none).
+    var shelves: [String]?
     var coverImageURL: String?
     /// Relative `covers/<bookID>.jpg` zip entry carrying the cover's JPEG
     /// bytes, set only on export. Presence tells import to restore from a file.
@@ -90,6 +92,7 @@ struct BookDTO: Codable {
         publicationYear = model.publicationYear
         tags = model.tags
         kind = model.kind.isEmpty ? nil : model.kind
+        shelves = model.shelves.isEmpty ? nil : model.shelves
         coverImageURL = model.coverImageURL
         coverImageFile = nil
         publisher = model.publisher
@@ -127,7 +130,7 @@ struct BookDTO: Codable {
         case summary, originalDescription, originalDescriptionSource, hasImprovedDescription
         case language, physicalLocation, status, acquiredDate, purchasePrice, rating
         case loanedTo, loanedDate, ownerID, sharedLibraryID, isPersonal, createdAt
-        case updatedAt, syncState, syncUpdatedAt, syncDeviceID
+        case updatedAt, syncState, syncUpdatedAt, syncDeviceID, shelves
         case legacyTags = "genres"
     }
 
@@ -173,6 +176,7 @@ struct BookDTO: Codable {
         syncState = try c.decode(String.self, forKey: .syncState)
         syncUpdatedAt = try c.decode(Date.self, forKey: .syncUpdatedAt)
         syncDeviceID = try c.decode(String.self, forKey: .syncDeviceID)
+        shelves = try c.decodeIfPresent([String].self, forKey: .shelves)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -210,6 +214,7 @@ struct BookDTO: Codable {
         try c.encode(syncState, forKey: .syncState)
         try c.encode(syncUpdatedAt, forKey: .syncUpdatedAt)
         try c.encode(syncDeviceID, forKey: .syncDeviceID)
+        try c.encodeIfPresent(shelves, forKey: .shelves)
     }
 }
 

@@ -9,10 +9,20 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
 ## [Unreleased]
 
 ### Added
+- **Manual shelves and bulk tagging** (no AI): long-press any grid book to
+  assign/edit shelves, edit tags, or delete; a **Select** mode in the grid
+  enables bulk-editing tags/shelves or deleting many books at once. Assignment
+  uses searchable multi-select sheets that can create new tags/shelves inline,
+  and books can be grouped by shelf manually.
 - **Re-versioning** of the release history: the earliest release is now 0.1 and
   each subsequent release group increments from there; the current release is
   **0.4** (shown in About).
 - Author and Tag filter search fields got a clear (**X**) button to reset them.
+
+### Changed
+- **Removed the AI Tools menu** (clean-up tags / reorganize shelves /
+  classify) as an in-app entry point; the underlying AI services remain in the
+  codebase for a future return.
 
 ### Fixed
 - **"Date added" showing 12/31/00** for recently added books: new books are now

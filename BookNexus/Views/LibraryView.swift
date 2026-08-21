@@ -24,6 +24,7 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
     case none = "none"
     case author = "author"
     case genre = "genre"
+    case shelf = "shelf"
 
     var id: String { rawValue }
 
@@ -32,6 +33,7 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
         case .none: return "None"
         case .author: return "Author"
         case .genre: return "Tags"
+        case .shelf: return "Shelf"
         }
     }
 }
@@ -125,13 +127,13 @@ struct LibraryView: View {
     @State private var sortOrder: LibrarySort = .titleAsc
     @State private var isScrolled = false
     @State private var filteredSheet: FilteredSheet?
-    @State private var showGenreCleanup = false
-    @State private var showShelfCategories = false
-    @State private var showFictionClassifier = false
-    /// The active canonical shelf plan for "Group by genre". Only set while it
-    /// matches the library's current tag set (fingerprint-validated); a stale
-    /// or missing plan makes genre grouping fall back to raw tags.
-    @State private var shelfPlan: ShelfCategoryPlan?
+    @State private var genreStore = GenreStore()
+    @State private var shelfStore = ShelfStore()
+    @State private var isSelecting = false
+    @State private var selection = Set<String>()
+    @State private var assignmentTarget: AssignmentTarget?
+    @State private var longPressBook: Book?
+    @State private var pushedBook: BookRoute?
 
     private var filteredBooks: [Book] {
         let visible = books.filter { $0.status != BookStatus.donated.rawValue }
@@ -216,6 +218,73 @@ struct LibraryView: View {
         }
     }
 
+    /// The library toolbar, extracted so the body's expressions stay
+    /// type-checkable.
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarLeading) {
+            modePicker
+            if viewMode != .dashboard {
+                Menu {
+                    Picker("Group by", selection: $grouping) {
+                        ForEach(LibraryGrouping.allCases) { group in
+                            Text(group.displayName).tag(group)
+                        }
+                    }
+                } label: {
+                    Label(groupLabel, systemImage: "rectangle.3.group")
+                }
+                Group {
+                    Button {
+                        showAuthorFilter = true
+                    } label: {
+                        Label(authorFilterLabel, systemImage: "person")
+                    }
+                    Button {
+                        showTagFilter = true
+                    } label: {
+                        Label(tagFilterLabel, systemImage: "tag")
+                    }
+                }
+                Menu {
+                    sortMenuItem(.title)
+                    sortMenuItem(.author)
+                    sortMenuItem(.dateAdded)
+                    Button("Tap a field again to reverse the order") {}
+                        .disabled(true)
+                        .accessibilityHidden(true)
+                } label: {
+                    Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
+                }
+            }
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            if !displayBooks.isEmpty {
+                Button(isSelecting ? "Done" : "Select") {
+                    toggleSelecting()
+                }
+            }
+            Button {
+                showAdd = true
+            } label: {
+                Label("Add", systemImage: "plus")
+            }
+        }
+    }
+
+    private var groupLabel: String {
+        grouping == .none ? "Group" : "Group: \(grouping.displayName)"
+    }
+
+    private func sortMenuItem(_ field: LibrarySortField) -> some View {
+        Button {
+            toggleSortField(field)
+        } label: {
+            Label(sortFieldLabel(field), systemImage: isSortField(field) ? "checkmark" : "arrow.up.arrow.down")
+        }
+    }
+
+
     private func sortFieldLabel(_ field: LibrarySortField) -> String {
         switch field {
         case .title:
@@ -244,38 +313,155 @@ struct LibraryView: View {
         return copyCounts[normalized] ?? 1
     }
 
-    /// Two-tier organization for "Group by tags": top-level Fiction /
-    /// Non-fiction / Uncategorized (from stored `Book.kind`), each containing
-    /// the AI shelves. Nil when there is no valid plan — callers fall back to
-    /// raw-tag grouping.
-    private var genreTiers: [(top: String, shelves: [ShelfCategorizer.ShelfSection])]? {
-        guard grouping == .genre, let plan = shelfPlan,
-              ShelfCategorizer.isValid(plan, forTags: ShelfCategorizer.allGenres(from: visibleBooks)) else { return nil }
-        return ShelfCategorizer.twoTierSections(books: displayBooks, plan: plan)
+    private var authorFilterLabel: String {
+        filteredAuthors.isEmpty ? "Author" : "Author (\(filteredAuthors.count))"
     }
 
-    /// Loads a valid stored plan, or generates (and caches) a fresh one when
-    /// the library's tag set has changed. Model failures degrade gracefully to
-    /// raw-tag grouping instead of blocking the library.
-    private func refreshShelfPlanIfNeeded() async {
-        guard grouping == .genre else { return }
-        let tags = ShelfCategorizer.allGenres(from: visibleBooks)
-        guard !tags.isEmpty else {
-            shelfPlan = nil
-            return
+    private var tagFilterLabel: String {
+        filteredTags.isEmpty ? "Tag" : "Tag (\(filteredTags.count))"
+    }
+
+    // MARK: - Manual tag/shelf assignment + bulk select
+
+    /// A pending assignment: which kind of value (tags or shelves) applied to
+    /// which books. Presented as a searchable multi-select sheet.
+    private struct AssignmentTarget: Identifiable {
+        enum Kind { case tags, shelves }
+        let id = UUID()
+        let kind: Kind
+        let books: [Book]
+    }
+
+    /// A pending push to a book's detail page (taps navigate).
+    private struct BookRoute: Identifiable, Hashable {
+        let id = UUID()
+        let book: Book
+        static func == (lhs: BookRoute, rhs: BookRoute) -> Bool { lhs.id == rhs.id }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    }
+
+    /// Grid cell that either navigates (tap) with a long-press menu for manual
+    /// tagging/assignment, or toggles bulk-selection when selection mode is on.
+    private func makeCell(for book: Book) -> some View {
+        let cell = BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
+        if isSelecting {
+            let isSelected = selection.contains(book.id)
+            return AnyView(
+                Button {
+                    toggleSelection(book.id)
+                } label: {
+                    cell
+                        .overlay(alignment: .topTrailing) {
+                            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                .font(.title3)
+                                .foregroundStyle(isSelected ? Color.accentColor : Color(uiColor: .tertiaryLabel))
+                                .padding(4)
+                                .background(.thinMaterial, in: Circle())
+                                .padding(4)
+                        }
+                }
+                .buttonStyle(.plain)
+            )
         }
-        if let stored = ShelfCategorizer.storedPlan(),
-           ShelfCategorizer.isValid(stored, forTags: tags) {
-            shelfPlan = stored
-            return
-        }
-        if let plan = try? await ShelfCategorizer.generatePlan(books: visibleBooks),
-           !plan.mappings.isEmpty {
-            shelfPlan = plan
-            ShelfCategorizer.store(plan)
+        return AnyView(
+            cell
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    pushedBook = BookRoute(book: book)
+                }
+                .onLongPressGesture(minimumDuration: 0.6) {
+                    longPressBook = book
+                }
+        )
+    }
+
+    private func toggleSelecting() {
+        isSelecting.toggle()
+        if !isSelecting { selection = [] }
+    }
+
+    private func toggleSelection(_ id: String) {
+        if selection.contains(id) {
+            selection.remove(id)
         } else {
-            shelfPlan = nil
+            selection.insert(id)
         }
+    }
+
+    private var selectedBooks: [Book] {
+        displayBooks.filter { selection.contains($0.id) }
+    }
+
+    private func presentAssignment(_ kind: AssignmentTarget.Kind, _ books: [Book]) {
+        assignmentTarget = AssignmentTarget(kind: kind, books: books)
+    }
+
+    private func assignmentSheet(_ target: AssignmentTarget) -> some View {
+        let known = target.kind == .shelves ? shelfStore.shelves : genreStore.tags
+        let initial = Set(target.books.flatMap { book in
+            target.kind == .shelves ? book.shelves : book.tags
+        })
+        return AssignValuesSheet(
+            title: target.kind == .shelves ? "Assign to shelf" : "Edit tags",
+            valueLabel: target.kind == .shelves ? "shelf" : "tag",
+            knownValues: known,
+            initialValues: initial,
+            onDone: { values in applyAssignment(values, to: target) }
+        )
+    }
+
+    private func applyAssignment(_ values: Set<String>, to target: AssignmentTarget) {
+        let list = values.sorted()
+        for book in target.books {
+            if target.kind == .shelves {
+                book.shelves = list
+            } else {
+                book.tags = list
+            }
+        }
+        // Register any new custom values so they become suggested later.
+        for value in list {
+            if target.kind == .shelves {
+                _ = shelfStore.add(value)
+            } else {
+                _ = genreStore.add(value)
+            }
+        }
+        try? modelContext.save()
+    }
+
+    private func delete(_ books: [Book]) {
+        for book in books {
+            CoverImageStore.delete(forBookID: book.id)
+            modelContext.delete(book)
+        }
+        try? modelContext.save()
+        if isSelecting { selection.subtract(books.map(\.id)) }
+    }
+
+    private var bulkActionBar: some View {
+        HStack(spacing: 12) {
+            Text(selection.isEmpty ? "Nothing selected" : "\(selection.count) selected")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("Tag") {
+                presentAssignment(.tags, selectedBooks)
+            }
+            .disabled(selection.isEmpty)
+            Button("Shelf") {
+                presentAssignment(.shelves, selectedBooks)
+            }
+            .disabled(selection.isEmpty)
+            Button("Delete", role: .destructive) {
+                delete(selectedBooks)
+                isSelecting = false
+            }
+            .disabled(selection.isEmpty)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .background(.bar)
     }
 
     private var visibleBooks: [Book] {
@@ -290,22 +476,10 @@ struct LibraryView: View {
         Set(visibleBooks.flatMap(\.tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
-    var body: some View {
+    private var libraryContent: some View {
         VStack(spacing: 0) {
             if hasActiveFilters {
                 activeFiltersBar
-            }
-            // AI genre maintenance. Deliberately in the content area, not the
-            // toolbar: on iPhone any extra toolbar item (trailing or leading)
-            // is folded into the hidden "More" overflow, which is the opposite
-            // of discoverable.
-            if !visibleBooks.isEmpty && viewMode != .dashboard {
-                HStack {
-                    Spacer()
-                    aiToolsMenu
-                }
-                .padding(.horizontal)
-                .padding(.top, 6)
             }
             Group {
                 switch viewMode {
@@ -316,72 +490,23 @@ struct LibraryView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if isSelecting {
+                bulkActionBar
+            }
+        }
         .toolbar {
-            ToolbarItemGroup(placement: .topBarLeading) {
-                modePicker
-                if viewMode != .dashboard {
-                    Menu {
-                        Picker("Group by", selection: $grouping) {
-                            ForEach(LibraryGrouping.allCases) { group in
-                                Text(group.displayName).tag(group)
-                            }
-                        }
-                    } label: {
-                        Label(grouping == .none ? "Group" : "Group: \(grouping.displayName)", systemImage: "rectangle.3.group")
-                    }
-                    Button {
-                        showAuthorFilter = true
-                    } label: {
-                        Label(filteredAuthors.isEmpty ? "Author" : "Author (\(filteredAuthors.count))", systemImage: "person")
-                    }
-                    Button {
-                        showTagFilter = true
-                    } label: {
-                        Label(filteredTags.isEmpty ? "Tag" : "Tag (\(filteredTags.count))", systemImage: "tag")
-                    }
-                    Menu {
-                        Button {
-                            toggleSortField(.title)
-                        } label: {
-                            Label(sortFieldLabel(.title), systemImage: isSortField(.title) ? "checkmark" : "arrow.up.arrow.down")
-                        }
-                        Button {
-                            toggleSortField(.author)
-                        } label: {
-                            Label(sortFieldLabel(.author), systemImage: isSortField(.author) ? "checkmark" : "arrow.up.arrow.down")
-                        }
-                        Button {
-                            toggleSortField(.dateAdded)
-                        } label: {
-                            Label(sortFieldLabel(.dateAdded), systemImage: isSortField(.dateAdded) ? "checkmark" : "arrow.up.arrow.down")
-                        }
-                        Button("Tap a field again to reverse the order") {}
-                            .disabled(true)
-                            .accessibilityHidden(true)
-                    } label: {
-                        Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
-                    }
-                }
+            toolbarContent
+        }
+    }
+
+    var body: some View {
+        libraryContent
+            .sheet(item: $filteredSheet) { sheet in
+                FilteredBooksSheet(sheet: sheet)
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showAdd = true
-                } label: {
-                    Label("Add", systemImage: "plus")
-                }
-            }
-        }
-        .sheet(item: $filteredSheet) { sheet in
-            FilteredBooksSheet(sheet: sheet)
-        }
-        .sheet(isPresented: $showGenreCleanup) {
-            GenreCleanupView(books: visibleBooks)
-        }
-        .sheet(isPresented: $showShelfCategories) {
-            ShelfCategoriesView(books: visibleBooks)
-        }
-        .sheet(isPresented: $showFictionClassifier) {
-            FictionClassifierView(books: visibleBooks)
+        .sheet(item: $assignmentTarget) { target in
+            assignmentSheet(target)
         }
         .sheet(isPresented: $showAuthorFilter) {
             MultiSelectFilterSheet(title: "Authors", items: allAuthors, selection: filteredAuthors) {
@@ -393,17 +518,38 @@ struct LibraryView: View {
                 filteredTags = $0
             }
         }
+        .confirmationDialog(
+            longPressBook?.title ?? "Book",
+            isPresented: Binding(
+                get: { longPressBook != nil },
+                set: { if !$0 { longPressBook = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Assign to shelf…") {
+                if let book = longPressBook { presentAssignment(.shelves, [book]) }
+                longPressBook = nil
+            }
+            Button("Edit tags…") {
+                if let book = longPressBook { presentAssignment(.tags, [book]) }
+                longPressBook = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let book = longPressBook { delete([book]) }
+                longPressBook = nil
+            }
+            Button("Cancel", role: .cancel) { longPressBook = nil }
+        } message: {
+            Text("Choose an action for this book.")
+        }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }
         .onChange(of: grouping) { isScrolled = false }
-        // (Re)build the canonical shelf plan whenever genre grouping is used.
-        // Fingerprint gating means no AI call unless the library's tag set
-        // actually changed since the last valid plan.
-        .task(id: grouping) {
-            await refreshShelfPlanIfNeeded()
-        }
         .sheet(isPresented: $showAdd) {
             AddBookView()
+        }
+        .navigationDestination(item: $pushedBook) { route in
+            BookDetailView(book: route.book)
         }
         .searchable(text: $searchText, prompt: "Search title, author, added by, notes…")
         .overlay {
@@ -445,25 +591,6 @@ struct LibraryView: View {
         .fixedSize()
     }
 
-    /// The AI genre-maintenance actions (clean up tags, reorganize shelves)
-    /// as a visible capsule. Hidden from the toolbar on purpose — see the
-    /// content-area note in `body`.
-    private var aiToolsMenu: some View {
-        Menu {
-            Button("Classify fiction / non-fiction…") { showFictionClassifier = true }
-            Button("Clean up tags…") { showGenreCleanup = true }
-            Button("Reorganize shelves…") { showShelfCategories = true }
-        } label: {
-            Label("AI tools", systemImage: "sparkles")
-                .font(.footnote.bold())
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.thinMaterial)
-                .clipShape(Capsule())
-        }
-    }
-
-
     // MARK: - Grid
 
     private var gridView: some View {
@@ -472,12 +599,7 @@ struct LibraryView: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
                         ForEach(displayBooks) { book in
-                            NavigationLink {
-                                BookDetailView(book: book)
-                            } label: {
-                                BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
-                            }
-                            .buttonStyle(.plain)
+                            makeCell(for: book)
                         }
                     }
                     .padding()
@@ -488,8 +610,6 @@ struct LibraryView: View {
                     isScrolled = offset < -30
                 }
             )
-        } else if grouping == .genre, genreTiers != nil {
-            return AnyView(genreTierGrid)
         } else {
             let grouped = Dictionary(grouping: displayBooks) { book in
                 groupKey(for: book)
@@ -507,12 +627,7 @@ struct LibraryView: View {
                             Section {
                                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
                                     ForEach(grouped[key] ?? []) { book in
-                                        NavigationLink {
-                                            BookDetailView(book: book)
-                                        } label: {
-                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
-                                        }
-                                        .buttonStyle(.plain)
+                                        makeCell(for: book)
                                     }
                                 }
                                 .padding()
@@ -537,54 +652,6 @@ struct LibraryView: View {
         }
     }
 
-    private var genreTierGrid: some View {
-        let tiers = genreTiers ?? []
-        return ScrollView {
-            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                ForEach(tiers, id: \.top) { tier in
-                    Section {
-                        ForEach(tier.shelves, id: \.shelf) { shelfSection in
-                            Section {
-                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 16)], spacing: 16) {
-                                    ForEach(shelfSection.books) { book in
-                                        NavigationLink {
-                                            BookDetailView(book: book)
-                                        } label: {
-                                            BookGridCell(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.horizontal)
-                                .padding(.bottom, 4)
-                            } header: {
-                                Text(shelfSection.shelf)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.horizontal)
-                                    .padding(.top, 4)
-                            }
-                        }
-                    } header: {
-                        Text(tier.top)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal)
-                            .padding(.vertical, 6)
-                            .background(Color(uiColor: .systemGroupedBackground))
-                    }
-                }
-            }
-            .background(ScrollOffsetTracker())
-        }
-        .coordinateSpace(name: "libraryScroll")
-        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-            isScrolled = offset < -30
-        }
-    }
-
     // MARK: - List
 
     private var listView: some View {
@@ -594,27 +661,6 @@ struct LibraryView: View {
                     BookDetailView(book: book)
                 } label: {
                     BookListRow(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
-                }
-            })
-        } else if grouping == .genre, genreTiers != nil {
-            let tiers = genreTiers ?? []
-            return AnyView(List {
-                ForEach(tiers, id: \.top) { tier in
-                    Section {
-                        ForEach(tier.shelves, id: \.shelf) { shelfSection in
-                            Section(shelfSection.shelf) {
-                                ForEach(shelfSection.books) { book in
-                                    NavigationLink {
-                                        BookDetailView(book: book)
-                                    } label: {
-                                        BookListRow(book: book, copyCount: copyBadge(for: book))
-                                    }
-                                }
-                            }
-                        }
-                    } header: {
-                        Text(tier.top)
-                    }
                 }
             })
         } else {
@@ -644,6 +690,7 @@ struct LibraryView: View {
         switch grouping {
         case .author: return book.authors.first
         case .genre: return book.tags.first
+        case .shelf: return book.shelves.first
         case .none: return nil
         }
     }

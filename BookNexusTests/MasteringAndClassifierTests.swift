@@ -122,6 +122,29 @@ struct BookMasteringTests {
     }
 }
 
+@Suite
+struct ShelfStoreTests {
+    @Test func addDeduplicatesCaseInsensitivelyAndPersists() {
+        let store = ShelfStore()
+        let before = store.shelves
+        defer {
+            for value in ["Home", "Travel"] where before.contains(value) == false {
+                store.remove(value)
+            }
+        }
+        let canonical = store.add("Home")
+        #expect(canonical == "Home")
+        // Re-adding with different case returns the original spelling.
+        #expect(store.add("home") == "Home")
+        #expect(store.shelves.filter { $0.caseInsensitiveCompare("Home") == .orderedSame }.count == 1)
+        #expect(store.add("   ") == "")
+
+        // A fresh instance reads the persisted shelf list.
+        let reloaded = ShelfStore()
+        #expect(reloaded.shelves.contains { $0.caseInsensitiveCompare("Home") == .orderedSame })
+    }
+}
+
 @Suite @MainActor
 struct BookDateRepairTests {
 

@@ -514,4 +514,19 @@ import SwiftData
         let dto = try decoder.decode(BookDTO.self, from: Data(legacy.utf8))
         #expect(dto.tags == ["Science Fiction", "Fantasy"])
     }
+
+    /// Manual shelves must survive an export/import round trip.
+    @Test func shelvesRoundTripThroughBookDTO() throws {
+        let book = Book(id: "b-1", title: "Dune", shelves: ["Home", "Sci-Fi"])
+        let dto = BookDTO(model: book)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(dto)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let restored = try decoder.decode(BookDTO.self, from: data)
+        #expect(restored.shelves == ["Home", "Sci-Fi"])
+    }
 }

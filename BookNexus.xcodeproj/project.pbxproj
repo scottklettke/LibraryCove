@@ -12,6 +12,7 @@
 		08F145FA5011259A60A2BC05 /* AskSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1DD9106F2F7BA4FC28006E1 /* AskSuggestions.swift */; };
 		09F88F4E689B4A6BA33EFD80 /* SyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B80C9AE1045CF5DCCDEDF2F /* SyncTests.swift */; };
 		1D227A84A443CE7DBBF3C546 /* ZipArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAE4766D3B7B69FC70AA5FED /* ZipArchive.swift */; };
+		21033AD1870A74ECF2251FD7 /* BookDateRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD3E5F0D88424617781F4EF /* BookDateRepair.swift */; };
 		213A58271FFA15D7825040D9 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F9FCFC1D683F9F63B7ED5B /* LibraryViewModel.swift */; };
 		23446AA2093D6D1DF964DCE2 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BECBAE066EF4A05F33A7576 /* Persistence.swift */; };
 		3721FF80627B5972661BC096 /* ShelfCategorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58856651ED12B7821246983 /* ShelfCategorizer.swift */; };
@@ -146,6 +147,7 @@
 		C743DD9BC9974475BD485779 /* LocationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationStore.swift; sourceTree = "<group>"; };
 		D8D13E465719FF80F0A10F54 /* PhotoCropView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCropView.swift; sourceTree = "<group>"; };
 		D9F1799A7E99E9EE23090A3F /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		DCD3E5F0D88424617781F4EF /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
 		E3C1F5B0FFD72FCDC259B256 /* GenreCleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanupView.swift; sourceTree = "<group>"; };
 		E54E5C7E59B39E7C1F1FA1D1 /* BookNexusTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E7A56D93BB09A4617F4BCF33 /* BookNexusUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BookNexusUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -349,6 +351,7 @@
 		F6590F32A3001250A4C8E305 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				DCD3E5F0D88424617781F4EF /* BookDateRepair.swift */,
 				A126CA4210748B50B74F5BB7 /* BookMastering.swift */,
 				AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */,
 				2B0405C54238ECDC073B5E73 /* ScanQueueStore.swift */,
@@ -485,6 +488,7 @@
 				08F145FA5011259A60A2BC05 /* AskSuggestions.swift in Sources */,
 				74AE52020D09D5E23E152B03 /* AuthService.swift in Sources */,
 				8E06109D646E9A01E3B4BB05 /* Book.swift in Sources */,
+				21033AD1870A74ECF2251FD7 /* BookDateRepair.swift in Sources */,
 				88A65217368FC591DC3B5396 /* BookDetailView.swift in Sources */,
 				78F338101414D83FAAC7B0B3 /* BookFormView.swift in Sources */,
 				A2DFF5BFD4AEDAEE000410A7 /* BookMastering.swift in Sources */,

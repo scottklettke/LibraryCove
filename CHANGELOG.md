@@ -14,6 +14,11 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
   **0.4** (shown in About).
 - Author and Tag filter search fields got a clear (**X**) button to reset them.
 
+### Fixed
+- **"Date added" showing 12/31/00** for recently added books: new books are now
+  stamped with the real add date, and books created earlier with the unset
+  (2001-01-01) sentinel are restored to a real date on launch.
+
 ## [0.4] — 2026-08-20
 
 ### Added

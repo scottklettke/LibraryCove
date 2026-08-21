@@ -787,7 +787,9 @@ struct BookFormView: View {
                 rating: rating,
                 loanedTo: loanedToText.isEmpty ? nil : loanedToText,
                 loanedDate: loanedDate,
-                ownerID: users.first(where: \.isActive)?.id
+                ownerID: users.first(where: \.isActive)?.id,
+                createdAt: Date(),
+                updatedAt: Date()
             )
             let key = catalog?.isbn ?? ""
             if let duplicate = findDuplicate(key: key) {

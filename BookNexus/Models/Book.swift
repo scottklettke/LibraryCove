@@ -52,8 +52,8 @@ final class Book {
     var sharedLibraryID: String?
     var isPersonal: Bool = true
 
-    var createdAt: Date = Date(timeIntervalSinceReferenceDate: 0)
-    var updatedAt: Date = Date(timeIntervalSinceReferenceDate: 0)
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
 
     // Sync metadata
     var syncState: String = "modified"  // synced | modified | deleted (tombstone)
@@ -101,8 +101,8 @@ final class Book {
         ownerID: String? = nil,
         sharedLibraryID: String? = nil,
         isPersonal: Bool = true,
-        createdAt: Date = Date(timeIntervalSinceReferenceDate: 0),
-        updatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
+        createdAt: Date = Date(),
+        updatedAt: Date = Date(),
         syncState: String = "modified",
         syncUpdatedAt: Date = Date(timeIntervalSinceReferenceDate: 0),
         syncDeviceID: String = ""

@@ -22,6 +22,11 @@ struct RootView: View {
             // Embed any still file-only covers as data URLs so iCloud Sync
             // pushes cover images to other devices.
             LibraryDataService.materializeLocalCovers(context: modelContext)
+            // Fix books whose dates were never stamped (sentinel 2001-01-01),
+            // which rendered "date added" as 12/31/00.
+            if let all = try? modelContext.fetch(FetchDescriptor<Book>()) {
+                BookDateRepair.repairSentinelDates(books: all, context: modelContext)
+            }
         }
     }
 

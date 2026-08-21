@@ -121,3 +121,51 @@ struct BookMasteringTests {
         #expect(Set(BookMastering.otherCopies(of: t1, in: [t1, t2]).map(\.id)) == ["t2"])
     }
 }
+
+@Suite @MainActor
+struct BookDateRepairTests {
+
+    private func makeBook(_ id: String, createdAt: Date, updatedAt: Date) -> Book {
+        let book = Book(id: id, title: "T", createdAt: createdAt, updatedAt: updatedAt)
+        return book
+    }
+
+    @Test func newBookDefaultsToCurrentDate() {
+        // The "date added" bug: the old default was the 2001-01-01 sentinel.
+        #expect(abs(Book(title: "T", authors: ["A"]).createdAt.timeIntervalSinceNow) < 60)
+    }
+
+    @Test func repairUsesLastUpdatedWhenCreatedAtIsSentinel() throws {
+        let context = try #require(Persistence.inMemory.mainContext)
+        let realUpdated = Date(timeIntervalSinceNow: -86_400)
+        let book = makeBook("a",
+                            createdAt: Date(timeIntervalSinceReferenceDate: 0),
+                            updatedAt: realUpdated)
+        context.insert(book)
+
+        BookDateRepair.repairSentinelDates(books: [book], context: context)
+        #expect(book.createdAt == realUpdated)
+    }
+
+    @Test func repairUsesNowWhenBothDatesAreSentinel() throws {
+        let context = try #require(Persistence.inMemory.mainContext)
+        let sentinel = Date(timeIntervalSinceReferenceDate: 0)
+        let book = makeBook("b", createdAt: sentinel, updatedAt: sentinel)
+        context.insert(book)
+
+        BookDateRepair.repairSentinelDates(books: [book], context: context)
+        #expect(abs(book.createdAt.timeIntervalSinceNow) < 60)
+        #expect(BookDateRepair.isSentinel(book.createdAt) == false)
+    }
+
+    @Test func repairLeavesRealDatesUntouched() throws {
+        let context = try #require(Persistence.inMemory.mainContext)
+        let real = Date(timeIntervalSinceNow: -3600)
+        let book = makeBook("c", createdAt: real, updatedAt: real)
+        context.insert(book)
+
+        BookDateRepair.repairSentinelDates(books: [book], context: context)
+        #expect(book.createdAt == real)
+        #expect(book.updatedAt == real)
+    }
+}

@@ -327,6 +327,14 @@ struct SettingsView: View {
                 } footer: {
                     Text("Shows the last 30 requests — endpoint, outcome, errors, and timing — so connection issues are visible. Logs stay on this device.")
                 }
+
+                Section {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("About & Feedback", systemImage: "info.circle")
+                    }
+                }
             }
             .navigationTitle("Settings")
             .alert(

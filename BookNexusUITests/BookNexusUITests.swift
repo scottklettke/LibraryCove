@@ -567,6 +567,50 @@ final class BookNexusUITests: XCTestCase {
                       "filter not cleared after removing chip")
     }
 
+    /// The About & Feedback screen is reachable from Settings and surfaces the
+    /// app's open-source attributions and roadmap (the new disclosure/changelog
+    /// surface must exist and be navigable).
+    func testAboutReachableAndShowsDisclosures() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        app.tabBars.buttons["Settings"].tap()
+
+        let about = app.buttons["About & Feedback"]
+        var scrolls = 0
+        while !about.exists && scrolls < 8 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        XCTAssertTrue(about.waitForExistence(timeout: 10), "About & Feedback row missing")
+        about.tap()
+        XCTAssertTrue(app.navigationBars["About & Feedback"].waitForExistence(timeout: 10),
+                      "About screen did not open")
+        // Open-source attribution for the bundled MarkdownUI dependency.
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'MarkdownUI'")
+        ).firstMatch.waitForExistence(timeout: 5), "open-source disclosure missing")
+        let roadmap = app.staticTexts["Coming in the future"]
+        var roadScrolls = 0
+        while !roadmap.exists && roadScrolls < 8 {
+            app.swipeUp()
+            roadScrolls += 1
+        }
+        XCTAssertTrue(roadmap.waitForExistence(timeout: 5), "roadmap section missing")
+        // The changelog page is reachable and shows bundled content.
+        let changelog = app.buttons["Changelog"]
+        var changelogScrolls = 0
+        while !changelog.exists && changelogScrolls < 8 {
+            app.swipeUp()
+            changelogScrolls += 1
+        }
+        XCTAssertTrue(changelog.waitForExistence(timeout: 5), "Changelog link missing")
+        changelog.tap()
+        XCTAssertTrue(app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'BookNexus'")
+        ).firstMatch.waitForExistence(timeout: 5), "changelog did not render")
+    }
+
     /// Genre cleanup over an engine-less simulator must show the error state
     /// with a Retry, not a blank sheet. Runs on a populated library: the AI
     /// tools menu lives in the trailing toolbar, which (like the Add button)

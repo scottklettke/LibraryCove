@@ -53,9 +53,11 @@
 		C1B5391196F9887E6C4EA087 /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D10C87BE8E0D0FD5C243BF /* OpenAICompatibleProvider.swift */; };
 		C2186FBF883F33F9720E4C00 /* AILog.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA352B2ACB33FB6DB3838EC8 /* AILog.swift */; };
 		CA6AEF54D4F207015ABD76C3 /* GenreCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 979A367A45B0D87E6C7C617F /* GenreCleanup.swift */; };
+		D75EB4CEC5E1DE28618DA595 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = FC78AF2954C3C19364FFD29E /* CHANGELOG.md */; };
 		DC446481A878EFABD9DDA09B /* ScanQueueStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B82E0D75EF283F5BC56D521A /* ScanQueueStoreTests.swift */; };
 		E039256789524685544238F4 /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BA645B8D9F8EE7D0843172 /* AIConfig.swift */; };
 		E31B410542DC6881F02A1807 /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A30ADE0D20FEA1692E407CB /* SyncCoordinator.swift */; };
+		E68557F3DA2FCDCB12FD8E1D /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E8C04994346C17F17BD4FDB /* AboutView.swift */; };
 		E7EDF16C4AEE314A788AFF95 /* LibrarySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F813FC7967B94AEFA911CF4E /* LibrarySync.swift */; };
 		E8115BCDDB902531EEB78351 /* FictionClassifierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB706E6DB5CB6DCFAD16A82 /* FictionClassifierView.swift */; };
 		E953E8BE36ABF0C51F8F84E2 /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D0B3560429372162C83A82A /* ReadingList.swift */; };
@@ -98,6 +100,7 @@
 		1C42CB91A5CE156BF1BBF476 /* BookNexusUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookNexusUITests.swift; sourceTree = "<group>"; };
 		2B0405C54238ECDC073B5E73 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		2D0B3560429372162C83A82A /* ReadingList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingList.swift; sourceTree = "<group>"; };
+		2E8C04994346C17F17BD4FDB /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		33EF2D5991F14BE64B336D96 /* BookFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormView.swift; sourceTree = "<group>"; };
 		3BECBAE066EF4A05F33A7576 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		3F3C5EAEAF435F572633AA09 /* ExportFormatGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFormatGuide.swift; sourceTree = "<group>"; };
@@ -150,6 +153,7 @@
 		F58856651ED12B7821246983 /* ShelfCategorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfCategorizer.swift; sourceTree = "<group>"; };
 		F813FC7967B94AEFA911CF4E /* LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySync.swift; sourceTree = "<group>"; };
 		F9A0A589327811D6BC0451EC /* BookNexus.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BookNexus.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FC78AF2954C3C19364FFD29E /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
 		FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAskView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -179,6 +183,7 @@
 		1155CBDF4A99BCD54EECB555 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				2E8C04994346C17F17BD4FDB /* AboutView.swift */,
 				07963244E0A5CBAFF3685B76 /* AddBookView.swift */,
 				FEDD74F1A43FCD94EDDEB4F6 /* AIAskView.swift */,
 				AA71BCA2022D2862829348EC /* BookDetailView.swift */,
@@ -207,6 +212,7 @@
 		13C4D610BC8DB05B4453BF2A = {
 			isa = PBXGroup;
 			children = (
+				FC78AF2954C3C19364FFD29E /* CHANGELOG.md */,
 				81FA1011C8BB955023DD5549 /* BookNexus */,
 				990A166765E29A475B0897F4 /* BookNexusTests */,
 				DBEA881FE7C1BB933D618633 /* BookNexusUITests */,
@@ -381,6 +387,7 @@
 			buildConfigurationList = 581433FB435D130F5B035740 /* Build configuration list for PBXNativeTarget "BookNexus" */;
 			buildPhases = (
 				6692F37246D9BB2FC7A1C21A /* Sources */,
+				AFDC1F25AB054F60FBA02278 /* Resources */,
 				E76BE4A9852892437560391F /* Frameworks */,
 			);
 			buildRules = (
@@ -451,6 +458,17 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		AFDC1F25AB054F60FBA02278 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D75EB4CEC5E1DE28618DA595 /* CHANGELOG.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		6692F37246D9BB2FC7A1C21A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -461,6 +479,7 @@
 				C2186FBF883F33F9720E4C00 /* AILog.swift in Sources */,
 				5E2C3FA26AF1E3B3DCC4E499 /* AIModels.swift in Sources */,
 				5F4096B1A7BBC0CEE8E66DFF /* AIService.swift in Sources */,
+				E68557F3DA2FCDCB12FD8E1D /* AboutView.swift in Sources */,
 				8171B07342C8F77A5A081F94 /* AddBookView.swift in Sources */,
 				48C184644350385B2C0D7829 /* AppleIntelligenceProvider.swift in Sources */,
 				08F145FA5011259A60A2BC05 /* AskSuggestions.swift in Sources */,

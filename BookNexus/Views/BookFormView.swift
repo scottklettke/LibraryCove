@@ -112,7 +112,7 @@ struct BookFormView: View {
     @State private var genreQuery = ""
     @State private var loanedToText = ""
     @State private var loanedDate: Date?
-    @State private var descriptionSource: DescriptionSource = .openlibrary
+    @State private var descriptionSource: DescriptionSource = .wikipedia
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
     @State private var showDuplicateAlert = false
@@ -603,24 +603,48 @@ struct BookFormView: View {
         fetchError = nil
         defer { isFetchingDescription = false }
 
-        let catalog = OpenLibraryService()
-        let result: CatalogBook?
+        let service = OpenLibraryService()
         let isbn = catalogISBN
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let authors = authorsText.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+
+        // Catalog metadata (tags/publisher/year/pages/covers) + a first-pass
+        // description from the ISBN record (Wikipedia-preferred) or a title
+        // search.
+        let result: CatalogBook?
         if let isbn {
-            result = try? await catalog.lookup(isbn: isbn, preferred: descriptionSource)
-        } else if !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let results = (try? await catalog.search(query: title, preferred: descriptionSource)) ?? []
+            result = try? await service.lookup(isbn: isbn, preferred: descriptionSource)
+        } else if !trimmedTitle.isEmpty {
+            let results = (try? await service.search(query: trimmedTitle, preferred: descriptionSource)) ?? []
             result = results.first
         } else {
             result = nil
         }
 
+        // Description: use the record's text; when the ISBN came up empty, an
+        // extra title-based lookup (Wikipedia by default) finds one for books
+        // whose ISBN "doesn't come up with anything."
+        var desc = result?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if (desc == nil || desc!.isEmpty) && !trimmedTitle.isEmpty {
+            let (text, _) = await service.descriptionByTitle(
+                title: trimmedTitle, authors: authors, preferred: descriptionSource)
+            if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                desc = text
+            }
+        }
+        if let desc, !desc.isEmpty {
+            description = desc
+        }
+
         guard let found = result else {
-            fetchError = "No details found for this book."
+            if desc == nil || desc!.isEmpty {
+                fetchError = "No details found for this book."
+            }
             return
         }
 
-        if let newDescription = found.description { description = newDescription }
         if !found.tags.isEmpty { tagsText = found.tags.joined(separator: ", ") }
         if let publisher = found.publisher { publisherText = publisher }
         if let pages = found.pageCount { pageCountText = String(pages) }

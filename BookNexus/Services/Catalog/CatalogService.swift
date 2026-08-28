@@ -86,7 +86,7 @@ final class OpenLibraryService: CatalogService {
     }
 
     /// Search by title/author. Combines OpenLibrary results with Google Books covers.
-    func search(query: String, preferred: DescriptionSource = .openlibrary) async throws -> [CatalogBook] {
+    func search(query: String, preferred: DescriptionSource = .wikipedia) async throws -> [CatalogBook] {
         var components = URLComponents(string: "https://openlibrary.org/search.json")!
         components.queryItems = [
             URLQueryItem(name: "q", value: query),
@@ -140,7 +140,7 @@ final class OpenLibraryService: CatalogService {
     }
 
     /// Look up a book by ISBN via OpenLibrary, then enrich with Google Books.
-    func lookup(isbn: String, preferred: DescriptionSource = .openlibrary) async throws -> CatalogBook? {
+    func lookup(isbn: String, preferred: DescriptionSource = .wikipedia) async throws -> CatalogBook? {
         let cleaned = isbn.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
         var components = URLComponents(string: "https://openlibrary.org/api/books")!
         components.queryItems = [
@@ -513,11 +513,13 @@ final class OpenLibraryService: CatalogService {
 
     // MARK: - Description aggregation (for "Improve description")
 
-    /// The single fullest, real description available for a book, used as the
-    /// only grounding source for AI rewriting: the book's existing description
-    /// (when substantial), OpenLibrary (via `lookup`, which also falls back to
-    /// Wikipedia), and Google Books by ISBN. The longest non-empty text wins,
-    /// so a thin one-liner can't starve out a fuller catalog entry.
+    /// Fetches a book's description only when the user is in a detail step (the
+    /// add/edit form or "Improve description") — never during search. Returns
+    /// the fullest real text available, preferring Wikipedia's article extract
+    /// (usually the longest) while still considering OpenLibrary and Google
+    /// Books. Title-based sources are consulted even when the ISBN has no
+    /// record, so an ISBN that "doesn't come up with anything" still finds a
+    /// description by title.
     func richDescription(existing: String?,
                          isbn: String?,
                          title: String,
@@ -527,18 +529,53 @@ final class OpenLibraryService: CatalogService {
             candidates.append((existing, nil))
         }
         if let isbn, !isbn.isEmpty {
-            if let book = try? await lookup(isbn: isbn, preferred: .openlibrary),
+            if let book = try? await lookup(isbn: isbn, preferred: .wikipedia),
                let desc = book.description,
                !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 candidates.append((desc, book.descriptionSource))
             }
-            if let google = await googleDescription(isbn: isbn),
-               !google.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if let google = await googleDescription(isbn: isbn) {
                 candidates.append((google, "googlebooks"))
             }
         }
+        // Title-based sources — the fallback when an ISBN lookup is empty, and
+        // the primary source of the fuller Wikipedia extract the user wanted.
+        if let wiki = await wikipediaBookExtract(title: title, authors: authors) {
+            candidates.append((wiki, "wikipedia"))
+        }
+        if let ol = await fetchWorkDescription(for: title, authors: authors) {
+            candidates.append((ol, "openlibrary"))
+        }
+        if let google = await googleTitleDescription(title: title, authors: authors) {
+            candidates.append((google, "googlebooks"))
+        }
         let best = AIDescriptionImprovement.longestNonEmpty(candidates)
         return (best?.text, best?.source)
+    }
+
+    /// A single, light title-based description lookup for the add/edit form's
+    /// auto-fill: Wikipedia (book-page-gated) preferred, then OpenLibrary's
+    /// work record. Used when the ISBN record carries no description, so an
+    /// ISBN that lacks a catalog entry still finds text by title without the
+    /// full multi-source chain (which stays reserved for "Improve description").
+    func descriptionByTitle(title: String, authors: [String], preferred: DescriptionSource) async -> (text: String?, source: String?) {
+        guard !title.isEmpty else { return (nil, nil) }
+        if preferred == .wikipedia {
+            if let wiki = await wikipediaBookExtract(title: title, authors: authors) {
+                return (wiki, "wikipedia")
+            }
+            if let ol = await fetchWorkDescription(for: title, authors: authors) {
+                return (ol, "openlibrary")
+            }
+        } else {
+            if let ol = await fetchWorkDescription(for: title, authors: authors) {
+                return (ol, "openlibrary")
+            }
+            if let wiki = await wikipediaBookExtract(title: title, authors: authors) {
+                return (wiki, "wikipedia")
+            }
+        }
+        return (nil, nil)
     }
 
     /// Google Books description by ISBN (Google often has the fullest text).
@@ -557,5 +594,90 @@ final class OpenLibraryService: CatalogService {
               let desc = info["description"] as? String,
               !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return Self.truncate(desc)
+    }
+
+    /// Google Books description by title+author — the extra source that still
+    /// works when the ISBN has no record.
+    private func googleTitleDescription(title: String, authors: [String]) async -> String? {
+        var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
+        var query = "intitle:\"\(title)\""
+        if let first = authors.first, !first.isEmpty {
+            query += " inauthor:\"\(first)\""
+        }
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "maxResults", value: "1"),
+        ]
+        guard let url = components.url else { return nil }
+        guard let (data, response) = try? await session.data(from: url),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]],
+              let volume = items.first, let info = volume["volumeInfo"] as? [String: Any],
+              let desc = info["description"] as? String,
+              !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return Self.truncate(desc)
+    }
+
+    /// Wikipedia's article extract for the book — but only when the matched
+    /// page's title actually looks like the book (shared substantive words).
+    /// This stops a niche book from being described by its author's bio page
+    /// (e.g. "No Bad Kids" matching the "Janet Lansbury" biography). Returns
+    /// nil when no book-matching page is found.
+    private func wikipediaBookExtract(title: String, authors: [String]) async -> String? {
+        guard !title.isEmpty else { return nil }
+        var searchComponents = URLComponents(string: "https://en.wikipedia.org/w/api.php")!
+        var query = title
+        if let first = authors.first, !first.isEmpty {
+            query += " " + first
+        }
+        searchComponents.queryItems = [
+            URLQueryItem(name: "action", value: "query"),
+            URLQueryItem(name: "list", value: "search"),
+            URLQueryItem(name: "srsearch", value: query),
+            URLQueryItem(name: "srlimit", value: "3"),
+            URLQueryItem(name: "format", value: "json"),
+        ]
+        guard let searchURL = searchComponents.url,
+              let (data, response) = try? await session.data(from: searchURL),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let queryResult = json["query"] as? [String: Any],
+              let search = queryResult["search"] as? [[String: Any]] else { return nil }
+
+        let bookWords = Self.words(title)
+        guard let hit = search.first(where: { page in
+            guard let pageTitle = page["title"] as? String else { return false }
+            return !Self.words(pageTitle).isDisjoint(with: bookWords)
+        }), let pageTitle = hit["title"] as? String else { return nil }
+
+        var extractComponents = URLComponents(string: "https://en.wikipedia.org/w/api.php")!
+        extractComponents.queryItems = [
+            URLQueryItem(name: "action", value: "query"),
+            URLQueryItem(name: "prop", value: "extracts"),
+            URLQueryItem(name: "exintro", value: "true"),
+            URLQueryItem(name: "explaintext", value: "true"),
+            URLQueryItem(name: "titles", value: pageTitle),
+            URLQueryItem(name: "format", value: "json"),
+        ]
+        guard let extractURL = extractComponents.url,
+              let (extractData, extractResponse) = try? await session.data(from: extractURL),
+              let extractHTTP = extractResponse as? HTTPURLResponse, extractHTTP.statusCode == 200,
+              let extractJSON = try? JSONSerialization.jsonObject(with: extractData) as? [String: Any],
+              let pages = extractJSON["query"] as? [String: Any],
+              let pagesDict = pages["pages"] as? [String: Any],
+              let page = pagesDict.values.compactMap({ $0 as? [String: Any] }).first,
+              let extract = page["extract"] as? String,
+              !extract.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return Self.truncate(extract)
+    }
+
+    /// Substantive words of a string (length ≥ 4, case-folded) used to decide
+    /// whether a Wikipedia page is about the book rather than its author.
+    private static func words(_ s: String) -> Set<String> {
+        Set(s.lowercased()
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .filter { $0.count >= 4 })
     }
 }

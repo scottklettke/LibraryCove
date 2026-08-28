@@ -20,6 +20,13 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
 - Author and Tag filter search fields got a clear (**X**) button to reset them.
 
 ### Changed
+- **Description fetching is detail-only** (the add/edit form and "Improve
+  description"), never during catalog search.
+- Description lookups now prefer **Wikipedia first**, and the finder always
+  tries title-based sources (Wikipedia book page, OpenLibrary work, Google by
+  title) even when the ISBN has no record — picking the longest real text. The
+  Wikipedia fallback only accepts a page whose title matches the book, so an
+  author's biography is never presented as a book's description.
 - **Removed the AI Tools menu** (clean-up tags / reorganize shelves /
   classify) as an in-app entry point; the underlying AI services remain in the
   codebase for a future return.

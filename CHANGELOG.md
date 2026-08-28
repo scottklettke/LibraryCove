@@ -25,6 +25,11 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
   codebase for a future return.
 
 ### Fixed
+- **"Improve description" invented flowery, made-up text** (e.g. a fabricated
+  biography). It now gathers the fullest real catalog description (existing
+  text + OpenLibrary + Google Books, longest wins) and the AI rewrites only
+  that source with a strict no-invention prompt; when no description exists it
+  says so instead of hallucinating.
 - **"Date added" showing 12/31/00** for recently added books: new books are now
   stamped with the real add date, and books created earlier with the unset
   (2001-01-01) sentinel are restored to a real date on launch.

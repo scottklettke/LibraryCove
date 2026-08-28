@@ -510,4 +510,52 @@ final class OpenLibraryService: CatalogService {
         if s.count <= limit { return s }
         return String(s.prefix(limit))
     }
+
+    // MARK: - Description aggregation (for "Improve description")
+
+    /// The single fullest, real description available for a book, used as the
+    /// only grounding source for AI rewriting: the book's existing description
+    /// (when substantial), OpenLibrary (via `lookup`, which also falls back to
+    /// Wikipedia), and Google Books by ISBN. The longest non-empty text wins,
+    /// so a thin one-liner can't starve out a fuller catalog entry.
+    func richDescription(existing: String?,
+                         isbn: String?,
+                         title: String,
+                         authors: [String]) async -> (text: String?, source: String?) {
+        var candidates: [(text: String, source: String?)] = []
+        if let existing, !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            candidates.append((existing, nil))
+        }
+        if let isbn, !isbn.isEmpty {
+            if let book = try? await lookup(isbn: isbn, preferred: .openlibrary),
+               let desc = book.description,
+               !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                candidates.append((desc, book.descriptionSource))
+            }
+            if let google = await googleDescription(isbn: isbn),
+               !google.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                candidates.append((google, "googlebooks"))
+            }
+        }
+        let best = AIDescriptionImprovement.longestNonEmpty(candidates)
+        return (best?.text, best?.source)
+    }
+
+    /// Google Books description by ISBN (Google often has the fullest text).
+    private func googleDescription(isbn: String) async -> String? {
+        var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
+        components.queryItems = [
+            URLQueryItem(name: "q", value: "isbn:\(isbn)"),
+            URLQueryItem(name: "maxResults", value: "1"),
+        ]
+        guard let url = components.url else { return nil }
+        guard let (data, response) = try? await session.data(from: url),
+              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let items = json["items"] as? [[String: Any]],
+              let volume = items.first, let info = volume["volumeInfo"] as? [String: Any],
+              let desc = info["description"] as? String,
+              !desc.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return Self.truncate(desc)
+    }
 }

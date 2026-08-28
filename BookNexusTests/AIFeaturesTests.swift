@@ -384,11 +384,27 @@ import SwiftData
 
     @Test func descriptionPromptIsDeterministic() {
         let prompt = AIDescriptionImprovement.prompt(raw: "Some raw source text")
-        #expect(prompt.system?.contains("vivid") == true)
-        #expect(prompt.user == "Some raw source text")
+        #expect(prompt.system?.contains("NEVER invent") == true)
+        #expect(prompt.system?.contains("No reliable description available") == true)
+        #expect(prompt.system?.contains("vivid") == false) // no more florid prompt
+        #expect(prompt.user.contains("Some raw source text") == true)
 
         let emptyPrompt = AIDescriptionImprovement.prompt(raw: "")
-        #expect(emptyPrompt.user == "(no source text)")
+        #expect(emptyPrompt.system?.contains("No reliable description available") == true)
+        #expect(emptyPrompt.user.contains("none") == true)
+    }
+
+    @Test func longestNonEmptyPrefersTheFullestSource() {
+        let candidates = [
+            (text: "short", source: "openlibrary"),
+            (text: "A much longer description that conveys far more detail about the book.", source: "googlebooks"),
+            (text: "", source: nil as String?),
+        ]
+        let best = AIDescriptionImprovement.longestNonEmpty(candidates)
+        #expect(best?.source == "googlebooks")
+        #expect(AIDescriptionImprovement.longestNonEmpty([]) == nil)
+        // Only non-empty candidates are considered.
+        #expect(AIDescriptionImprovement.longestNonEmpty([(text: "   ", source: nil)]) == nil)
     }
 
     @Test func descriptionApplySetsFieldsAndBumpsUpdatedAt() throws {

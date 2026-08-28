@@ -408,6 +408,13 @@ struct BookDetailView: View {
 
         do {
             let (raw, source) = await AIDescriptionImprovement.onlineText(for: book)
+            // Never feed an empty prompt to a model that would then invent
+            // content: with no real source there is nothing to improve.
+            if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                improveError = "The catalog has no description for this book to improve — nothing to rewrite. Add one manually, or try again when a full catalog entry is available."
+                showImproveError = true
+                return
+            }
             let rewritten = try await AIService.shared.generate(
                 AIDescriptionImprovement.prompt(raw: raw)
             )

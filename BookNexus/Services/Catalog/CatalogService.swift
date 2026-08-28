@@ -45,6 +45,7 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
 enum DescriptionSource: String, CaseIterable, Identifiable {
     case openlibrary
     case wikipedia
+    case googlebooks
 
     var id: String { rawValue }
 
@@ -52,6 +53,7 @@ enum DescriptionSource: String, CaseIterable, Identifiable {
         switch self {
         case .openlibrary: return "Open Library"
         case .wikipedia: return "Wikipedia"
+        case .googlebooks: return "Google Books"
         }
     }
 }
@@ -316,18 +318,26 @@ final class OpenLibraryService: CatalogService {
         return covers.filter { seen.insert($0).inserted }
     }
 
-    /// Fetch a book description from the preferred source, falling back to the other.
+    /// Fetch a book description from the preferred source, falling back through
+    /// the rest. Google Books may be rate-limited keyless, so it is never the
+    /// only chance — the others follow if it returns nothing.
     private func fetchDescription(for title: String, authors: [String], preferred: DescriptionSource) async -> String? {
-        let sources: [DescriptionSource] = preferred == .wikipedia
-            ? [.wikipedia, .openlibrary]
-            : [.openlibrary, .wikipedia]
+        let sources: [DescriptionSource]
+        switch preferred {
+        case .wikipedia: sources = [.wikipedia, .googlebooks, .openlibrary]
+        case .openlibrary: sources = [.openlibrary, .wikipedia, .googlebooks]
+        case .googlebooks: sources = [.googlebooks, .wikipedia, .openlibrary]
+        }
 
         for source in sources {
             let desc: String?
-            if source == .openlibrary {
+            switch source {
+            case .openlibrary:
                 desc = await fetchWorkDescription(for: title, authors: authors)
-            } else {
+            case .wikipedia:
                 desc = await fetchWikipediaDescription(for: title, authors: authors)
+            case .googlebooks:
+                desc = await googleTitleDescription(title: title, authors: authors)
             }
             if let desc { return desc }
         }
@@ -560,19 +570,36 @@ final class OpenLibraryService: CatalogService {
     /// full multi-source chain (which stays reserved for "Improve description").
     func descriptionByTitle(title: String, authors: [String], preferred: DescriptionSource) async -> (text: String?, source: String?) {
         guard !title.isEmpty else { return (nil, nil) }
-        if preferred == .wikipedia {
+        switch preferred {
+        case .openlibrary:
+            if let ol = await fetchWorkDescription(for: title, authors: authors) {
+                return (ol, "openlibrary")
+            }
+            if let wiki = await wikipediaBookExtract(title: title, authors: authors) {
+                return (wiki, "wikipedia")
+            }
+            if let google = await googleTitleDescription(title: title, authors: authors) {
+                return (google, "googlebooks")
+            }
+        case .wikipedia:
             if let wiki = await wikipediaBookExtract(title: title, authors: authors) {
                 return (wiki, "wikipedia")
             }
             if let ol = await fetchWorkDescription(for: title, authors: authors) {
                 return (ol, "openlibrary")
             }
-        } else {
-            if let ol = await fetchWorkDescription(for: title, authors: authors) {
-                return (ol, "openlibrary")
+            if let google = await googleTitleDescription(title: title, authors: authors) {
+                return (google, "googlebooks")
+            }
+        case .googlebooks:
+            if let google = await googleTitleDescription(title: title, authors: authors) {
+                return (google, "googlebooks")
             }
             if let wiki = await wikipediaBookExtract(title: title, authors: authors) {
                 return (wiki, "wikipedia")
+            }
+            if let ol = await fetchWorkDescription(for: title, authors: authors) {
+                return (ol, "openlibrary")
             }
         }
         return (nil, nil)

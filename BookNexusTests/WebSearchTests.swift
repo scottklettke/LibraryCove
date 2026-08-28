@@ -72,3 +72,13 @@ struct WebSearchTests {
         #expect(WebSearch.truncate("hello", to: 3) == "hel…")
     }
 }
+
+@Suite
+struct DescriptionSourceTests {
+    @Test func pickerOptionsIncludeAllSupportedSources() {
+        // The edit form's Source picker iterates allCases, so every source
+        // here must actually be fetchable.
+        #expect(DescriptionSource.allCases == [.openlibrary, .wikipedia, .googlebooks])
+        #expect(DescriptionSource.googlebooks.displayName == "Google Books")
+    }
+}

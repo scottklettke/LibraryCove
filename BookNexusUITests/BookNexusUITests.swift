@@ -137,11 +137,19 @@ final class BookNexusUITests: XCTestCase {
             guard addButton.isHittable else { break }
             let current = remainingCount(app) ?? 0
             // The pager can re-render (element identities change) under slow
-            // first-run conditions; re-resolve and wait before tapping so a
-            // mid-transition query never finds nothing.
-            let target = app.buttons["Add to library"]
-            guard target.waitForExistence(timeout: 5), target.isHittable else { break }
-            target.tap()
+            // first-run conditions. Re-resolve, wait, and retry the tap a few
+            // times so a mid-transition vanish never aborts the whole flow.
+            var tapped = false
+            for _ in 0..<3 where !tapped {
+                let target = app.buttons["Add to library"]
+                if target.waitForExistence(timeout: 3), target.isHittable {
+                    target.tap()
+                    tapped = true
+                } else {
+                    app.swipeUp()
+                }
+            }
+            guard tapped else { break }
             if current > 1 {
                 guard app.navigationBars["\(current - 1) remaining"].waitForExistence(timeout: 10) else { break }
             } else {

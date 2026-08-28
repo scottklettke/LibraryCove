@@ -15,6 +15,10 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
   keyless source; DuckDuckGo's HTML endpoint can rate-limit bots and the seam
   degrades silently to whatever returned. Answers stay offline-clean when the
   toggle is off.
+- The edit form's description **Source** picker now offers **Google Books**
+  alongside Wikipedia and Open Library (all three preferences are wired into
+  the fetch order, with graceful fallback when a keyless provider is
+  rate-limited).
 - **Manual shelves and bulk tagging** (no AI): long-press any grid book to
   assign/edit shelves, edit tags, or delete; a **Select** mode in the grid
   enables bulk-editing tags/shelves or deleting many books at once. Assignment

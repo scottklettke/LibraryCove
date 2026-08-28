@@ -84,6 +84,12 @@ struct SettingsView: View {
         }
     }
 
+    /// Keyless web-grounding toggle (Settings → AI), backed by AIConfig.
+    private var webSearchBinding: Binding<Bool> {
+        Binding(get: { AIConfig.webSearchEnabled },
+                set: { AIConfig.webSearchEnabled = $0 })
+    }
+
     private var trimmedBaseURL: String {
         aiBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -220,6 +226,7 @@ struct SettingsView: View {
                                 .tag(engine)
                         }
                     }
+                    Toggle("Ground answers with web search", isOn: webSearchBinding)
                     LabeledContent("Status") {
                         Text(aiStatusText)
                             .foregroundStyle(aiStatusColor)
@@ -306,7 +313,7 @@ struct SettingsView: View {
                 } header: {
                     Text("AI")
                 } footer: {
-                    Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library.")
+                    Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library. Ground answers with web search is keyless: Ask AI looks up a Wikipedia article and DuckDuckGo results and cites their URLs; it adds a short fetch per question when enabled and stays off unless you turn it on.")
                 }
 
                 Section {

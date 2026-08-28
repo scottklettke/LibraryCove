@@ -258,11 +258,25 @@ struct AIAskView: View {
                     .map { "\($0.role == .user ? "User" : "Assistant"): \($0.text)" }
                     .joined(separator: "\n")
 
+                // Optional keyless web grounding (Settings → AI): fetch a
+                // Wikipedia article + DuckDuckGo results and hand the raw
+                // snippets to the model, which reads and cites them. Fails
+                // silently — the chat still answers from the library + model
+                // knowledge when the fetch finds nothing.
+                var userMessage = conversation
+                if AIConfig.webSearchEnabled {
+                    let sources = await WebSearch.results(for: text, limit: 4)
+                    let grounding = WebSearch.groundingBlock(sources: sources)
+                    if !grounding.isEmpty {
+                        userMessage = grounding + "\n\n" + conversation
+                    }
+                }
+
                 let start = Date()
                 let response = try await AIService.shared.generate(
                     AIPrompt(
                         system: AIPromptFactory.systemPrompt(snapshot: snapshot),
-                        user: conversation
+                        user: userMessage
                     )
                 )
                 let elapsed = Date().timeIntervalSince(start)

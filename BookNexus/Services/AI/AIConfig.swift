@@ -22,6 +22,7 @@ enum AIConfig {
         static let showTokenRate = "AI.showTokenRate"
         static let maxContextTokens = "AI.maxContextTokens"
         static let openAIModel = "AI.openAIModel"
+        static let webSearchEnabled = "AI.webSearchEnabled"
     }
 
     // MARK: Engine
@@ -102,6 +103,20 @@ enum AIConfig {
         }
     }
 
+    // MARK: Web grounding
+
+    /// Whether Ask AI looks up keyless web sources (Wikipedia + DuckDuckGo)
+    /// and grounds answers in them. Off by default so the chat stays fast and
+    /// offline-clean; enabling costs a short background fetch per send.
+    static var webSearchEnabled: Bool {
+        get {
+            UserDefaults.standard.bool(forKey: Keys.webSearchEnabled)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Keys.webSearchEnabled)
+        }
+    }
+
     // MARK: Context window
 
     /// The model's context window in tokens, used to size the Ask AI snapshot
@@ -138,6 +153,7 @@ enum AIConfig {
         UserDefaults.standard.removeObject(forKey: Keys.showTokenRate)
         UserDefaults.standard.removeObject(forKey: Keys.maxContextTokens)
         UserDefaults.standard.removeObject(forKey: Keys.openAIModel)
+        UserDefaults.standard.removeObject(forKey: Keys.webSearchEnabled)
         AILogStore.clear()
         Keychain.delete(service: Keys.keychainService, account: Keys.keychainAccount)
     }

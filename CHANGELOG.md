@@ -1,12 +1,6 @@
 # Changelog
 
-All notable changes to BookNexus are tracked here, newest first. This file is
-intended to be updated with every meaningful change. Versioning follows the
-scheme documented in the README: the earliest release is **0.1**; patch-level
-fixes increment the last component (0.1.1, 0.1.2, …), new features raise the
-minor version (0.2, 0.3, …), and major milestones raise the major version (1.0).
-
-## [Unreleased]
+## [0.5] — 2026-08-28
 
 ### Added
 - **Keyless web grounding for Ask AI** (Settings → AI, default off): each
@@ -24,9 +18,6 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
   enables bulk-editing tags/shelves or deleting many books at once. Assignment
   uses searchable multi-select sheets that can create new tags/shelves inline,
   and books can be grouped by shelf manually.
-- **Re-versioning** of the release history: the earliest release is now 0.1 and
-  each subsequent release group increments from there; the current release is
-  **0.4** (shown in About).
 - Author and Tag filter search fields got a clear (**X**) button to reset them.
 
 ### Changed
@@ -40,11 +31,6 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
 - **Removed the AI Tools menu** (clean-up tags / reorganize shelves /
   classify) as an in-app entry point; the underlying AI services remain in the
   codebase for a future return.
-- **Faster scan-time lookups**: catalog lookups now fetch Open Library and
-  Google Books cover variants concurrently instead of one after the other, and
-  the background scan queue processes up to **3 ISBN lookups at once** (bounded
-  window) instead of strictly serially — scanning a stack of books no longer
-  serializes every network round-trip. Import order still follows scan order.
 
 ### Fixed
 - **"Improve description" invented flowery, made-up text** (e.g. a fabricated
@@ -52,9 +38,24 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
   text + OpenLibrary + Google Books, longest wins) and the AI rewrites only
   that source with a strict no-invention prompt; when no description exists it
   says so instead of hallucinating.
+
+## [0.4.1] — 2026-08-21
+
+### Fixed
 - **"Date added" showing 12/31/00** for recently added books: new books are now
   stamped with the real add date, and books created earlier with the unset
   (2001-01-01) sentinel are restored to a real date on launch.
+
+## [0.4.2] — 2026-09-01
+
+### Changed
+- **Faster scan-time lookups**: catalog lookups now fetch Open Library and
+  Google Books cover variants concurrently instead of one after the other, and
+  the background scan queue processes up to **3 ISBN lookups at once** (bounded
+  window) instead of strictly serially — scanning a stack of books no longer
+  serializes every network round-trip. Import order still follows scan order.
+
+### Fixed
 - **ISBN-10 vs ISBN-13 duplicates**: the same book typed as a 10-digit ISBN
   and scanned as a 13-digit ISBN no longer creates two library entries —
   every identifier (manual entry, camera scan, catalog lookup) now normalizes

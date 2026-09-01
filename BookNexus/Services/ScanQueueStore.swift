@@ -156,18 +156,32 @@ final class ScanQueueStore: ObservableObject {
         return task
     }
 
-    /// Processes all queued items serially (FIFO preserves scan order and
-    /// respects catalog rate limits). Awaitable so tests run deterministically.
-    /// Reentrant-safe: while a drain is in flight (`isProcessing` true), a
-    /// concurrent caller returns immediately — the running drain re-checks for
-    /// newly queued items after every processed ISBN, so nothing is left behind.
+    /// Processes queued items with bounded concurrency — up to 3 catalog
+    /// lookups in flight — so scanning a stack of books doesn't serialize one
+    /// network round-trip behind the next. `items` itself never reorders
+    /// (`update` mutates in place), so `importableBooks` keeps scan order.
+    /// Awaitable so tests run deterministically: it returns only after every
+    /// queued item reached a terminal state. Reentrant-safe: while a drain is
+    /// in flight (`isProcessing` true), a concurrent caller returns
+    /// immediately — the running drain re-checks for newly queued items after
+    /// every batch, so nothing is left behind.
     func drain() async {
         guard !isProcessing else { return }
         isProcessing = true
         defer { isProcessing = false }
-        while let next = items.first(where: { $0.status == .queued }) {
-            await process(next.id)
-            if Task.isCancelled { break }
+        let maxInFlight = 3
+        while !Task.isCancelled {
+            // Snapshot the queued ids each pass; `process` re-validates
+            // status on the main actor, so items enqueued (or removed) mid-
+            // drain are picked up by later passes exactly once.
+            let batch = items.filter { $0.status == .queued }.prefix(maxInFlight).map(\.id)
+            guard !batch.isEmpty else { break }
+            await withTaskGroup(of: Void.self) { group in
+                for id in batch {
+                    group.addTask { await self.process(id) }
+                }
+                await group.waitForAll()
+            }
         }
     }
 

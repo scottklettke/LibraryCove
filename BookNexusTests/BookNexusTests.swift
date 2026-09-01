@@ -184,3 +184,45 @@ import UIKit
         #expect(r.minX >= 0 && r.maxX <= 1 && r.minY >= 0 && r.maxY <= 1)
     }
 }
+
+@Suite struct ISBNNormalizationTests {
+    /// Canonical ISBN-10 → ISBN-13 conversion pair from the ISBN standard
+    /// docs. Hardcoded so the test can't self-validate a broken algorithm.
+    @Test func isbn10ConvertsTo13() {
+        #expect(Book.normalizedISBN("0-306-40615-2") == "9780306406157")
+        #expect(Book.normalizedISBN("0306406152") == "9780306406157")
+    }
+
+    /// ISBN-10 check digit X (e.g. several Penguin Classics) also converts.
+    /// 0-8044-2957-X → 9780804429573.
+    @Test func isbn10WithXCheckDigitConverts() {
+        #expect(Book.normalizedISBN("0-8044-2957-X") == "9780804429573")
+        #expect(Book.normalizedISBN("080442957x") == "9780804429573")
+    }
+
+    @Test func isbn13PassesThroughAndDashesAreStripped() {
+        #expect(Book.normalizedISBN("978-0-441-17271-9") == "9780441172719")
+        #expect(Book.normalizedISBN(" 9780441172719 ") == "9780441172719")
+    }
+
+    /// The dedupe invariant this whole fix exists for: the same book seen as
+    /// ISBN-10 (typed) and ISBN-13 (scanned) must normalize to one key.
+    @Test func isbn10And13FormsOfSameBookCollide() {
+        #expect(Book.normalizedISBN("0306406152") == Book.normalizedISBN("9780306406157"))
+    }
+
+    @Test func garbageReturnsNil() {
+        #expect(Book.normalizedISBN(nil) == nil)
+        #expect(Book.normalizedISBN("") == nil)
+        #expect(Book.normalizedISBN("   ") == nil)
+        // 10-char shape must be digit-shaped to convert; all letters fail
+        // isbn10To13's digit guard.
+        #expect(Book.normalizedISBN("abcdefghij") == nil)
+    }
+
+    @Test func manualStubUsesNormalizedIsbn() {
+        let stub = CatalogBook.manualStub(isbn: "0-306-40615-2")
+        #expect(stub.isbn == "9780306406157")
+        #expect(stub.id == "isbn-9780306406157")
+    }
+}

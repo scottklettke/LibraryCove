@@ -268,6 +268,16 @@ final class OpenAICompatibleProvider: AIModelProviding {
         return min(length, AIConfig.maxContextTokensCeiling)
     }
 
+    /// Output budget for a chat request: the standard 8192, clamped to the
+    /// model's context window when one is known (server-declared or the user's
+    /// setting), so strict OpenAI-compatible servers (Llama.cpp and friends)
+    /// don't reject requests whose `max_tokens` alone exceeds the window.
+    /// A 1024 floor keeps thinking models from starving even on tiny windows.
+    private func requestMaxOutputTokens() async -> Int {
+        let limit = await contextTokenLimit() ?? AIConfig.maxContextTokens
+        return min(8192, max(AIConfig.minContextTokens, limit))
+    }
+
     func generate(_ prompt: AIPrompt) async throws -> AIGeneration {
         guard prompt.images.isEmpty else {
             throw AIError.unsupported("Image input is not available yet.")
@@ -281,7 +291,8 @@ final class OpenAICompatibleProvider: AIModelProviding {
         let resolvedModel = try await resolveModel()
         Self.recordResolvedModel(resolvedModel)
 
-        let request = try makeRequest(url: url, prompt: prompt, model: resolvedModel)
+        let request = try makeRequest(url: url, prompt: prompt, model: resolvedModel,
+                                      maxOutputTokens: await requestMaxOutputTokens())
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await session.data(for: request)
@@ -324,23 +335,26 @@ final class OpenAICompatibleProvider: AIModelProviding {
         let prefix = base.hasSuffix("/v1") ? base : "\(base)/v1"
         return URL(string: "\(prefix)/chat/completions")
     }
-
-    private func makeRequest(url: URL, prompt: AIPrompt, model: String) throws -> URLRequest {
+    private func makeRequest(url: URL, prompt: AIPrompt, model: String, maxOutputTokens: Int) throws -> URLRequest {
         var messages: [[String: String]] = []
         if let system = prompt.system {
             messages.append(["role": "system", "content": system])
         }
         messages.append(["role": "user", "content": prompt.user])
-
         // Generous output budget: reasoning/thinking models consume part of the
         // budget for chain-of-thought, and genre/shelf requests ask for long
         // JSON. A small cap (1024) let thinking eat the whole budget, so the
         // server returned `content` empty and every AI-assisted genre feature
         // failed with "Missing text content in message."
+        //
+        // The budget is clamped to the model's context window: requesting more
+        // output tokens than the window holds makes strict servers (Llama.cpp,
+        // llama-box, most OpenAI-compatible runtimes) reject the request
+        // outright with a 400 about `max_tokens` + prompt exceeding the limit.
         let body: [String: Any] = [
             "model": model,
             "messages": messages,
-            "max_tokens": 8192,
+            "max_tokens": maxOutputTokens,
         ]
 
         var request = URLRequest(url: url)

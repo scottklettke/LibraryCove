@@ -26,6 +26,33 @@ private func testBook(isbn: String, title: String = "Dune") -> CatalogBook {
                 language: "en", coverURLs: [], descriptionSource: "test", source: "test")
 }
 
+/// Thread-safe in-flight counter for asserting the drain's concurrency
+/// window. NSLock-based so it works from any executor.
+private final class ConcurrencyProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var inFlight = 0
+    private var maxInFlight = 0
+
+    func enter() {
+        lock.lock()
+        inFlight += 1
+        if inFlight > maxInFlight { maxInFlight = inFlight }
+        lock.unlock()
+    }
+
+    func exit() {
+        lock.lock()
+        inFlight -= 1
+        lock.unlock()
+    }
+
+    var peak: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return maxInFlight
+    }
+}
+
 /// The background scan queue: instant ISBN caching, offline-crash-safe
 /// persistence, and status transitions driven by a background processor.
 @Suite @MainActor
@@ -180,6 +207,27 @@ struct ScanQueueStoreTests {
         await store.drain()
 
         #expect(store.importableBooks.map { $0.isbn } == ["9780000000001", "9780000000002"])
+    }
+
+    /// The drain runs up to 3 catalog lookups concurrently (never more) and
+    /// still resolves every item in scan order.
+    @Test func drainRunsLookupsWithBoundedConcurrency() async {
+        let probe = ConcurrencyProbe()
+        catalog.lookupHandler = { isbn in
+            probe.enter()
+            // Hold each lookup open so overlapping windows can actually form.
+            try? await Task.sleep(for: .milliseconds(50))
+            probe.exit()
+            return testBook(isbn: isbn, title: "B-\(isbn)")
+        }
+        let store = makeStore()
+        for i in 1...9 { store.enqueue(isbn: "978000000000\(i)") }
+        await store.drain()
+
+        #expect(store.items.allSatisfy { $0.status == .ready })
+        #expect(store.importableBooks.map { $0.isbn } == (1...9).map { "978000000000\($0)" })
+        #expect(probe.peak > 1, "lookups should overlap instead of running serially")
+        #expect(probe.peak <= 3, "concurrency window must stay bounded at 3")
     }
 
     @Test func duplicateScanMidProcessingNotRebilledAsNew() {

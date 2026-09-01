@@ -21,10 +21,10 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
     var primaryCoverURL: String? { coverURLs.first }
 
     /// A placeholder for a scanned-but-not-found ISBN so the book can still be
-    /// added with manually entered details. ISBN is normalized (no dashes).
+    /// added with manually entered details. ISBN normalized via the shared
+    /// canonical form (13 digits).
     static func manualStub(isbn: String) -> CatalogBook {
-        let cleaned = isbn.replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: " ", with: "")
+        let cleaned = Book.normalizedISBN(isbn) ?? ""
         return CatalogBook(id: "isbn-\(cleaned)",
                            title: "",
                            authors: [],
@@ -143,7 +143,7 @@ final class OpenLibraryService: CatalogService {
 
     /// Look up a book by ISBN via OpenLibrary, then enrich with Google Books.
     func lookup(isbn: String, preferred: DescriptionSource = .wikipedia) async throws -> CatalogBook? {
-        let cleaned = isbn.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: " ", with: "")
+        guard let cleaned = Book.normalizedISBN(isbn) else { return nil }
         var components = URLComponents(string: "https://openlibrary.org/api/books")!
         components.queryItems = [
             URLQueryItem(name: "bibkeys", value: "ISBN:\(cleaned)"),
@@ -226,10 +226,12 @@ final class OpenLibraryService: CatalogService {
             )
         }
 
-        // Gather multiple cover variants from OpenLibrary editions + Google title search.
-        let olCovers = await fetchOpenLibraryCovers(isbn: cleaned)
-        let gCovers = await fetchGoogleCovers(title: catalog.title, authors: catalog.authors)
-        let combined = olCovers + gCovers
+        // Gather multiple cover variants from OpenLibrary editions + Google
+        // title search. The two sources are independent — fetch them
+        // concurrently so scan-time lookups don't serialize one behind the other.
+        async let olCovers = fetchOpenLibraryCovers(isbn: cleaned)
+        async let gCovers = fetchGoogleCovers(title: catalog.title, authors: catalog.authors)
+        let combined = await olCovers + gCovers
         if !combined.isEmpty {
             var merged = catalog.coverURLs
             var seen = Set(merged)

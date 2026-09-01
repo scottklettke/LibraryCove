@@ -16,7 +16,8 @@ enum ZipArchiveError: LocalizedError {
 /// deflated via libcompression). Handles standard archives produced by the
 /// system `zip`/Finder "Compress" tools as well as the ones BookNexus writes.
 ///
-/// No ZIP entry may exceed 4 GiB; BookNexus data never approaches that.
+/// Reading enforces zip-bomb caps: 256 MB per entry and 1 GB total
+/// uncompressed size, checked against the central directory before allocating.
 enum ZipArchive {
 
     // MARK: - Write
@@ -126,6 +127,7 @@ enum ZipArchive {
         }
 
         var files: [String: Data] = [:]
+        var totalUncompressed = 0
         var cursor = centralOffset
         for _ in 0..<entryCount {
             guard cursor + 46 <= data.count else {
@@ -151,6 +153,20 @@ enum ZipArchive {
 
             // Skip directories and macOS metadata sidecars.
             if !name.hasSuffix("/") && !name.hasPrefix("__MACOSX/") && !name.contains("/__MACOSX/") {
+                // Zip-bomb guards: no single entry may claim more than
+                // 256 MB, and the whole archive may not decompress past
+                // 1 GB. The declared sizes come from the central directory
+                // and are checked BEFORE any allocation or inflation, so a
+                // hostile archive can't get a byte of memory past the caps.
+                // 1 GB total because cover JPEGs are stored nearly
+                // uncompressed — a large library export is legitimately huge.
+                guard uncompressedSize <= 256_000_000 else {
+                    throw ZipArchiveError.corrupt("entry '\(name)' exceeds 256 MB uncompressed size limit")
+                }
+                totalUncompressed += uncompressedSize
+                guard totalUncompressed <= 1_000_000_000 else {
+                    throw ZipArchiveError.corrupt("archive exceeds 1 GB total uncompressed size limit")
+                }
                 let payload = try dataOfEntry(data,
                                               localOffset: localOffset,
                                               method: method,

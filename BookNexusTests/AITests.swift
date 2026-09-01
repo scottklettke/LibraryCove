@@ -123,6 +123,8 @@ final class MockURLProtocol: URLProtocol {
     // MARK: - Provider: success path
 
     @Test func generateParsesContentAndBuildsCorrectRequest() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
         AITests.resetDiscovery()
         MockURLProtocol.handler = { request in
             // Auto-discovery: the models endpoint is consulted first, and the
@@ -140,9 +142,9 @@ final class MockURLProtocol: URLProtocol {
             // Not the old hardcoded gpt-4o-mini: it's the chat-capable id the
             // server list actually contained.
             #expect(body["model"] as? String == "gpt-4o-2024-11-20")
-            // Generous output budget so reasoning/thinking models cannot burn
-            // the whole budget on chain-of-thought (see makeRequest).
-            #expect(body["max_tokens"] as? Int == 8192)
+            // Default 4096-token window (no user setting, models probe
+            // declares none): budget clamps to the window, not the 8192 cap.
+            #expect(body["max_tokens"] as? Int == 4096)
             let messages = try #require(body["messages"] as? [[String: String]])
             #expect(messages.count == 1)
             #expect(messages[0]["role"] == "user")
@@ -177,6 +179,29 @@ final class MockURLProtocol: URLProtocol {
 
         let prompt = AIPrompt(system: "You are a helpful assistant.", user: "Summarize this")
         #expect(try await AITests.provider(session: AITests.session()).generate(prompt).text == "done")
+    }
+
+    /// When the server declares a context window, the output budget clamps to
+    /// it — here 16384 >= 8192, so the full 8192 budget survives.
+    @Test func generateClampsMaxTokensToDeclaredContextWindow() async throws {
+        AIConfig.resetForTesting()
+        defer { AIConfig.resetForTesting() }
+        AITests.resetDiscovery()
+        MockURLProtocol.handler = { request in
+            if AITests.isModelsRequest(request) {
+                return AITests.modelsResponse(request, infos: [
+                    AIModelInfo(id: "gpt-4o", name: nil, contextLength: 16384),
+                ])
+            }
+            let body = try AITests.bodyObject(request)
+            #expect(body["max_tokens"] as? Int == 8192)
+            let json = #"{"choices":[{"message":{"content":"ok"}}]}"#
+            return AITests.jsonResponse(request, status: 200, body: json)
+        }
+
+        let result = try await AITests.provider(session: AITests.session())
+            .generate(AIPrompt(user: "Hello there"))
+        #expect(result.text == "ok")
     }
 
     @Test func customModelFlowsThrough() async throws {

@@ -175,16 +175,41 @@ extension Book {
         BookStatus(rawValue: status) ?? .toRead
     }
 
-    /// Canonical ISBN used for duplicate detection: digits only (no dashes or
-    /// spaces), so "978-0-441-17271-9" and "9780441172719" match. `nil` when
-    /// there's nothing usable.
+    /// Canonical ISBN used for duplicate detection: digits only, always 13
+    /// digits. Strips dashes/spaces, then upgrades a 10-digit ISBN-10 (last
+    /// digit may be `X`) to its ISBN-13 equivalent so the same book scanned,
+    /// typed, and looked up normalizes to one key. `nil` when nothing usable
+    /// remains.
     static func normalizedISBN(_ raw: String?) -> String? {
         guard let raw else { return nil }
         let cleaned = raw
             .replacingOccurrences(of: "-", with: "")
             .replacingOccurrences(of: " ", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.count == 10 {
+            return isbn10To13(cleaned)
+        }
         return cleaned.isEmpty ? nil : cleaned
+    }
+
+    /// Converts an ISBN-10 to ISBN-13: prefix "978", keep the first nine
+    /// digits (the tenth may be X), then recompute the check digit with the
+    /// alternating 1/3 weights. A malformed ISBN-10 still converts — this
+    /// feeds dedupe, not validation, so tolerance beats rejection.
+    private static func isbn10To13(_ isbn10: String) -> String? {
+        let digits = Array(isbn10.utf8)
+        guard digits.dropLast().allSatisfy({ $0 >= 48 && $0 <= 57 }) else { return nil }
+        let last = digits[9]
+        guard last >= 48 && last <= 57 || last == 88 || last == 120 else { return nil }
+        let first9 = isbn10.prefix(9)
+        var sum = 0
+        // Weights run across the FULL 12-digit stem ("978" + first9), left to
+        // right alternating 1, 3 — the prefix contributes 9·1+7·3+8·1 = 38.
+        for (i, c) in ("978" + first9).enumerated() {
+            sum += Int(c.asciiValue! - 48) * (i % 2 == 0 ? 1 : 3)
+        }
+        let check = (10 - sum % 10) % 10
+        return "978" + first9 + String(check)
     }
 }
 

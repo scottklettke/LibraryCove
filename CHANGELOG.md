@@ -40,6 +40,11 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
 - **Removed the AI Tools menu** (clean-up tags / reorganize shelves /
   classify) as an in-app entry point; the underlying AI services remain in the
   codebase for a future return.
+- **Faster scan-time lookups**: catalog lookups now fetch Open Library and
+  Google Books cover variants concurrently instead of one after the other, and
+  the background scan queue processes up to **3 ISBN lookups at once** (bounded
+  window) instead of strictly serially — scanning a stack of books no longer
+  serializes every network round-trip. Import order still follows scan order.
 
 ### Fixed
 - **"Improve description" invented flowery, made-up text** (e.g. a fabricated
@@ -50,6 +55,19 @@ minor version (0.2, 0.3, …), and major milestones raise the major version (1.0
 - **"Date added" showing 12/31/00** for recently added books: new books are now
   stamped with the real add date, and books created earlier with the unset
   (2001-01-01) sentinel are restored to a real date on launch.
+- **ISBN-10 vs ISBN-13 duplicates**: the same book typed as a 10-digit ISBN
+  and scanned as a 13-digit ISBN no longer creates two library entries —
+  every identifier (manual entry, camera scan, catalog lookup) now normalizes
+  to the canonical 13-digit form (e.g. `0306406152` → `9780306406157`) before
+  duplicate detection.
+- **Ask AI rejected by strict local servers**: the 8192-token output budget is
+  now clamped to the model's context window (server-reported or the Settings →
+  AI setting), so OpenAI-compatible endpoints like Llama.cpp no longer return
+  a 400 about `max_tokens` exceeding the window.
+- **Malicious archive import**: library restore now rejects ZIP entries over
+  256 MB and archives that claim to decompress past 1 GB total, checked before
+  any memory is allocated (zip-bomb guard; normal exports are far below the
+  cap).
 
 ## [0.4] — 2026-08-20
 

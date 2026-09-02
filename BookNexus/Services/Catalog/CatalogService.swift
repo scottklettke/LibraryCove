@@ -565,6 +565,56 @@ final class OpenLibraryService: CatalogService {
         return (best?.text, best?.source)
     }
 
+    /// Every description candidate a book has, from all sources at once —
+    /// the picker in the add/edit form shows one row per source so the user
+    /// can choose the text they like best. Sources run concurrently; results
+    /// are deduped by normalized text and labeled with their origin. The
+    /// book's current description (if any) is included as "current".
+    func descriptionCandidates(isbn: String?,
+                               title: String,
+                               authors: [String],
+                               current: String?) async -> [(text: String, source: String?)] {
+        var candidates: [(text: String, source: String?)] = []
+        let trimmedCurrent = current?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedCurrent, !trimmedCurrent.isEmpty {
+            candidates.append((trimmedCurrent, nil))
+        }
+
+        var fetched: [(text: String, source: String?)] = []
+        // The ISBN record's own description first (Wikipedia-preferred order),
+        // then the remaining sources by title. Independent — run concurrently.
+        async let isbnRecord: (text: String?, source: String?)? = {
+            guard let isbn, !isbn.isEmpty,
+                  let book = try? await lookup(isbn: isbn, preferred: .wikipedia),
+                  let desc = book.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !desc.isEmpty else { return nil }
+            return (desc, book.descriptionSource)
+        }()
+        async let wiki: String? = wikipediaBookExtract(title: title, authors: authors)
+        async let ol: String? = fetchWorkDescription(for: title, authors: authors)
+        async let googleIsbn: String? = {
+            guard let isbn, !isbn.isEmpty else { return nil }
+            return await googleDescription(isbn: isbn)
+        }()
+        async let googleTitle: String? = googleTitleDescription(title: title, authors: authors)
+        let (record, w, o, gi, gt) = await (isbnRecord, wiki, ol, googleIsbn, googleTitle)
+        if let record, let text = record.text, !text.isEmpty {
+            fetched.append((text, record.source))
+        }
+        if let w, !w.isEmpty { fetched.append((w, "wikipedia")) }
+        if let o, !o.isEmpty { fetched.append((o, "openlibrary")) }
+        if let gi, !gi.isEmpty { fetched.append((gi, "googlebooks")) }
+        if let gt, !gt.isEmpty { fetched.append((gt, "googlebooks")) }
+
+        // Dedupe identical texts (the ISBN record and a title hit are often
+        // the same publisher blurb), keeping first occurrence.
+        var seen = Set<String>()
+        for candidate in fetched where seen.insert(candidate.text).inserted {
+            candidates.append(candidate)
+        }
+        return candidates
+    }
+
     /// A single, light title-based description lookup for the add/edit form's
     /// auto-fill: Wikipedia (book-page-gated) preferred, then OpenLibrary's
     /// work record. Used when the ISBN record carries no description, so an

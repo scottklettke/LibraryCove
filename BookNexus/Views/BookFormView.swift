@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import SafariServices
 
 /// Encodes a captured cover photo into the stored `data:` URL form.
 ///
@@ -115,6 +116,16 @@ struct BookFormView: View {
     @State private var descriptionSource: DescriptionSource = .wikipedia
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
+    /// Set when the user deletes the description while an auto-fetch is in
+    /// flight, so the fetch's late result doesn't clobber the cleared field.
+    @State private var clearedFetchedDescription = false
+    @State private var showDescriptionPicker = false
+    /// Description candidates for the "Choose from sources" sheet, loaded
+    /// when the sheet opens.
+    @State private var descriptionCandidates: [(text: String, source: String?)] = []
+    @State private var isLoadingCandidates = false
+    /// Web search for manually copying a description (opens Safari).
+    @State private var webSearchURL: URL?
     @State private var showDuplicateAlert = false
     @State private var showDeleteConfirmation = false
     @State private var pendingInsertBook: Book?
@@ -189,6 +200,9 @@ struct BookFormView: View {
                 statusSection
                 descriptionSection
                 if existing != nil {
+                    aiContentSection
+                }
+                if existing != nil {
                     loanedSection
                 }
                 saveSection
@@ -238,6 +252,32 @@ struct BookFormView: View {
                 }
                 .onDisappear { cropSource = nil }
             }
+        }
+        .sheet(isPresented: $showDescriptionPicker) {
+            DescriptionPickerSheet(
+                isbn: catalogISBN,
+                title: title,
+                authors: authorsList,
+                current: description,
+                candidates: $descriptionCandidates,
+                isLoading: $isLoadingCandidates,
+                onPick: { picked in
+                    description = picked
+                    clearedFetchedDescription = false
+                    showDescriptionPicker = false
+                },
+                onWebSearch: {
+                    let query = [title, authorsList.first]
+                        .compactMap { $0 }
+                        .filter { !$0.isEmpty }
+                        .joined(separator: " ")
+                    webSearchURL = URL(string: "https://www.google.com/search?q=" +
+                        (query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""))
+                    showDescriptionPicker = false
+                })
+        }
+        .sheet(item: $webSearchURL) { url in
+            SafariView(url: url)
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -498,6 +538,36 @@ struct BookFormView: View {
         }
     }
 
+    /// AI-generated text the edit form displays read-only: the "Summarize"
+    /// output (stored separately from the description) and, when "Improve
+    /// description" has rewritten the description, the original it replaced.
+    /// Both were invisible while editing — you could only see them after
+    /// saving and returning to the detail page.
+    private var aiContentSection: some View {
+        Section {
+            if let summary = existing?.summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.body)
+                    .textSelection(.enabled)
+                Label("AI summary (read-only)", systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let original = existing?.originalDescription,
+               !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text(original)
+                    .font(.body)
+                    .textSelection(.enabled)
+                    .lineLimit(6)
+                Label("Original description before the AI rewrite", systemImage: "arrow.uturn.backward")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("AI content")
+        }
+    }
+
     private var loanedSection: some View {
         Section {
             TextField("Person loaned to", text: $loanedToText)
@@ -558,14 +628,26 @@ struct BookFormView: View {
             }
             HStack {
                 Button {
-                    Task { await fetchDescription() }
+                    Task {
+                        clearedFetchedDescription = false
+                        await fetchDescription()
+                    }
                 } label: {
                     Text(isFetchingDescription ? "Fetching…" : "Fetch description")
                 }
                 .disabled(isFetchingDescription)
+                Button {
+                    showDescriptionPicker = true
+                } label: {
+                    Label("Choose from sources", systemImage: "text.justify.left")
+                }
+                .disabled(isFetchingDescription)
                 if !description.isEmpty {
                     Button(role: .destructive) {
+                        // An auto-fetch that's still in flight must not
+                        // resurrect the text after the user deletes it.
                         description = ""
+                        clearedFetchedDescription = true
                     } label: {
                         Text("Delete description")
                     }
@@ -579,7 +661,7 @@ struct BookFormView: View {
         } header: {
             Text("Description")
         } footer: {
-            Text("A short summary of the book. Fetched automatically from the ISBN lookup when available.")
+            Text("A short summary of the book. Fetched automatically from the ISBN lookup when available. \"Choose from sources\" lists every description found online so you can pick one, or search the web to paste your own.")
         }
     }
 
@@ -635,6 +717,9 @@ struct BookFormView: View {
             }
         }
         if let desc, !desc.isEmpty {
+            // The user deleted the description while this fetch was running —
+            // respect the clear instead of resurrecting the fetched text.
+            guard !clearedFetchedDescription else { return }
             description = desc
         }
 
@@ -656,6 +741,13 @@ struct BookFormView: View {
         let merged = (keptCover.map { [$0] } ?? []) + found.coverURLs.filter { $0 != keptCover }
         if !merged.isEmpty { coverURLs = merged }
     }
+
+    private var authorsList: [String] {
+        authorsText.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+    }
+
 
     private var catalogISBN: String? {
         if let isbn = catalog?.isbn { return isbn }
@@ -894,6 +986,115 @@ private struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
+        }
+    }
+}
+
+/// Presents a URL in an in-app Safari sheet.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+/// A URL wrapped so it can drive `.sheet(item:)`.
+extension URL: Identifiable {
+    public var id: String { absoluteString }
+}
+
+/// "Choose from sources": every description found for the book, one row per
+/// source, plus a web-search escape hatch for copying a description by hand.
+private struct DescriptionPickerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let isbn: String?
+    let title: String
+    let authors: [String]
+    let current: String
+    @Binding var candidates: [(text: String, source: String?)]
+    @Binding var isLoading: Bool
+    let onPick: (String) -> Void
+    let onWebSearch: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    ProgressView("Searching sources…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if candidates.isEmpty {
+                    ContentUnavailableView("No descriptions found",
+                                           systemImage: "text.justify.left",
+                                           description: Text("Try the web search below to copy one yourself."))
+                } else {
+                    List {
+                        ForEach(Array(candidates.enumerated()), id: \.offset) { _, candidate in
+                            Button {
+                                onPick(candidate.text)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack {
+                                        Text(sourceLabel(candidate.source))
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundStyle(.secondary)
+                                        if candidate.text == current.trimmingCharacters(in: .whitespacesAndNewlines) {
+                                            Text("in use")
+                                                .font(.caption2)
+                                                .foregroundStyle(.tint)
+                                        }
+                                    }
+                                    Text(candidate.text)
+                                        .font(.footnote)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(6)
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Descriptions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        onWebSearch()
+                    } label: {
+                        Label("Search the web", systemImage: "safari")
+                    }
+                }
+            }
+        }
+        .task {
+            if candidates.isEmpty && !isLoading {
+                await loadIfNeeded()
+            }
+        }
+    }
+
+    private func loadIfNeeded() async {
+        let service = OpenLibraryService()
+        isLoading = true
+        defer { isLoading = false }
+        candidates = await service.descriptionCandidates(
+            isbn: isbn, title: title, authors: authors, current: current)
+    }
+
+    private func sourceLabel(_ source: String?) -> String {
+        switch source {
+        case "wikipedia": return "Wikipedia"
+        case "openlibrary": return "Open Library"
+        case "googlebooks": return "Google Books"
+        case nil: return "Current text"
+        default: return source?.capitalized ?? "Unknown"
         }
     }
 }

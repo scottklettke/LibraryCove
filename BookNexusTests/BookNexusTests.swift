@@ -226,3 +226,111 @@ import UIKit
         #expect(stub.id == "isbn-9780306406157")
     }
 }
+
+/// URLProtocol stub for the description-candidate service test. Separate
+/// from AITests' MockURLProtocol (different suite, no `.serialized` coupling).
+private final class CatalogStubProtocol: URLProtocol {
+    nonisolated(unsafe) static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        guard let handler = Self.handler else { return }
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+    override func stopLoading() {}
+}
+
+private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURLResponse, Data) {
+    let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                   httpVersion: "HTTP/1.1",
+                                   headerFields: ["Content-Type": "application/json"])!
+    return (response, try! JSONSerialization.data(withJSONObject: body))
+}
+
+@Suite struct DescriptionCandidateTests {
+    /// The candidate collector dedupes identical texts across sources and
+    /// labels each result with its origin. The stub returns the SAME blurb
+    /// from the ISBN record and from Google-by-ISBN, plus distinct Wikipedia
+    /// and OpenLibrary texts — the picker must show three rows, not four.
+    @Test func candidatesDedupeIdenticalTextsAndLabelSources() async {
+        let shared = "A publisher blurb."
+        let wiki = "Wikipedia article extract."
+        let ol = "OpenLibrary work description."
+        CatalogStubProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            // OpenLibrary ISBN record: description = shared blurb.
+            if path.contains("/api/books") {
+                let body: [String: Any] = ["ISBN:9780306406157": [
+                    "title": "A Book", "authors": [["name": "An Author"]],
+                    "description": shared,
+                ]]
+                return catalogJSON(body, request: request)
+            }
+            // Wikipedia search then extract — the extract request also
+            // carries action=query, so discriminate on list=search. The
+            // service reads pages as an object keyed by page id.
+            if path.contains("/w/api.php") {
+                if query.contains("list=search") {
+                    return catalogJSON(["query": ["search": [["title": "A Book (novel)"]]]], request: request)
+                }
+                return catalogJSON(["query": ["pages": ["123": ["extract": wiki]]]], request: request)
+            }
+            if path.contains("/search.json") {
+                // OpenLibrary work search → key; then the work record.
+                return catalogJSON(["docs": [["key": "/works/OL1"]]], request: request)
+            }
+            if path.hasSuffix("/works/OL1.json") {
+                return catalogJSON(["description": ["value": ol]], request: request)
+            }
+            // Google Books volumes API (host is not part of url.path).
+            if path.contains("/books/v1/volumes") {
+                return catalogJSON(["items": [["volumeInfo": ["description": shared]]]], request: request)
+            }
+            return catalogJSON([:], request: request)
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CatalogStubProtocol.self]
+        let service = OpenLibraryService(session: URLSession(configuration: config))
+
+        let candidates = await service.descriptionCandidates(
+            isbn: "9780306406157", title: "A Book", authors: ["An Author"],
+            current: nil)
+
+        let sources = candidates.map { $0.source }
+        #expect(sources.contains("wikipedia"))
+        #expect(sources.contains("openlibrary"))
+        #expect(sources.contains("googlebooks"))
+        #expect(candidates.filter { $0.text == shared }.count == 1,
+                "identical texts from ISBN record and Google must dedupe to one row")
+        #expect(candidates.count == 3)
+    }
+
+    /// The book's current text is always offered as a candidate even when no
+    /// source returns anything (so the user can keep or compare it).
+    @Test func currentTextIncludedEvenWhenSourcesEmpty() async {
+        CatalogStubProtocol.handler = { request in
+            catalogJSON([:], request: request)
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CatalogStubProtocol.self]
+        let service = OpenLibraryService(session: URLSession(configuration: config))
+
+        let candidates = await service.descriptionCandidates(
+            isbn: "9780306406157", title: "A Book", authors: ["An Author"],
+            current: "My own description.")
+
+        #expect(candidates.count == 1)
+        #expect(candidates.first?.text == "My own description.")
+        #expect(candidates.first?.source == nil)
+    }
+}

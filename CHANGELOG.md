@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6] — 2026-09-01
+
+### Added
+- **Choose from sources** in the add/edit description section: one button
+  lists every description found online for the book — your current text,
+  the ISBN record (Open Library), Wikipedia, and Google Books (ISBN and
+  title lookups, deduplicated) — so you can pick the wording you like
+  instead of accepting whichever source happened to answer first.
+- **Search the web** inside the same sheet opens Safari on a pre-filled
+  title/author search, so you can copy a description by hand from any site.
+- The edit form now shows the **AI-generated content** that was previously
+  visible only on the detail page: the "Summarize" output and, after an AI
+  description rewrite, the original text it replaced (both read-only, both
+  copyable).
+
+### Fixed
+- **Deleting the description brought it back**: while an automatic fetch
+  was still in flight, tapping "Delete description" cleared the field —
+  then the late fetch result overwrote it. A cleared field now stays
+  cleared; an explicit "Fetch description" still overwrites on purpose.
+
 ## [0.5] — 2026-08-28
 
 ### Added
@@ -39,7 +60,7 @@
   that source with a strict no-invention prompt; when no description exists it
   says so instead of hallucinating.
 
-## [0.4.3] — 2026-09-01
+## [0.5.2] — 2026-09-01
 
 ### Fixed
 - **Duplicate scan stayed pending after OK**: rescanning a book already in
@@ -50,7 +71,7 @@
   scanner opens, so a book added earlier in the same session is correctly
   detected as a duplicate instead of silently re-queued.
 
-## [0.4.2] — 2026-09-01
+## [0.5.1] — 2026-09-01
 
 ### Changed
 - **Faster scan-time lookups**: catalog lookups now fetch Open Library and
@@ -73,6 +94,13 @@
   256 MB and archives that claim to decompress past 1 GB total, checked before
   any memory is allocated (zip-bomb guard; normal exports are far below the
   cap).
+
+## [0.4.1] — 2026-08-21
+
+### Fixed
+- **"Date added" showing 12/31/00** for recently added books: new books are now
+  stamped with the real add date, and books created earlier with the unset
+  (2001-01-01) sentinel are restored to a real date on launch.
 
 ## [0.4] — 2026-08-20
 

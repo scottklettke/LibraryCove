@@ -39,12 +39,16 @@
   that source with a strict no-invention prompt; when no description exists it
   says so instead of hallucinating.
 
-## [0.4.1] — 2026-08-21
+## [0.4.3] — 2026-09-01
 
 ### Fixed
-- **"Date added" showing 12/31/00** for recently added books: new books are now
-  stamped with the real add date, and books created earlier with the unset
-  (2001-01-01) sentinel are restored to a real date on launch.
+- **Duplicate scan stayed pending after OK**: rescanning a book already in
+  the library shows "Already in library" with *Add another copy / OK*, but OK
+  left any queued scan of that ISBN (e.g. a stale entry from an earlier
+  session) in the pending list forever. OK now actually skips the scan — the
+  pending banner clears. The library snapshot is also rebuilt each time the
+  scanner opens, so a book added earlier in the same session is correctly
+  detected as a duplicate instead of silently re-queued.
 
 ## [0.4.2] — 2026-09-01
 

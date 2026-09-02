@@ -109,6 +109,17 @@ final class ScanQueueStore: ObservableObject {
         persist()
     }
 
+    /// Drops every queued/resolved scan whose ISBN normalizes to `isbn`.
+    /// The duplicate-scan alert uses this to make its OK action honor the
+    /// "skip this scan" promise: a stale entry for a book already in the
+    /// library (an earlier scan that was never added) must not linger in the
+    /// pending list.
+    func removeISBN(_ isbn: String) {
+        guard let normalized = Book.normalizedISBN(isbn) else { return }
+        items.removeAll { $0.id == "isbn-\(normalized)" }
+        persist()
+    }
+
     /// Used by the "Delete all data" reset and UI-test hygiene. When a UI-test
     /// seed is present it is authoritative and re-applied (mirroring the old
     /// store, which re-read the launch environment at every display).

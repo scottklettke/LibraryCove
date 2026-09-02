@@ -790,6 +790,54 @@ final class BookNexusUITests: XCTestCase {
                        "deleted book still tappable in strip")
     }
 
+    /// Regression for the reported "OK leaves the scan pending" bug: with a
+    /// stale scan entry for a book that IS in the library, rescanning shows
+    /// the duplicate alert; OK must DISCARD the queued scan (the alert
+    /// promises "skip this scan"), so the pending-scan banner disappears.
+    /// The rescan is injected through the real handleCode path via
+    /// UI_TEST_SCAN_CODE (the simulator camera produces no frames). Phase 2
+    /// must NOT set UI_TEST_RESET_DATA — that would wipe the library the
+    /// first phase imported and the ISBN would no longer be a duplicate.
+    func testDuplicateScanOKDiscardsPendingScan() throws {
+        // Phase 1: reset to a known state and import both seed books, so the
+        // library contains ISBN 9780137463602.
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_PENDING_SCANS"] = pendingScansSeed
+        app.launch()
+        enterLibraryIfNeeded(app)
+        addSeededBooks(app)
+        app.terminate()
+
+        // Phase 2: relaunch WITHOUT reset — the library persists. Seed a
+        // stale (failed) scan entry for a book already imported, then inject
+        // a rescan of the same ISBN through handleCode.
+        let app2 = XCUIApplication()
+        app2.launchEnvironment["UI_TEST_PENDING_ISBNS"] = "9780137463602"
+        app2.launchEnvironment["UI_TEST_SCAN_CODE"] = "9780137463602"
+        app2.launch()
+        enterLibraryIfNeeded(app2)
+        openAddSheet(app2)
+
+        // The stale entry is pending before the rescan.
+        let banner = app2.buttons.matching(NSPredicate(format: "label CONTAINS 'not yet added'")).firstMatch
+        XCTAssertTrue(banner.waitForExistence(timeout: 10), "stale scan entry missing before rescan")
+        openScanner(app2)
+
+        // The duplicate alert appears…
+        let alert = app2.alerts["Already in library"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 20),
+                      "duplicate alert did not appear for already-in-library ISBN")
+
+        // …and OK discards the queued scan instead of leaving it pending.
+        alert.buttons["OK"].tap()
+        XCTAssertTrue(app2.staticTexts["No books scanned yet"].waitForExistence(timeout: 10),
+                      "scan strip should be empty after OK discards the duplicate scan")
+        app2.buttons["Close scanner"].tap()
+        XCTAssertTrue(app2.navigationBars["Add a book"].waitForExistence(timeout: 10),
+                      "did not return to the Add screen")
+        XCTAssertFalse(banner.exists, "pending-scan banner must vanish once OK skips the scan")
+    }
+
     /// An assistant-only chat seeded with markdown, matching `[AITurn]` and
     /// the JSONEncoder defaults `LocalTranscriptMemory` writes (seconds since
     /// a reference date, "role"/"text"/"date" keys).

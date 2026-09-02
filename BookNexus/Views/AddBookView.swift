@@ -99,6 +99,7 @@ struct AddBookView: View {
                     showScanner = false
                     dismiss()
                 })
+                .onAppear { buildExistingSet() }
             }
             .sheet(item: $importDispatch) { dispatch in
                 BookImportFlow(queue: dispatch.books,
@@ -302,6 +303,15 @@ private struct ScannerFlow: View {
         .onAppear {
             seedScannedBooksForTesting()
             queue.startProcessingIfNeeded()
+            // UI-test seam: feed a barcode through the real handleCode path
+            // (the camera produces no frames in the simulator, and the
+            // duplicate-alert logic lives in handleCode). Slight delay so
+            // the alert presents after the full-screen cover finishes.
+            if let code = ProcessInfo.processInfo.environment["UI_TEST_SCAN_CODE"], !code.isEmpty {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weakSelfCode = code] in
+                    self.handleCode(weakSelfCode)
+                }
+            }
         }
     }
 
@@ -385,7 +395,14 @@ private struct ScannerFlow: View {
                     queue.enqueue(isbn: hit.isbn)
                 }
             }
-            Button("OK", role: .cancel) {}
+            Button("OK", role: .cancel) {
+                // "Skip this scan" must actually skip: discard any queued
+                // scan of this ISBN (including stale entries from earlier
+                // sessions) so it never resurfaces in the pending list.
+                if let hit = duplicateScan {
+                    queue.removeISBN(hit.isbn)
+                }
+            }
         } message: {
             if let hit = duplicateScan {
                 if let name = hit.name, !name.isEmpty {

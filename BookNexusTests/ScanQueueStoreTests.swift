@@ -209,6 +209,24 @@ struct ScanQueueStoreTests {
         #expect(store.importableBooks.map { $0.isbn } == ["9780000000001", "9780000000002"])
     }
 
+    /// removeISBN drops the whole scan entry (whatever its status) for a
+    /// normalized ISBN — the duplicate-scan alert's "skip" path depends on it.
+    @Test func removeISBNDropsEntryRegardlessOfStatus() async {
+        catalog.lookupHandler = { isbn in testBook(isbn: isbn) }
+        let store = makeStore()
+        store.enqueue(isbn: "9780140328721")
+        await store.drain()
+        #expect(store.count == 1)
+
+        // Dashed/spaced spellings normalize to the same key.
+        store.removeISBN("978-0-14-032872-1")
+        #expect(store.count == 0)
+        #expect(makeStore().count == 0, "removal must persist")
+
+        // Garbage is a no-op, not a crash.
+        store.removeISBN("not-an-isbn")
+    }
+
     /// The drain runs up to 3 catalog lookups concurrently (never more) and
     /// still resolves every item in scan order.
     @Test func drainRunsLookupsWithBoundedConcurrency() async {

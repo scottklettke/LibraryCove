@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7] — 2026-09-02
+
+### Added
+- **Import highlighted text from the web**: "Search the web" now opens an
+  in-app browser instead of Safari. Highlight any text on the page and an
+  import button appears — tap it to bring the selection straight into the
+  description field (appended to existing text, or used as-is when the
+  field is empty). No more copy-pasting through the app switcher.
+- **Your choice of search engine** for the description web search
+  (Settings → Description lookup): Google, DuckDuckGo (the new default
+  instead of Google), Bing, Ecosia, or Kagi. iOS doesn't reveal Safari's
+  default engine, so BookNexus keeps its own setting.
+
+### Changed
+- **Search the web is now a prominent button** at the top of the
+  description picker sheet instead of a small toolbar icon you had to
+  hunt for.
+
+### Fixed
+- The description picker now says why Google Books is missing: when it
+  returns nothing (its keyless access is often rate-limited), the sheet
+  shows a note instead of silently omitting the source.
+
 ## [0.6] — 2026-09-02
 
 ### Added

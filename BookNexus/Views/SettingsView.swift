@@ -317,6 +317,21 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Search engine", selection: Binding(
+                        get: { WebSearchEngine.selected },
+                        set: { WebSearchEngine.selected = $0 }
+                    )) {
+                        ForEach(WebSearchEngine.allCases) { engine in
+                            Text(engine.displayName).tag(engine)
+                        }
+                    }
+                    .accessibilityIdentifier("searchEnginePicker")
+                } header: {
+                    Text("Description lookup")
+                } footer: {
+                    Text("Used by \"Search the web\" when you fetch a book's description. iOS doesn't reveal Safari's default engine, so BookNexus keeps its own choice; DuckDuckGo is the default.")
+                }
+                Section {
                     if aiLogs.isEmpty {
                         Text("No AI activity logged yet. Ask a question or tap Test connection to see request logs here.")
                             .foregroundStyle(.secondary)

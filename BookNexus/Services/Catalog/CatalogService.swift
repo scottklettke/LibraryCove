@@ -778,3 +778,53 @@ final class OpenLibraryService: CatalogService {
             .filter { $0.count >= 4 })
     }
 }
+
+/// Web search engines offered for the "Search the web" description escape
+/// hatch. Stored as a raw string in `UserDefaults` via `AIConfig`-style
+/// accessors; every case builds its own query URL so no engine-specific
+/// formatting leaks into call sites.
+enum WebSearchEngine: String, CaseIterable, Identifiable {
+    case google, duckduckgo, bing, ecosia, kagi
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .google: return "Google"
+        case .duckduckgo: return "DuckDuckGo"
+        case .bing: return "Bing"
+        case .ecosia: return "Ecosia"
+        case .kagi: return "Kagi"
+        }
+    }
+
+    /// Percent-encoded search URL for a free-form query. Built with
+    /// URLComponents so values containing "&" or "=" (think "War & Peace")
+    /// stay inside the `q` parameter instead of splitting into fake ones.
+    func searchURL(for query: String) -> URL? {
+        let base: String
+        switch self {
+        case .google: base = "https://www.google.com/search"
+        case .duckduckgo: base = "https://duckduckgo.com/"
+        case .bing: base = "https://www.bing.com/search"
+        case .ecosia: base = "https://www.ecosia.org/search"
+        case .kagi: base = "https://kagi.com/search"
+        }
+        var components = URLComponents(string: base)
+        components?.queryItems = [URLQueryItem(name: "q", value: query)]
+        return components?.url
+    }
+
+    /// The persisted selection. iOS exposes no API to read Safari's actual
+    /// default engine, so the app keeps its own — defaulting to DuckDuckGo
+    /// rather than Google by user preference. Change it in Settings → AI.
+    static var selected: WebSearchEngine {
+        get {
+            let raw = UserDefaults.standard.string(forKey: "description.webSearchEngine") ?? ""
+            return WebSearchEngine(rawValue: raw) ?? .duckduckgo
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "description.webSearchEngine")
+        }
+    }
+}

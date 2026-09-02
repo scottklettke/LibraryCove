@@ -367,3 +367,35 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
         #expect(candidates.first?.sources == [nil, "wikipedia"])
     }
 }
+
+@Suite struct WebSearchEngineTests {
+    /// The q parameter must survive "&"/"=" inside book titles (think
+    /// "War & Peace") — URLComponents encoding, not string interpolation.
+    @Test func searchURLEncodesQuerySafely() throws {
+        let url = try #require(WebSearchEngine.duckduckgo.searchURL(for: "War & Peace Tolstoy"))
+        let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let q = try #require(components.queryItems?.first { $0.name == "q" }?.value)
+        #expect(q == "War & Peace Tolstoy")
+    }
+
+    /// Every engine builds a valid https search URL for an empty query too
+    /// (the form can be submitted with title and authors blank).
+    @Test func allEnginesBuildValidURLs() throws {
+        for engine in WebSearchEngine.allCases {
+            let url = try #require(engine.searchURL(for: "The Odyssey Homer"))
+            #expect(url.scheme == "https")
+            let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+            #expect(components.queryItems?.contains { $0.name == "q" } == true)
+        }
+    }
+
+    /// The persisted selection falls back to DuckDuckGo, not Google, per the
+    /// user's "rather than defaulting to Google" requirement.
+    @Test func selectionDefaultsToDuckDuckGo() {
+        UserDefaults.standard.removeObject(forKey: "description.webSearchEngine")
+        #expect(WebSearchEngine.selected == .duckduckgo)
+        WebSearchEngine.selected = .kagi
+        #expect(WebSearchEngine.selected == .kagi)
+        UserDefaults.standard.removeObject(forKey: "description.webSearchEngine")
+    }
+}

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import SafariServices
+import WebKit
 
 /// Encodes a captured cover photo into the stored `data:` URL form.
 ///
@@ -278,13 +279,26 @@ struct BookFormView: View {
                         .compactMap { $0 }
                         .filter { !$0.isEmpty }
                         .joined(separator: " ")
-                    webSearchURL = URL(string: "https://www.google.com/search?q=" +
-                        (query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""))
+                    webSearchURL = WebSearchEngine.selected.searchURL(for: query)
                     showDescriptionPicker = false
                 })
         }
         .sheet(item: $webSearchURL) { url in
-            SafariView(url: url)
+            WebSearchBrowser(
+                url: url,
+                onImportSelection: { text in
+                    // A hand-copied selection has no catalog source; keep the
+                    // existing text and append, or start fresh when empty.
+                    if description.isEmpty {
+                        description = text
+                    } else {
+                        description += "\n\n" + text
+                    }
+                    activeDescriptionSource = nil
+                    clearedFetchedDescription = isFetchingDescription
+                    webSearchURL = nil
+                },
+                onClose: { webSearchURL = nil })
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -1012,15 +1026,128 @@ private struct CameraPicker: UIViewControllerRepresentable {
     }
 }
 
-/// Presents a URL in an in-app Safari sheet.
-struct SafariView: UIViewControllerRepresentable {
+/// Presents a URL in an in-app WebKit browser sheet. Unlike the old
+/// SFSafariViewController sheet, a WKWebView can read the page's current text
+/// selection, which is what powers "import the highlighted description".
+/// The Close button tears the browser down itself by firing `onClose`, which
+/// the SwiftUI side binds to `webSearchURL = nil`.
+struct WebSearchBrowser: UIViewControllerRepresentable {
     let url: URL
+    var onImportSelection: (String) -> Void
+    var onClose: () -> Void = {}
 
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        SFSafariViewController(url: url)
+    func makeUIViewController(context: Context) -> UINavigationController {
+        let webView = WKWebView(frame: .zero)
+        webView.load(URLRequest(url: url))
+        let coordinator = context.coordinator
+
+        let importButton = UIButton(type: .system)
+        importButton.setImage(UIImage(systemName: "text.badge.plus"), for: .normal)
+        importButton.tintColor = .systemBlue
+        importButton.accessibilityLabel = "Import selected text"
+        // Hidden until the page actually has a selection.
+        importButton.alpha = 0
+        importButton.addAction(UIAction { [weak webView, weak importButton] _ in
+            guard let webView else { return }
+            webView.evaluateJavaScript("window.getSelection().toString()") { result, _ in
+                guard let text = result as? String else { return }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                importButton?.alpha = 0
+                coordinator.onImportSelection(trimmed)
+            }
+        }, for: .touchUpInside)
+
+        let bar = UIToolbar()
+        let flexible = UIBarButtonItem(systemItem: .flexibleSpace)
+        let importItem = UIBarButtonItem(customView: importButton)
+        let closeItem = UIBarButtonItem(
+            systemItem: .close,
+            primaryAction: UIAction { _ in
+                coordinator.close()
+            })
+        bar.items = [closeItem, flexible, importItem]
+
+        let container = UIViewController()
+        container.view.addSubview(bar)
+        container.view.addSubview(webView)
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: container.view.safeAreaLayoutGuide.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: container.view.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: container.view.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: container.view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: container.view.trailingAnchor),
+            webView.bottomAnchor.constraint(equalTo: container.view.bottomAnchor),
+        ])
+
+        // The selection appears/clears as the user drags handles, so poll
+        // rather than rely on WKWebView delegate callbacks (none fire for
+        // selection changes).
+        let poll = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak webView, weak importButton] _ in
+            webView?.evaluateJavaScript("String(window.getSelection())") { result, _ in
+                let has = (result as? String)?.isEmpty == false
+                importButton?.alpha = has ? 1 : 0
+                importButton?.isUserInteractionEnabled = has
+            }
+        }
+
+        let nav = UINavigationController(rootViewController: container)
+        nav.toolbar.isHidden = true
+        coordinator.install(webView: webView, pollTimer: poll)
+        return nav
     }
 
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {}
+
+    /// SwiftUI's teardown hook (swipe-dismiss included): stops the 0.5s
+    /// selection poll so it never outlives the browser. Runs on the main
+    /// actor, so it may touch the coordinator's isolated state.
+    static func dismantleUIViewController(_ uiViewController: UINavigationController,
+                                          coordinator: Coordinator) {
+        coordinator.dismiss()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onImportSelection: onImportSelection, onClose: onClose)
+    }
+    /// Owns the browser's WebView + poll timer. `close()` tears everything
+    /// down (Close button); `dismiss()` is the swipe-dismiss path that
+    /// `dismantleUIViewController` calls on the main actor.
+    @MainActor
+    final class Coordinator {
+        private var webView: WKWebView?
+        private var pollTimer: Timer?
+        let onImportSelection: (String) -> Void
+        private let onClose: () -> Void
+
+        init(onImportSelection: @escaping (String) -> Void,
+             onClose: @escaping () -> Void) {
+            self.onImportSelection = onImportSelection
+            self.onClose = onClose
+        }
+
+        func install(webView: WKWebView, pollTimer: Timer) {
+            self.webView = webView
+            self.pollTimer = pollTimer
+        }
+
+        /// Close button: stop polling, then hand dismissal back to SwiftUI
+        /// by clearing the `webSearchURL` binding.
+        func close() {
+            dismiss()
+            onClose()
+        }
+
+        func dismiss() {
+            pollTimer?.invalidate()
+            pollTimer = nil
+            webView?.stopLoading()
+            webView = nil
+        }
+    }
 }
 
 /// A URL wrapped so it can drive `.sheet(item:)`.
@@ -1048,36 +1175,79 @@ private struct DescriptionPickerSheet: View {
                     ProgressView("Searching sources…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if candidates.isEmpty {
-                    ContentUnavailableView("No descriptions found",
-                                           systemImage: "text.justify.left",
-                                           description: Text("Try the web search below to copy one yourself."))
+                    List {
+                        Section {
+                            Button {
+                                onWebSearch()
+                            } label: {
+                                Label("Search the web for this book",
+                                      systemImage: "safari")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                        } footer: {
+                            Text("No descriptions found in Open Library, Wikipedia, or Google Books (its keyless access is often rate-limited). Try the web search — you can highlight text on the page and import it as the description.")
+                        }
+                    }
                 } else {
                     List {
-                        ForEach(Array(candidates.enumerated()), id: \.offset) { _, candidate in
+                        Section {
                             Button {
-                                onPick(candidate.text, candidate.sources)
+                                onWebSearch()
                             } label: {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    HStack {
-                                        Text(candidate.sources.compactMap { $0 }.isEmpty
-                                             ? "Current text"
-                                             : DescriptionSource.label(for: candidate.sources.compactMap { $0 }.joined(separator: ",")))
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                            .foregroundStyle(.secondary)
-                                        if candidate.text == current.trimmingCharacters(in: .whitespacesAndNewlines) {
-                                            Text("in use")
-                                                .font(.caption2)
-                                                .foregroundStyle(.tint)
+                                Label("Search the web for this book",
+                                      systemImage: "safari")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+
+                            // A source that answered empty simply contributes
+                            // no row; surface why so the list's silence is
+                            // legible (Google Books' keyless endpoint is
+                            // frequently rate-limited).
+                            let present = Set(candidates.compactMap { row in
+                                row.sources.compactMap { $0 }
+                            }.joined())
+                            if !present.contains("googlebooks") {
+                                Text("Google Books returned no description — its keyless access is often rate-limited, so it may be temporarily unavailable.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Section {
+                            ForEach(Array(candidates.enumerated()), id: \.offset) { _, candidate in
+                                Button {
+                                    onPick(candidate.text, candidate.sources)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        HStack {
+                                            Text(candidate.sources.compactMap { $0 }.isEmpty
+                                                 ? "Current text"
+                                                 : DescriptionSource.label(for: candidate.sources.compactMap { $0 }.joined(separator: ",")))
+                                                .font(.caption)
+                                                .fontWeight(.semibold)
+                                                .foregroundStyle(.secondary)
+                                            if candidate.text == current.trimmingCharacters(in: .whitespacesAndNewlines) {
+                                                Text("in use")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.tint)
+                                            }
                                         }
+                                        Text(candidate.text)
+                                            .font(.footnote)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(6)
+                                            .multilineTextAlignment(.leading)
                                     }
-                                    Text(candidate.text)
-                                        .font(.footnote)
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(6)
-                                        .multilineTextAlignment(.leading)
                                 }
                             }
+                        } header: {
+                            Text("Found online")
                         }
                     }
                 }
@@ -1087,13 +1257,6 @@ private struct DescriptionPickerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        onWebSearch()
-                    } label: {
-                        Label("Search the web", systemImage: "safari")
-                    }
                 }
             }
         }

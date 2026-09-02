@@ -56,6 +56,17 @@ enum DescriptionSource: String, CaseIterable, Identifiable {
         case .googlebooks: return "Google Books"
         }
     }
+
+    /// Display label for a stored source string (a rawValue, or several
+    /// comma-joined rawValues when identical texts were merged across
+    /// sources). `nil` means the text has no known origin ("Current text").
+    static func label(for raw: String?) -> String {
+        guard let raw, !raw.isEmpty else { return "Current text" }
+        let names = raw.split(separator: ",").compactMap { part in
+            DescriptionSource(rawValue: String(part))?.displayName
+        }
+        return names.isEmpty ? raw : names.joined(separator: " · ")
+    }
 }
 
 /// Protocol for external catalog providers.
@@ -221,7 +232,9 @@ final class OpenLibraryService: CatalogService {
                 description: description,
                 language: catalog.language,
                 coverURLs: covers,
-                descriptionSource: gb["description"] != nil ? "googlebooks" : catalog.descriptionSource,
+                descriptionSource: (gb["description"] as? String).flatMap { gbDesc in
+                    gbDesc != catalog.description ? "googlebooks" : nil
+                } ?? catalog.descriptionSource,
                 source: catalog.source
             )
         }
@@ -246,12 +259,12 @@ final class OpenLibraryService: CatalogService {
             )
         }
 
-        if catalog.description == nil, let fetchedDesc = await fetchDescription(for: catalog.title, authors: catalog.authors, preferred: preferred) {
+        if catalog.description == nil, let fetched = await fetchDescription(for: catalog.title, authors: catalog.authors, preferred: preferred) {
             catalog = CatalogBook(
                 id: catalog.id, title: catalog.title, authors: catalog.authors, isbn: catalog.isbn,
                 publicationYear: catalog.publicationYear, tags: catalog.tags, publisher: catalog.publisher,
-                pageCount: catalog.pageCount, description: fetchedDesc, language: catalog.language,
-                coverURLs: catalog.coverURLs, descriptionSource: preferred.rawValue, source: catalog.source
+                pageCount: catalog.pageCount, description: fetched.text, language: catalog.language,
+                coverURLs: catalog.coverURLs, descriptionSource: fetched.source.rawValue, source: catalog.source
             )
         }
 
@@ -322,8 +335,9 @@ final class OpenLibraryService: CatalogService {
 
     /// Fetch a book description from the preferred source, falling back through
     /// the rest. Google Books may be rate-limited keyless, so it is never the
-    /// only chance — the others follow if it returns nothing.
-    private func fetchDescription(for title: String, authors: [String], preferred: DescriptionSource) async -> String? {
+    /// only chance — the others follow if it returns nothing. Returns the
+    /// text with the source that actually provided it.
+    private func fetchDescription(for title: String, authors: [String], preferred: DescriptionSource) async -> (text: String, source: DescriptionSource)? {
         let sources: [DescriptionSource]
         switch preferred {
         case .wikipedia: sources = [.wikipedia, .googlebooks, .openlibrary]
@@ -341,12 +355,11 @@ final class OpenLibraryService: CatalogService {
             case .googlebooks:
                 desc = await googleTitleDescription(title: title, authors: authors)
             }
-            if let desc { return desc }
+            if let desc { return (desc, source) }
         }
 
         return nil
     }
-
     /// Fallback: fetch a book's description from its OpenLibrary work record
     /// when the ISBN record has none.
     private func fetchWorkDescription(for title: String, authors: [String]) async -> String? {
@@ -573,11 +586,13 @@ final class OpenLibraryService: CatalogService {
     func descriptionCandidates(isbn: String?,
                                title: String,
                                authors: [String],
-                               current: String?) async -> [(text: String, source: String?)] {
-        var candidates: [(text: String, source: String?)] = []
+                               current: String?) async -> [(text: String, sources: [String?])] {
+        var candidates: [(text: String, sources: [String?])] = []
         let trimmedCurrent = current?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var seen = Set<String>()
         if let trimmedCurrent, !trimmedCurrent.isEmpty {
-            candidates.append((trimmedCurrent, nil))
+            candidates.append((trimmedCurrent, [nil]))
+            seen.insert(trimmedCurrent)
         }
 
         var fetched: [(text: String, source: String?)] = []
@@ -604,17 +619,20 @@ final class OpenLibraryService: CatalogService {
         if let w, !w.isEmpty { fetched.append((w, "wikipedia")) }
         if let o, !o.isEmpty { fetched.append((o, "openlibrary")) }
         if let gi, !gi.isEmpty { fetched.append((gi, "googlebooks")) }
-        if let gt, !gt.isEmpty { fetched.append((gt, "googlebooks")) }
-
         // Dedupe identical texts (the ISBN record and a title hit are often
-        // the same publisher blurb), keeping first occurrence.
-        var seen = Set<String>()
-        for candidate in fetched where seen.insert(candidate.text).inserted {
-            candidates.append(candidate)
+        // the same publisher blurb), merging their source labels on the first
+        // occurrence. The current text dedupes too: when it matches a fetched
+        // description the row keeps "current" plus the fetched source(s).
+        for candidate in fetched {
+            if seen.insert(candidate.text).inserted {
+                candidates.append((candidate.text, [candidate.source]))
+            } else if let idx = candidates.firstIndex(where: { $0.text == candidate.text }),
+                      !candidates[idx].sources.contains(candidate.source) {
+                candidates[idx].sources.append(candidate.source)
+            }
         }
         return candidates
     }
-
     /// A single, light title-based description lookup for the add/edit form's
     /// auto-fill: Wikipedia (book-page-gated) preferred, then OpenLibrary's
     /// work record. Used when the ISBN record carries no description, so an

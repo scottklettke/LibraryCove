@@ -114,6 +114,10 @@ struct BookFormView: View {
     @State private var loanedToText = ""
     @State private var loanedDate: Date?
     @State private var descriptionSource: DescriptionSource = .wikipedia
+    /// Where the description currently in the editor came from — the raw
+    /// source string persisted with the book on save ("openlibrary", or a
+    /// comma-joined union when identical texts merged across sources).
+    @State private var activeDescriptionSource: String?
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
     /// Set when the user deletes the description while an auto-fetch is in
@@ -122,7 +126,7 @@ struct BookFormView: View {
     @State private var showDescriptionPicker = false
     /// Description candidates for the "Choose from sources" sheet, loaded
     /// when the sheet opens.
-    @State private var descriptionCandidates: [(text: String, source: String?)] = []
+    @State private var descriptionCandidates: [(text: String, sources: [String?])] = []
     @State private var isLoadingCandidates = false
     /// Web search for manually copying a description (opens Safari).
     @State private var webSearchURL: URL?
@@ -157,8 +161,8 @@ struct BookFormView: View {
             _publisherText = State(initialValue: catalog.publisher ?? "")
             _pageCountText = State(initialValue: catalog.pageCount.map { String($0) } ?? "")
             _description = State(initialValue: catalog.description ?? "")
+            _activeDescriptionSource = State(initialValue: catalog.descriptionSource)
             _coverURLs = State(initialValue: catalog.coverURLs)
-            _selectedCover = State(initialValue: catalog.primaryCoverURL)
         } else if let existing {
             _title = State(initialValue: existing.title)
             _authorsText = State(initialValue: existing.authors.joined(separator: ", "))
@@ -167,8 +171,8 @@ struct BookFormView: View {
             _publisherText = State(initialValue: existing.publisher ?? "")
             _pageCountText = State(initialValue: existing.pageCount.map { String($0) } ?? "")
             _description = State(initialValue: existing.bookDescription ?? "")
+            _activeDescriptionSource = State(initialValue: existing.descriptionSource)
             _locationText = State(initialValue: existing.physicalLocation ?? "")
-            _coverURLs = State(initialValue: existing.coverImageURL.map { [$0] } ?? [])
             _selectedCover = State(initialValue: existing.coverImageURL)
         }
     }
@@ -183,6 +187,7 @@ struct BookFormView: View {
             || publisherText != (book.publisher ?? "")
             || pageCountText != (book.pageCount.map { String($0) } ?? "")
             || description != (book.bookDescription ?? "")
+            || activeDescriptionSource != book.descriptionSource
             || locationText != (book.physicalLocation ?? "")
             || status != book.statusEnum
             || kind != (BookKind(rawValue: book.kind) ?? .notSet)
@@ -261,9 +266,11 @@ struct BookFormView: View {
                 current: description,
                 candidates: $descriptionCandidates,
                 isLoading: $isLoadingCandidates,
-                onPick: { picked in
+                onPick: { picked, sources in
                     description = picked
-                    clearedFetchedDescription = false
+                    let picked = sources.compactMap { $0 }.joined(separator: ",")
+                    activeDescriptionSource = picked.isEmpty ? nil : picked
+                    clearedFetchedDescription = isFetchingDescription
                     showDescriptionPicker = false
                 },
                 onWebSearch: {
@@ -628,11 +635,6 @@ struct BookFormView: View {
 
     private var descriptionSection: some View {
         Section {
-            Picker("Source", selection: $descriptionSource) {
-                ForEach(DescriptionSource.allCases) { source in
-                    Text(source.displayName).tag(source)
-                }
-            }
             TextEditor(text: $description)
                 .frame(minHeight: 120)
             if isFetchingDescription {
@@ -645,18 +647,9 @@ struct BookFormView: View {
             }
             HStack {
                 Button {
-                    Task {
-                        clearedFetchedDescription = false
-                        await fetchDescription()
-                    }
-                } label: {
-                    Text(isFetchingDescription ? "Fetching…" : "Fetch description")
-                }
-                .disabled(isFetchingDescription)
-                Button {
                     showDescriptionPicker = true
                 } label: {
-                    Label("Choose from sources", systemImage: "text.justify.left")
+                    Label("Fetch description", systemImage: "text.justify.left")
                 }
                 .disabled(isFetchingDescription)
                 if !description.isEmpty {
@@ -664,6 +657,7 @@ struct BookFormView: View {
                         // An auto-fetch that's still in flight must not
                         // resurrect the text after the user deletes it.
                         description = ""
+                        activeDescriptionSource = nil
                         clearedFetchedDescription = true
                     } label: {
                         Text("Delete description")
@@ -675,10 +669,15 @@ struct BookFormView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            if let source = activeDescriptionSource {
+                Text("Source: \(DescriptionSource.label(for: source))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("Description")
         } footer: {
-            Text("A short summary of the book. Fetched automatically from the ISBN lookup when available. \"Choose from sources\" lists every description found online so you can pick one, or search the web to paste your own.")
+            Text("A short summary of the book. \"Fetch description\" lists every description found online — your current text, Open Library, Wikipedia, and Google Books — so you can pick one, or search the web to paste your own.")
         }
     }
 
@@ -726,11 +725,13 @@ struct BookFormView: View {
         // extra title-based lookup (Wikipedia by default) finds one for books
         // whose ISBN "doesn't come up with anything."
         var desc = result?.description?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var descSource = result?.descriptionSource
         if (desc == nil || desc!.isEmpty) && !trimmedTitle.isEmpty {
-            let (text, _) = await service.descriptionByTitle(
+            let (text, source) = await service.descriptionByTitle(
                 title: trimmedTitle, authors: authors, preferred: descriptionSource)
             if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 desc = text
+                descSource = source
             }
         }
         if let desc, !desc.isEmpty {
@@ -738,6 +739,7 @@ struct BookFormView: View {
             // respect the clear instead of resurrecting the fetched text.
             guard !clearedFetchedDescription else { return }
             description = desc
+            activeDescriptionSource = descSource
         }
 
         guard let found = result else {
@@ -892,10 +894,8 @@ struct BookFormView: View {
             existing.authors = authors
             existing.publicationYear = year
             existing.tags = tags
-            existing.publisher = publisherText.isEmpty ? nil : publisherText
-            existing.pageCount = pageCount
             existing.bookDescription = description.isEmpty ? nil : description
-            existing.descriptionSource = description.isEmpty ? nil : (catalog?.descriptionSource ?? existing.descriptionSource)
+            existing.descriptionSource = description.isEmpty ? nil : (activeDescriptionSource ?? existing.descriptionSource)
             existing.physicalLocation = location.isEmpty ? nil : location
             existing.status = status.rawValue
             existing.kind = kind.rawValue
@@ -918,7 +918,7 @@ struct BookFormView: View {
                 publisher: publisherText.isEmpty ? nil : publisherText,
                 pageCount: pageCount,
                 bookDescription: description.isEmpty ? nil : description,
-                descriptionSource: description.isEmpty ? nil : (catalog?.descriptionSource ?? nil),
+                descriptionSource: description.isEmpty ? nil : (activeDescriptionSource ?? catalog?.descriptionSource),
                 language: catalog?.language,
                 physicalLocation: location.isEmpty ? nil : location,
                 status: status.rawValue,
@@ -1036,9 +1036,9 @@ private struct DescriptionPickerSheet: View {
     let title: String
     let authors: [String]
     let current: String
-    @Binding var candidates: [(text: String, source: String?)]
+    @Binding var candidates: [(text: String, sources: [String?])]
     @Binding var isLoading: Bool
-    let onPick: (String) -> Void
+    let onPick: (String, [String?]) -> Void
     let onWebSearch: () -> Void
 
     var body: some View {
@@ -1055,11 +1055,13 @@ private struct DescriptionPickerSheet: View {
                     List {
                         ForEach(Array(candidates.enumerated()), id: \.offset) { _, candidate in
                             Button {
-                                onPick(candidate.text)
+                                onPick(candidate.text, candidate.sources)
                             } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack {
-                                        Text(sourceLabel(candidate.source))
+                                        Text(candidate.sources.compactMap { $0 }.isEmpty
+                                             ? "Current text"
+                                             : DescriptionSource.label(for: candidate.sources.compactMap { $0 }.joined(separator: ",")))
                                             .font(.caption)
                                             .fontWeight(.semibold)
                                             .foregroundStyle(.secondary)
@@ -1110,13 +1112,4 @@ private struct DescriptionPickerSheet: View {
             isbn: isbn, title: title, authors: authors, current: current)
     }
 
-    private func sourceLabel(_ source: String?) -> String {
-        switch source {
-        case "wikipedia": return "Wikipedia"
-        case "openlibrary": return "Open Library"
-        case "googlebooks": return "Google Books"
-        case nil: return "Current text"
-        default: return source?.capitalized ?? "Unknown"
-        }
-    }
 }

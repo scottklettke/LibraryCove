@@ -3,23 +3,33 @@
 ## [0.6] — 2026-09-02
 
 ### Added
-- **Choose from sources** in the add/edit description section: one button
-  lists every description found online for the book — your current text,
-  the ISBN record (Open Library), Wikipedia, and Google Books (ISBN and
-  title lookups, deduplicated) — so you can pick the wording you like
-  instead of accepting whichever source happened to answer first.
+- **Fetch description** in the add/edit description section: one button
+  opens a sheet listing every description found online for the book — your
+  current text, the ISBN record (Open Library), Wikipedia, and Google Books
+  (ISBN and title lookups, deduplicated) — so you can pick the wording you
+  like instead of accepting whichever source happened to answer first.
+  Identical texts found in several places merge into one row credited to
+  all of them (e.g. "Open Library · Google Books").
 - **Search the web** inside the same sheet opens Safari on a pre-filled
   title/author search, so you can copy a description by hand from any site.
 - The edit form now shows the **AI-generated content** that was previously
   visible only on the detail page: the "Summarize" output and, after an AI
   description rewrite, the original text it replaced (both read-only, both
   copyable).
-
 ### Fixed
+
 - **Deleting the description brought it back**: while an automatic fetch
   was still in flight, tapping "Delete description" cleared the field —
   then the late fetch result overwrote it. A cleared field now stays
-  cleared; an explicit "Fetch description" still overwrites on purpose.
+  cleared; picking a description from the sheet during an in-flight fetch
+  counts as deliberate too, so it is never clobbered.
+- **Description source stuck on Wikipedia**: picking a different
+  description in the sheet kept the old source label (or none on the
+  detail page), and a Google Books text could be labelled Wikipedia when
+  the ISBN record came up empty. The chosen source now travels with the
+  text: the form shows it under the editor, the detail page keeps the
+  correct label, and identical texts are no longer offered twice (e.g.
+  Wikipedia's row when the current text already is Wikipedia's).
 
 ## [0.5] — 2026-08-28
 

@@ -242,7 +242,7 @@ struct BookDetailView: View {
                     }
                 }
                 if let source = book.descriptionSource, source != "none" {
-                    LabeledContent("Source", value: sourceLabel(source))
+                    LabeledContent("Source", value: DescriptionSource.label(for: source))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -434,14 +434,6 @@ struct BookDetailView: View {
         }
     }
 
-    private func sourceLabel(_ source: String) -> String {
-        switch source {
-        case "wikipedia": return "Wikipedia"
-        case "googlebooks": return "Google Books"
-        case "openlibrary": return "Open Library"
-        default: return source
-        }
-    }
 
     private var addedByName: String {
         if let id = book.ownerID, let owner = users.first(where: { $0.id == id }) {

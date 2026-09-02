@@ -260,7 +260,7 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
     /// labels each result with its origin. The stub returns the SAME blurb
     /// from the ISBN record and from Google-by-ISBN, plus distinct Wikipedia
     /// and OpenLibrary texts — the picker must show three rows, not four.
-    @Test func candidatesDedupeIdenticalTextsAndLabelSources() async {
+    @Test func candidatesDedupeIdenticalTextsAndLabelSources() async throws {
         let shared = "A publisher blurb."
         let wiki = "Wikipedia article extract."
         let ol = "OpenLibrary work description."
@@ -306,13 +306,17 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
             isbn: "9780306406157", title: "A Book", authors: ["An Author"],
             current: nil)
 
-        let sources = candidates.map { $0.source }
+        let sources = candidates.flatMap { $0.sources.compactMap { $0 } }
         #expect(sources.contains("wikipedia"))
         #expect(sources.contains("openlibrary"))
         #expect(sources.contains("googlebooks"))
         #expect(candidates.filter { $0.text == shared }.count == 1,
                 "identical texts from ISBN record and Google must dedupe to one row")
         #expect(candidates.count == 3)
+        // The shared blurb arrives from both the ISBN record (OpenLibrary)
+        // and Google-by-ISBN — its label must carry the union.
+        let sharedRow = try #require(candidates.first { $0.text == shared })
+        #expect(sharedRow.sources.compactMap { $0 } == ["openlibrary", "googlebooks"])
     }
 
     /// The book's current text is always offered as a candidate even when no
@@ -331,6 +335,35 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
 
         #expect(candidates.count == 1)
         #expect(candidates.first?.text == "My own description.")
-        #expect(candidates.first?.source == nil)
+        #expect(candidates.first?.sources == [nil])
+    }
+
+    /// When the current text matches a fetched description, the row dedupes
+    /// to the fetched source instead of showing "Current text" + the source
+    /// as two identical rows (the Wikipedia-shown-twice bug).
+    @Test func currentTextDedupesIntoFetchedSource() async {
+        CatalogStubProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.contains("/w/api.php") {
+                if let query = request.url?.query, query.contains("list=search") {
+                    return catalogJSON(["query": ["search": [["title": "A Book (novel)"]]]], request: request)
+                }
+                return catalogJSON(["query": ["pages": ["123": ["extract": "Wiki text."]]]], request: request)
+            }
+            return catalogJSON([:], request: request)
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CatalogStubProtocol.self]
+        let service = OpenLibraryService(session: URLSession(configuration: config))
+
+        let candidates = await service.descriptionCandidates(
+            isbn: nil, title: "A Book", authors: ["An Author"],
+            current: "Wiki text.")
+
+        #expect(candidates.count == 1)
+        // Current text matches the Wikipedia extract: one row, labelled
+        // "Current text · Wikipedia" (nil = current, so picking it preserves
+        // the existing label).
+        #expect(candidates.first?.sources == [nil, "wikipedia"])
     }
 }

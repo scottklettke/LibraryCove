@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.6] — 2026-09-01
+## [0.6] — 2026-09-02
 
 ### Added
 - **Choose from sources** in the add/edit description section: one button

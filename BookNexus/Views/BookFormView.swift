@@ -543,7 +543,24 @@ struct BookFormView: View {
     /// description" has rewritten the description, the original it replaced.
     /// Both were invisible while editing — you could only see them after
     /// saving and returning to the detail page.
+    @ViewBuilder
     private var aiContentSection: some View {
+        if hasAIContent {
+            aiContentRows
+        }
+    }
+
+    /// Books typically have neither AI text — an empty section would still
+    /// render its header, so the whole section is gated behind this check.
+    private var hasAIContent: Bool {
+        if let summary = existing?.summary, !summary.isEmpty { return true }
+        if let original = existing?.originalDescription,
+           !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
+        return false
+    }
+
+
+    private var aiContentRows: some View {
         Section {
             if let summary = existing?.summary, !summary.isEmpty {
                 Text(summary)
@@ -729,6 +746,11 @@ struct BookFormView: View {
             }
             return
         }
+
+        // The user deleted the description while this fetch ran — they're
+        // actively editing, so don't clobber ANY of their form edits
+        // (tags/publisher/pages/year/covers) with catalog data mid-flight.
+        if clearedFetchedDescription { return }
 
         if !found.tags.isEmpty { tagsText = found.tags.joined(separator: ", ") }
         if let publisher = found.publisher { publisherText = publisher }

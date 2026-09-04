@@ -287,17 +287,19 @@ struct BookFormView: View {
         .sheet(item: $webSearchURL) { url in
             WebSearchBrowser(
                 url: url,
-                onImportSelection: { text in
+                onImportSelection: { text, pageURL in
                     // Keep the existing text and append, or start fresh
-                    // when empty. The website the text came from becomes the
-                    // provenance (hostname, e.g. "en.wikipedia.org"), shown
-                    // on the form, detail page, and future picker runs.
+                    // when empty. Attribution goes to the page the text was
+                    // actually copied from (e.g. "en.wikipedia.org"), not
+                    // the search engine the flow started on; when the page
+                    // URL is unavailable the search engine host is the best
+                    // known origin.
                     if description.isEmpty {
                         description = text
                     } else {
                         description += "\n\n" + text
                     }
-                    activeDescriptionSource = url.host
+                    activeDescriptionSource = pageURL?.host ?? url.host
                     clearedFetchedDescription = isFetchingDescription
                     webSearchURL = nil
                 },
@@ -989,7 +991,7 @@ private struct CameraPicker: UIViewControllerRepresentable {
 /// the SwiftUI side binds to `webSearchURL = nil`.
 struct WebSearchBrowser: UIViewControllerRepresentable {
     let url: URL
-    var onImportSelection: (String) -> Void
+    var onImportSelection: (String, URL?) -> Void
     var onClose: () -> Void = {}
 
     func makeUIViewController(context: Context) -> UINavigationController {
@@ -1016,9 +1018,8 @@ struct WebSearchBrowser: UIViewControllerRepresentable {
             webView.evaluateJavaScript("window.getSelection().toString()") { result, _ in
                 guard let text = result as? String else { return }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
+                coordinator.onImportSelection(trimmed, webView.url)
                 importButton?.alpha = 0
-                coordinator.onImportSelection(trimmed)
             }
         }, for: .touchUpInside)
 
@@ -1093,10 +1094,10 @@ struct WebSearchBrowser: UIViewControllerRepresentable {
     final class Coordinator {
         private var webView: WKWebView?
         private var pollTimer: Timer?
-        let onImportSelection: (String) -> Void
+        let onImportSelection: (String, URL?) -> Void
         private let onClose: () -> Void
 
-        init(onImportSelection: @escaping (String) -> Void,
+        init(onImportSelection: @escaping (String, URL?) -> Void,
              onClose: @escaping () -> Void) {
             self.onImportSelection = onImportSelection
             self.onClose = onClose

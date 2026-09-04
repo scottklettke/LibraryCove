@@ -15,21 +15,10 @@ struct BookDetailView: View {
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
 
-    @State private var isSummarizing = false
-    @State private var showSummarySheet = false
-    @State private var summaryText = ""
-    @State private var summaryCopied = false
-    @State private var summaryError: String?
-    @State private var showSummaryError = false
-    @State private var isImprovingDescription = false
-    @State private var improveError: String?
-    @State private var showImproveError = false
-
     var body: some View {
         List {
             headerSection
             infoSection
-            summarySection
             copiesSection
             notesSection
         }
@@ -37,84 +26,12 @@ struct BookDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        Task { await summarize() }
-                    } label: {
-                        Label("Summarize", systemImage: "wand.and.stars")
-                    }
-                    .disabled(isSummarizing)
-                    Button {
-                        Task { await improveDescription() }
-                    } label: {
-                        Label(
-                            isImprovingDescription ? "Improving…" : "Improve description",
-                            systemImage: "text.quote"
-                        )
-                    }
-                    .disabled(!canImproveDescription || book.hasImprovedDescription || isImprovingDescription)
-                    if book.hasImprovedDescription {
-                        Button {
-                            restoreOriginalDescription()
-                        } label: {
-                            Label("Restore original description", systemImage: "arrow.uturn.backward")
-                        }
-                        .disabled(isImprovingDescription)
-                    }
-                } label: {
-                    if isSummarizing || isImprovingDescription {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Label("AI", systemImage: "sparkles")
-                    }
-                }
-            }
-            ToolbarItem(placement: .primaryAction) {
                 Button {
                     showEdit = true
                 } label: {
                     Label("Edit", systemImage: "pencil")
                 }
             }
-        }
-        .sheet(isPresented: $showSummarySheet) {
-            NavigationStack {
-                ScrollView {
-                    Text(summaryText)
-                        .font(.body)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                }
-                .navigationTitle("Summary")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {
-                            showSummarySheet = false
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button {
-                            UIPasteboard.general.string = summaryText
-                            summaryCopied = true
-                        } label: {
-                            Label(summaryCopied ? "Copied" : "Copy", systemImage: "doc.on.doc")
-                        }
-                    }
-                }
-            }
-        }
-        .alert("AI Summary", isPresented: $showSummaryError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(summaryError ?? "")
-        }
-        .alert("Improve Description", isPresented: $showImproveError) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(improveError ?? "")
         }
         .sheet(isPresented: $showEdit) {
             NavigationStack {
@@ -229,18 +146,6 @@ struct BookDetailView: View {
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)
-                if book.hasImprovedDescription {
-                    HStack(spacing: 8) {
-                        Label("AI generated", systemImage: "sparkles")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Button("Restore original") {
-                            restoreOriginalDescription()
-                        }
-                        .font(.caption)
-                    }
-                }
                 if let source = book.descriptionSource, source != "none" {
                     LabeledContent("Source", value: DescriptionSource.label(for: source))
                         .font(.caption)
@@ -266,22 +171,6 @@ struct BookDetailView: View {
                 }
             }
         }
-    }
-
-    private var summarySection: some View {
-        if let summary = book.summary, !summary.isEmpty {
-            return AnyView(
-                Section("Summary") {
-                    Text(summary)
-                        .font(.body)
-                        .textSelection(.enabled)
-                    Label("AI generated", systemImage: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            )
-        }
-        return AnyView(EmptyView())
     }
 
     private var notesSection: some View {
@@ -350,90 +239,6 @@ struct BookDetailView: View {
         book.updatedAt = Date()
         try? modelContext.save()
     }
-
-    private func summarize() async {
-        guard let description = book.bookDescription,
-              !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            summaryError = "This book has no description yet. Fetch one in the Details section before summarizing."
-            showSummaryError = true
-            return
-        }
-
-        isSummarizing = true
-        defer { isSummarizing = false }
-
-        do {
-            let result = try await AIService.shared.generate(
-                AIPrompt(user: "Summarize this book description in 2-3 sentences:\n\(description)")
-            )
-            summaryText = result.text
-            summaryCopied = false
-            // Keep the generated summary in its own field (shown in the Summary
-            // section and searchable via the AI catalog) instead of overwriting
-            // the book description.
-            book.summary = result.text
-            book.updatedAt = Date()
-            try? modelContext.save()
-            showSummarySheet = true
-        } catch let error as AIError {
-            switch error {
-            case .notConfigured:
-                summaryError = "Set up your AI endpoint in Settings → AI to use this."
-            default:
-                summaryError = "The AI summary couldn't be generated: \(error.localizedDescription)"
-            }
-            showSummaryError = true
-        } catch {
-            summaryError = "The AI summary couldn't be generated: \(error.localizedDescription)"
-            showSummaryError = true
-        }
-    }
-
-    /// "Improve description" needs either an existing description to rewrite
-    /// or an ISBN to fetch richer source text from the catalog.
-    private var canImproveDescription: Bool {
-        book.bookDescription != nil || book.isbn != nil
-    }
-
-    private func restoreOriginalDescription() {
-        AIDescriptionImprovement.revert(to: book)
-        try? modelContext.save()
-    }
-
-    private func improveDescription() async {
-        guard canImproveDescription else { return }
-
-        isImprovingDescription = true
-        defer { isImprovingDescription = false }
-
-        do {
-            let (raw, source) = await AIDescriptionImprovement.onlineText(for: book)
-            // Never feed an empty prompt to a model that would then invent
-            // content: with no real source there is nothing to improve.
-            if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                improveError = "The catalog has no description for this book to improve — nothing to rewrite. Add one manually, or try again when a full catalog entry is available."
-                showImproveError = true
-                return
-            }
-            let rewritten = try await AIService.shared.generate(
-                AIDescriptionImprovement.prompt(raw: raw)
-            )
-            AIDescriptionImprovement.apply(rewritten.text, source: source, to: book)
-            try? modelContext.save()
-        } catch let error as AIError {
-            switch error {
-            case .notConfigured, .engineUnavailable:
-                improveError = "Set up an AI engine in Settings → AI first."
-            default:
-                improveError = error.localizedDescription
-            }
-            showImproveError = true
-        } catch {
-            improveError = error.localizedDescription
-            showImproveError = true
-        }
-    }
-
 
     private var addedByName: String {
         if let id = book.ownerID, let owner = users.first(where: { $0.id == id }) {

@@ -145,14 +145,10 @@ enum AILibrarySnapshot {
         return line
     }
 
-    /// The searchable body of a book row: summary first (most-asked text),
-    /// then description, then notes. Truncated as a whole against the per-book
-    /// budget, never field-by-field.
+    /// The searchable body of a book row: description, then notes.
+    /// Truncated as a whole against the per-book budget, never field-by-field.
     private static func detailSuffix(for book: Book) -> String {
         var parts: [String] = []
-        if let summary = book.summary, !summary.isEmpty {
-            parts.append("Summary: " + summary)
-        }
         if let description = book.bookDescription, !description.isEmpty {
             parts.append("Description: " + description)
         }

@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		000336C1E815F679BE391609 /* DescriptionImprovement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EEEF39D0AC74B7F9FEB7319 /* DescriptionImprovement.swift */; };
 		053D6A4DA7EEA1D7DE261AE0 /* CoverImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7E326CB2C969A81AE0646A /* CoverImageStore.swift */; };
 		08F145FA5011259A60A2BC05 /* AskSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1DD9106F2F7BA4FC28006E1 /* AskSuggestions.swift */; };
 		09F88F4E689B4A6BA33EFD80 /* SyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B80C9AE1045CF5DCCDEDF2F /* SyncTests.swift */; };
@@ -128,7 +127,6 @@
 		774E901EA024ABACCD282F3B /* WebSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearch.swift; sourceTree = "<group>"; };
 		7A30ADE0D20FEA1692E407CB /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		7CACAFEB7C9607842138FC93 /* AIFeaturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIFeaturesTests.swift; sourceTree = "<group>"; };
-		7EEEF39D0AC74B7F9FEB7319 /* DescriptionImprovement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DescriptionImprovement.swift; sourceTree = "<group>"; };
 		8B7A776C41705A6CB7A15A49 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		8CB1362C8B8BD5B6600FDF7A /* LibraryDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataService.swift; sourceTree = "<group>"; };
 		8E86167FD5411E0B5D28F468 /* LibraryContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryContext.swift; sourceTree = "<group>"; };
@@ -321,7 +319,6 @@
 				4B35B01FCD85BDC304C10910 /* AppleIntelligenceProvider.swift */,
 				B1DD9106F2F7BA4FC28006E1 /* AskSuggestions.swift */,
 				65CB04629C627D51DCBFC9CF /* ConversationMemory.swift */,
-				7EEEF39D0AC74B7F9FEB7319 /* DescriptionImprovement.swift */,
 				A830576B30732C8741276296 /* FictionClassifier.swift */,
 				979A367A45B0D87E6C7C617F /* GenreCleanup.swift */,
 				8E86167FD5411E0B5D28F468 /* LibraryContext.swift */,
@@ -510,7 +507,6 @@
 				7E2FA0F74EC58B2CD575BCC0 /* Connection.swift in Sources */,
 				F14C705A62F2C81EBEEF4B23 /* ConversationMemory.swift in Sources */,
 				053D6A4DA7EEA1D7DE261AE0 /* CoverImageStore.swift in Sources */,
-				000336C1E815F679BE391609 /* DescriptionImprovement.swift in Sources */,
 				FBD02930C22165FB4952717B /* ExportFormatGuide.swift in Sources */,
 				F32777D9C2C0AACDE728C056 /* FictionClassifier.swift in Sources */,
 				E8115BCDDB902531EEB78351 /* FictionClassifierView.swift in Sources */,

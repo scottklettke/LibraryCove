@@ -206,9 +206,6 @@ struct BookFormView: View {
                 statusSection
                 descriptionSection
                 if existing != nil {
-                    aiContentSection
-                }
-                if existing != nil {
                     loanedSection
                 }
                 saveSection
@@ -265,6 +262,7 @@ struct BookFormView: View {
                 title: title,
                 authors: authorsList,
                 current: description,
+                currentSource: activeDescriptionSource,
                 candidates: $descriptionCandidates,
                 isLoading: $isLoadingCandidates,
                 onPick: { picked, sources in
@@ -287,14 +285,16 @@ struct BookFormView: View {
             WebSearchBrowser(
                 url: url,
                 onImportSelection: { text in
-                    // A hand-copied selection has no catalog source; keep the
-                    // existing text and append, or start fresh when empty.
+                    // Keep the existing text and append, or start fresh
+                    // when empty. The website the text came from becomes the
+                    // provenance (hostname, e.g. "en.wikipedia.org"), shown
+                    // on the form, detail page, and future picker runs.
                     if description.isEmpty {
                         description = text
                     } else {
                         description += "\n\n" + text
                     }
-                    activeDescriptionSource = nil
+                    activeDescriptionSource = url.host
                     clearedFetchedDescription = isFetchingDescription
                     webSearchURL = nil
                 },
@@ -556,53 +556,6 @@ struct BookFormView: View {
             }
         } header: {
             Text("Status & notes")
-        }
-    }
-
-    /// AI-generated text the edit form displays read-only: the "Summarize"
-    /// output (stored separately from the description) and, when "Improve
-    /// description" has rewritten the description, the original it replaced.
-    /// Both were invisible while editing — you could only see them after
-    /// saving and returning to the detail page.
-    @ViewBuilder
-    private var aiContentSection: some View {
-        if hasAIContent {
-            aiContentRows
-        }
-    }
-
-    /// Books typically have neither AI text — an empty section would still
-    /// render its header, so the whole section is gated behind this check.
-    private var hasAIContent: Bool {
-        if let summary = existing?.summary, !summary.isEmpty { return true }
-        if let original = existing?.originalDescription,
-           !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
-        return false
-    }
-
-
-    private var aiContentRows: some View {
-        Section {
-            if let summary = existing?.summary, !summary.isEmpty {
-                Text(summary)
-                    .font(.body)
-                    .textSelection(.enabled)
-                Label("AI summary (read-only)", systemImage: "sparkles")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let original = existing?.originalDescription,
-               !original.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Text(original)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .lineLimit(6)
-                Label("Original description before the AI rewrite", systemImage: "arrow.uturn.backward")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("AI content")
         }
     }
 
@@ -1163,6 +1116,10 @@ private struct DescriptionPickerSheet: View {
     let title: String
     let authors: [String]
     let current: String
+    /// Provenance of `current` — a catalog rawValue or a website hostname
+    /// from a web import. Threads into the candidates service so the
+    /// "current text" row keeps its source label in future fetches.
+    let currentSource: String?
     @Binding var candidates: [(text: String, sources: [String?])]
     @Binding var isLoading: Bool
     let onPick: (String, [String?]) -> Void
@@ -1272,7 +1229,8 @@ private struct DescriptionPickerSheet: View {
         isLoading = true
         defer { isLoading = false }
         candidates = await service.descriptionCandidates(
-            isbn: isbn, title: title, authors: authors, current: current)
+            isbn: isbn, title: title, authors: authors, current: current,
+            currentSource: currentSource)
     }
 
 }

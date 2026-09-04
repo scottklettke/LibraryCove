@@ -62,11 +62,6 @@ struct BookDTO: Codable {
     var pageCount: Int?
     var bookDescription: String?
     var descriptionSource: String?
-    var summary: String?
-    var originalDescription: String?
-    var originalDescriptionSource: String?
-    /// Optional so older archives (which lack the key) still decode.
-    var hasImprovedDescription: Bool?
     var language: String?
     var physicalLocation: String?
     var status: String
@@ -99,10 +94,6 @@ struct BookDTO: Codable {
         pageCount = model.pageCount
         bookDescription = model.bookDescription
         descriptionSource = model.descriptionSource
-        summary = model.summary
-        originalDescription = model.originalDescription
-        originalDescriptionSource = model.originalDescriptionSource
-        hasImprovedDescription = model.hasImprovedDescription
         language = model.language
         physicalLocation = model.physicalLocation
         status = model.status
@@ -127,7 +118,6 @@ struct BookDTO: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, title, authors, isbn, publicationYear, tags, kind, coverImageURL
         case coverImageFile, publisher, pageCount, bookDescription, descriptionSource
-        case summary, originalDescription, originalDescriptionSource, hasImprovedDescription
         case language, physicalLocation, status, acquiredDate, purchasePrice, rating
         case loanedTo, loanedDate, ownerID, sharedLibraryID, isPersonal, createdAt
         case updatedAt, syncState, syncUpdatedAt, syncDeviceID, shelves
@@ -156,10 +146,6 @@ struct BookDTO: Codable {
         pageCount = try c.decodeIfPresent(Int.self, forKey: .pageCount)
         bookDescription = try c.decodeIfPresent(String.self, forKey: .bookDescription)
         descriptionSource = try c.decodeIfPresent(String.self, forKey: .descriptionSource)
-        summary = try c.decodeIfPresent(String.self, forKey: .summary)
-        originalDescription = try c.decodeIfPresent(String.self, forKey: .originalDescription)
-        originalDescriptionSource = try c.decodeIfPresent(String.self, forKey: .originalDescriptionSource)
-        hasImprovedDescription = try c.decodeIfPresent(Bool.self, forKey: .hasImprovedDescription)
         language = try c.decodeIfPresent(String.self, forKey: .language)
         physicalLocation = try c.decodeIfPresent(String.self, forKey: .physicalLocation)
         status = try c.decode(String.self, forKey: .status)
@@ -194,10 +180,6 @@ struct BookDTO: Codable {
         try c.encodeIfPresent(pageCount, forKey: .pageCount)
         try c.encodeIfPresent(bookDescription, forKey: .bookDescription)
         try c.encodeIfPresent(descriptionSource, forKey: .descriptionSource)
-        try c.encodeIfPresent(summary, forKey: .summary)
-        try c.encodeIfPresent(originalDescription, forKey: .originalDescription)
-        try c.encodeIfPresent(originalDescriptionSource, forKey: .originalDescriptionSource)
-        try c.encodeIfPresent(hasImprovedDescription, forKey: .hasImprovedDescription)
         try c.encodeIfPresent(language, forKey: .language)
         try c.encodeIfPresent(physicalLocation, forKey: .physicalLocation)
         try c.encode(status, forKey: .status)

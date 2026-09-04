@@ -187,7 +187,6 @@ enum LibraryRetriever {
             let authors = book.authors.joined(separator: " ")
             let tags = book.tags.joined(separator: " ")
             let location = book.physicalLocation ?? ""
-            let summary = book.summary ?? ""
             let description = book.bookDescription ?? ""
             let notes = book.notes?.map(\.content).joined(separator: " ") ?? ""
 
@@ -196,7 +195,7 @@ enum LibraryRetriever {
             // description can't drown the index; the snapshot still carries
             // full detail for retrieved books.
             let body = Self.words(
-                String((summary + " " + description + " " + notes).prefix(4000))
+                String((description + " " + notes).prefix(4000))
             )
             namedTokens = named
             textTokens = named.union(body)
@@ -206,7 +205,6 @@ enum LibraryRetriever {
             var semantic: [String] = []
             if !title.isEmpty { semantic.append(title) }
             if !authors.isEmpty { semantic.append(authors) }
-            if !summary.isEmpty { semantic.append(summary) }
             if !description.isEmpty { semantic.append(String(description.prefix(600))) }
             semanticText = semantic.joined(separator: ". ")
         }

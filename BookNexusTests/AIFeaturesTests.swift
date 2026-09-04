@@ -222,11 +222,11 @@ import SwiftData
         #expect(!snapshot.contains("Recently added:\nBook 00"))
     }
 
-    @Test func snapshotShipsFullSummaryBeyondOldTruncation() {
+    @Test func snapshotShipsFullDescriptionBeyondOldTruncation() {
         // A keyword placed past the old 200-char per-field cap must reach the
-        // model — regression for "AI couldn't find a word in my summary".
-        let summary = String(repeating: "m", count: 250) + "needle-of-proof"
-        let book = Book(title: "Dune", summary: summary)
+        // model — regression for "AI couldn't find a word in my description".
+        let description = String(repeating: "m", count: 250) + "needle-of-proof"
+        let book = Book(title: "Dune", bookDescription: description)
         let snapshot = AILibrarySnapshot.build(books: [book], users: [])
 
         #expect(snapshot.contains("needle-of-proof"))
@@ -238,7 +238,7 @@ import SwiftData
         let pad = String(repeating: "z", count: 2000)
         let books = (0..<40).map { _ in
             Book(title: "Book", authors: ["A"], tags: ["G"],
-                 bookDescription: pad, summary: pad)
+                 bookDescription: pad)
         }
         let snapshot = AILibrarySnapshot.build(books: books, users: [])
 
@@ -382,125 +382,21 @@ import SwiftData
         #expect(AIPromptFactory.tokensPerSecond(text: "hi", seconds: 0.5) == 2)
     }
 
-    @Test func descriptionPromptIsDeterministic() {
-        let prompt = AIDescriptionImprovement.prompt(raw: "Some raw source text")
-        #expect(prompt.system?.contains("NEVER invent") == true)
-        #expect(prompt.system?.contains("No reliable description available") == true)
-        #expect(prompt.system?.contains("vivid") == false) // no more florid prompt
-        #expect(prompt.user.contains("Some raw source text") == true)
-
-        let emptyPrompt = AIDescriptionImprovement.prompt(raw: "")
-        #expect(emptyPrompt.system?.contains("No reliable description available") == true)
-        #expect(emptyPrompt.user.contains("none") == true)
-    }
-
-    @Test func longestNonEmptyPrefersTheFullestSource() {
-        let candidates = [
-            (text: "short", source: "openlibrary"),
-            (text: "A much longer description that conveys far more detail about the book.", source: "googlebooks"),
-            (text: "", source: nil as String?),
-        ]
-        let best = AIDescriptionImprovement.longestNonEmpty(candidates)
-        #expect(best?.source == "googlebooks")
-        #expect(AIDescriptionImprovement.longestNonEmpty([]) == nil)
-        // Only non-empty candidates are considered.
-        #expect(AIDescriptionImprovement.longestNonEmpty([(text: "   ", source: nil)]) == nil)
-    }
-
-    @Test func descriptionApplySetsFieldsAndBumpsUpdatedAt() throws {
-        // Deterministic, so this works without an AI engine.
-        let context = baseContext()
-        LibraryDataService.deleteAll(context: context)
-        defer { LibraryDataService.deleteAll(context: context) }
-
-        let book = Book(title: "Solaris", bookDescription: "old text", descriptionSource: "openlibrary")
-        context.insert(book)
-        try? context.save()
-        let before = book.updatedAt
-
-        AIDescriptionImprovement.apply("A vivid new description", source: "googlebooks", to: book)
-
-        #expect(book.bookDescription == "A vivid new description")
-        #expect(book.descriptionSource == "googlebooks")
-        #expect(book.updatedAt > before)
-    }
-
-    @Test func descriptionApplyKeepsExistingSourceWhenNoneProvided() throws {
-        let book = Book(title: "Dune", bookDescription: "old", descriptionSource: "wikipedia")
-
-        AIDescriptionImprovement.apply("Rewritten", source: nil, to: book)
-
-        #expect(book.bookDescription == "Rewritten")
-        #expect(book.descriptionSource == "wikipedia")
-    }
-
-    @Test func snapshotCatalogCarriesDescriptionAndDetail() {
-        let book = Book(
-            title: "Dune", authors: ["Frank Herbert"],
-            publicationYear: 1965, tags: ["Science Fiction"],
-            bookDescription: "A deep-space epic about power, faith, and spice on Arrakis.",
-            summary: "In two sentences: Dune follows House Atreides on Arrakis."
-        )
-        let snapshot = AILibrarySnapshot.build(books: [book], users: [])
-
-        #expect(snapshot.contains("All books:"))
-        #expect(snapshot.contains("Dune (Frank Herbert) — Science Fiction; 1965"))
-        #expect(snapshot.contains("Description: A deep-space epic about power, faith, and spice on Arrakis."))
-        #expect(snapshot.contains("Summary: In two sentences: Dune follows House Atreides on Arrakis."))
-    }
-
-    @Test func descriptionApplyStoresOriginalOnlyOnce() {
-        let book = Book(title: "Dune", bookDescription: "Original text", descriptionSource: "openlibrary")
-
-        AIDescriptionImprovement.apply("First revision", source: "openlibrary", to: book)
-        #expect(book.bookDescription == "First revision")
-        #expect(book.originalDescription == "Original text")
-        #expect(book.hasImprovedDescription == true)
-
-        // A second call (guarded in the UI, but defensive here) must not
-        // clobber the saved original.
-        AIDescriptionImprovement.apply("Second revision", source: "googlebooks", to: book)
-        #expect(book.originalDescription == "Original text")
-        #expect(book.originalDescriptionSource == "openlibrary")
-        #expect(book.bookDescription == "Second revision")
-    }
-
-    @Test func revertRestoresOriginalAndClearsMarker() {
-        let book = Book(title: "Dune", bookDescription: "Original text", descriptionSource: "wikipedia")
-
-        AIDescriptionImprovement.apply("Revised text", source: "openlibrary", to: book)
-        AIDescriptionImprovement.revert(to: book)
-
-        #expect(book.bookDescription == "Original text")
-        #expect(book.descriptionSource == "wikipedia")
-        #expect(book.originalDescription == nil)
-        #expect(book.originalDescriptionSource == nil)
-        #expect(book.hasImprovedDescription == false)
-    }
-
-    @Test func revertWithoutImprovementIsNoOp() {
-        let book = Book(title: "Dune", bookDescription: "Original text", descriptionSource: "openlibrary")
-        AIDescriptionImprovement.revert(to: book)
-        #expect(book.bookDescription == "Original text")
-        #expect(book.hasImprovedDescription == false)
-    }
-
     // MARK: - Retrieval-first snapshot (overflow fix)
 
     @Test func targetedQueryDropsMassiveCatalogToFitTinyContext() {
         // Regression for the original overflow: 48 books each with a 2k-char
-        // description + summary used to produce a ~190k-char snapshot that
+        // description used to produce a ~190k-char snapshot that
         // burst the on-device 4096-token budget on the FIRST question. With
         // retrieval-first context, a simple question ships only the title
         // index + the matched book's detail + the compact digest.
         let pad = String(repeating: "z", count: 2000)
         var books = (0..<48).map { i in
             Book(title: String(format: "Book %02d", i), authors: ["Author \(i)"],
-                 bookDescription: pad, summary: pad)
+                 bookDescription: pad)
         }
         books.append(Book(title: "Dune", authors: ["Frank Herbert"],
-                          bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice.",
-                          summary: "A desert epic about power, faith, and spice."))
+                          bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice."))
 
         let snapshot = AILibrarySnapshot.build(books: books, users: [], query: "Do I have Dune?")
 
@@ -515,8 +411,7 @@ import SwiftData
 
     @Test func retrievalTargetsNamedBookAndKeepsSnapshotSlim() {
         let dune = Book(title: "Dune", authors: ["Frank Herbert"], tags: ["Science Fiction"],
-                        bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice.",
-                        summary: "A desert epic about power, faith, and spice.")
+                        bookDescription: "Paul Atreides journeys to Arrakis, the desert planet of spice.")
         let solaris = Book(title: "Solaris", authors: ["Stanislaw Lem"], tags: ["Science Fiction"],
                            bookDescription: "A psychologist studies an ocean that mirrors human minds.")
 
@@ -533,23 +428,27 @@ import SwiftData
         #expect(snapshot.count <= AIPromptFactory.contextCap)
     }
 
-    @Test func retrievalKeywordFindsSummaryMention() {
-        let walrus = Book(title: "The Voyage", summary: "A sailor befriends a walrus in the Arctic winter.")
-        let other = Book(title: "Antipodes", summary: "Ornithology on a remote island.")
+    @Test func retrievalKeywordFindsDescriptionMention() {
+        let walrus = Book(title: "The Voyage",
+                          bookDescription: "A sailor befriends a walrus in the Arctic winter.")
+        let other = Book(title: "Antipodes",
+                         bookDescription: "Ornithology on a remote island.")
 
         let snapshot = AILibrarySnapshot.build(books: [walrus, other], users: [], query: "which book mentions a walrus")
 
-        #expect(snapshot.contains("Summary: A sailor befriends a walrus in the Arctic winter."))
+        #expect(snapshot.contains("Description: A sailor befriends a walrus in the Arctic winter."))
         #expect(!snapshot.contains("remote island"))
     }
 
     @Test func retrievalMatchesAuthorSurname() {
-        let lem = Book(title: "Solaris", authors: ["Stanislaw Lem"], summary: "A sentient ocean. ")
-        let herbert = Book(title: "Dune", authors: ["Frank Herbert"], summary: "Desert planet politics. ")
+        let lem = Book(title: "Solaris", authors: ["Stanislaw Lem"],
+                       bookDescription: "A sentient ocean. ")
+        let herbert = Book(title: "Dune", authors: ["Frank Herbert"],
+                           bookDescription: "Desert planet politics. ")
 
         let snapshot = AILibrarySnapshot.build(books: [lem, herbert], users: [], query: "books by Lem")
 
-        #expect(snapshot.contains("Summary: A sentient ocean."))
+        #expect(snapshot.contains("Description: A sentient ocean."))
         #expect(!snapshot.contains("Desert planet politics."))
     }
 

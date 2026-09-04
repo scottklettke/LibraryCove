@@ -58,14 +58,16 @@ enum DescriptionSource: String, CaseIterable, Identifiable {
     }
 
     /// Display label for a stored source string (a rawValue, or several
-    /// comma-joined rawValues when identical texts were merged across
-    /// sources). `nil` means the text has no known origin ("Current text").
+    /// comma-joined parts when identical texts were merged across sources).
+    /// Known catalog sources map to display names; unknown parts (a website
+    /// hostname captured from the in-app browser import) pass through
+    /// verbatim. `nil` means the text has no known origin ("Current text").
     static func label(for raw: String?) -> String {
         guard let raw, !raw.isEmpty else { return "Current text" }
-        let names = raw.split(separator: ",").compactMap { part in
-            DescriptionSource(rawValue: String(part))?.displayName
+        let names = raw.split(separator: ",").map { part in
+            DescriptionSource(rawValue: String(part))?.displayName ?? String(part)
         }
-        return names.isEmpty ? raw : names.joined(separator: " · ")
+        return names.joined(separator: " · ")
     }
 }
 
@@ -574,24 +576,28 @@ final class OpenLibraryService: CatalogService {
         if let google = await googleTitleDescription(title: title, authors: authors) {
             candidates.append((google, "googlebooks"))
         }
-        let best = AIDescriptionImprovement.longestNonEmpty(candidates)
+        // Longest non-empty candidate wins (whitespace-trimmed so a
+        // whitespace-only entry can't win).
+        let best = candidates
+            .map { (text: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), source: $0.source) }
+            .filter { !$0.text.isEmpty }
+            .max { $0.text.count < $1.text.count }
         return (best?.text, best?.source)
     }
 
     /// Every description candidate a book has, from all sources at once —
     /// the picker in the add/edit form shows one row per source so the user
     /// can choose the text they like best. Sources run concurrently; results
-    /// are deduped by normalized text and labeled with their origin. The
-    /// book's current description (if any) is included as "current".
     func descriptionCandidates(isbn: String?,
                                title: String,
                                authors: [String],
-                               current: String?) async -> [(text: String, sources: [String?])] {
+                               current: String?,
+                               currentSource: String? = nil) async -> [(text: String, sources: [String?])] {
         var candidates: [(text: String, sources: [String?])] = []
         let trimmedCurrent = current?.trimmingCharacters(in: .whitespacesAndNewlines)
         var seen = Set<String>()
         if let trimmedCurrent, !trimmedCurrent.isEmpty {
-            candidates.append((trimmedCurrent, [nil]))
+            candidates.append((trimmedCurrent, [currentSource]))
             seen.insert(trimmedCurrent)
         }
 
@@ -619,6 +625,14 @@ final class OpenLibraryService: CatalogService {
         if let w, !w.isEmpty { fetched.append((w, "wikipedia")) }
         if let o, !o.isEmpty { fetched.append((o, "openlibrary")) }
         if let gi, !gi.isEmpty { fetched.append((gi, "googlebooks")) }
+        if let gt, !gt.isEmpty { fetched.append((gt, "googlebooks")) }
+        // Trim before dedupe: the direct sources return truncate() output
+        // with edge whitespace while the ISBN record and the current text
+        // are trimmed — raw comparison missed those matches and the same
+        // Wikipedia article could show up as two rows.
+        fetched = fetched.map {
+            ($0.text.trimmingCharacters(in: .whitespacesAndNewlines), $0.source)
+        }.filter { !$0.text.isEmpty }
         // Dedupe identical texts (the ISBN record and a title hit are often
         // the same publisher blurb), merging their source labels on the first
         // occurrence. The current text dedupes too: when it matches a fetched

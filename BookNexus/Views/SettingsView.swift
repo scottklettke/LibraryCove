@@ -42,10 +42,15 @@ struct SettingsView: View {
     @State private var availableModelInfos: [AIModelInfo] = []
     @State private var modelListNote: String?
     @State private var aiAvailability: AIAvailability?
+    @State private var aiModel: String = AIConfig.openAIModel
+    @State private var contextWindow: Int = AIConfig.maxContextTokens
     @State private var aiLogs: [AILogEntry] = []
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testResultIsError = false
+
+    // Description lookup
+    @State private var searchEngine: WebSearchEngine = WebSearchEngine.selected
 
     // Feedback
     @State private var lastResult: String?
@@ -237,15 +242,7 @@ struct SettingsView: View {
                             .autocorrectionDisabled()
                             .keyboardType(.URL)
                             .textContentType(.URL)
-                            .accessibilityIdentifier("aiEndpointField")
-                        SecureField("API key (optional)", text: $aiAPIKey)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .accessibilityIdentifier("aiAPIKeyField")
-                        Picker("Model", selection: Binding(
-                            get: { AIConfig.openAIModel },
-                            set: { AIConfig.openAIModel = $0 }
-                        )) {
+                        Picker("Model", selection: $aiModel) {
                             Text("Auto (detect from server)").tag("")
                             ForEach(modelPickerOptions, id: \.self) { id in
                                 Text(pickerLabel(for: id)).tag(id)
@@ -293,10 +290,7 @@ struct SettingsView: View {
                         get: { AIConfig.showTokenRate },
                         set: { AIConfig.showTokenRate = $0 }
                     ))
-                    Picker("Context window", selection: Binding(
-                        get: { AIConfig.maxContextTokens },
-                        set: { AIConfig.maxContextTokens = $0 }
-                    )) {
+                    Picker("Context window", selection: $contextWindow) {
                         let options = [2048, 4096, 8192, 16384, 32768, 65536]
                         let present: [Int] = options.contains(AIConfig.maxContextTokens)
                             ? options
@@ -317,10 +311,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Search engine", selection: Binding(
-                        get: { WebSearchEngine.selected },
-                        set: { WebSearchEngine.selected = $0 }
-                    )) {
+                    Picker("Search engine", selection: $searchEngine) {
                         ForEach(WebSearchEngine.allCases) { engine in
                             Text(engine.displayName).tag(engine)
                         }
@@ -401,6 +392,15 @@ struct SettingsView: View {
             }
             .onChange(of: aiAPIKey) { _, newValue in
                 AIConfig.openAIAPIKey = newValue
+            }
+            .onChange(of: aiModel) { _, newValue in
+                AIConfig.openAIModel = newValue
+            }
+            .onChange(of: contextWindow) { _, newValue in
+                AIConfig.maxContextTokens = newValue
+            }
+            .onChange(of: searchEngine) { _, newValue in
+                WebSearchEngine.selected = newValue
             }
             .alert("Restart to apply", isPresented: $showSyncRestartNotice) {
                 Button("OK", role: .cancel) {}

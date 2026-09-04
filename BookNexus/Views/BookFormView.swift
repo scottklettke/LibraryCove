@@ -273,10 +273,13 @@ struct BookFormView: View {
                     showDescriptionPicker = false
                 },
                 onWebSearch: {
-                    let query = [title, authorsList.first]
+                    // "description" biases results toward blurb pages
+                    // (Wikipedia, publisher, book sites) instead of shops
+                    // and review lists.
+                    let query = ([title, authorsList.first, "description"]
                         .compactMap { $0 }
                         .filter { !$0.isEmpty }
-                        .joined(separator: " ")
+                        .joined(separator: " "))
                     webSearchURL = WebSearchEngine.selected.searchURL(for: query)
                     showDescriptionPicker = false
                 })
@@ -990,7 +993,15 @@ struct WebSearchBrowser: UIViewControllerRepresentable {
     var onClose: () -> Void = {}
 
     func makeUIViewController(context: Context) -> UINavigationController {
-        let webView = WKWebView(frame: .zero)
+        // The app's own persistent WKWebsiteDataStore: a Kagi (or any other)
+        // login done inside this browser survives restarts — iOS sandboxes
+        // prevent reading Safari's cookies, so an in-app session is the only
+        // durable one we can offer.
+        let webView = WKWebView(frame: .zero, configuration: {
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = .default()
+            return configuration
+        }())
         webView.load(URLRequest(url: url))
         let coordinator = context.coordinator
 
@@ -1014,12 +1025,21 @@ struct WebSearchBrowser: UIViewControllerRepresentable {
         let bar = UIToolbar()
         let flexible = UIBarButtonItem(systemItem: .flexibleSpace)
         let importItem = UIBarButtonItem(customView: importButton)
+        // Hand-off to the user's real Safari session: iOS sandboxes prevent
+        // this in-app browser from reading Safari's cookies, so a site that
+        // needs the Safari login (e.g. Kagi) can be opened there instead.
+        // Importing is impossible from Safari, so this leaves the sheet open.
+        let safariItem = UIBarButtonItem(primaryAction: UIAction { [weak webView] _ in
+            guard let url = webView?.url ?? webView?.backForwardList.currentItem?.url else { return }
+            UIApplication.shared.open(url)
+        })
+        safariItem.image = UIImage(systemName: "safari")
         let closeItem = UIBarButtonItem(
             systemItem: .close,
             primaryAction: UIAction { _ in
                 coordinator.close()
             })
-        bar.items = [closeItem, flexible, importItem]
+        bar.items = [closeItem, flexible, safariItem, importItem]
 
         let container = UIViewController()
         container.view.addSubview(bar)

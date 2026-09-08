@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7C2E34"/>
+      <stop offset="1" stop-color="#4E1B20"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg2)"/>
+
+  <!-- library shelf frame -->
+  <rect x="172" y="150" width="680" height="724" rx="64" fill="none" stroke="#F5EEDF" stroke-width="40"/>
+  <line x1="172" y1="512" x2="852" y2="512" stroke="#F5EEDF" stroke-width="40"/>
+
+  <!-- top shelf: upright spines -->
+  <g>
+    <rect x="252" y="232" width="64" height="240" rx="18" fill="#E3B95F"/>
+    <rect x="336" y="212" width="64" height="260" rx="18" fill="#2F8273"/>
+    <rect x="420" y="248" width="64" height="224" rx="18" fill="#F5EEDF" opacity="0.92"/>
+    <!-- leaning book -->
+    <g transform="rotate(14 590 470)">
+      <rect x="552" y="252" width="64" height="220" rx="18" fill="#8FB6E3"/>
+    </g>
+    <rect x="668" y="228" width="64" height="244" rx="18" fill="#E3B95F" opacity="0.85"/>
+  </g>
+
+  <!-- bottom shelf: open book centrepiece -->
+  <g>
+    <path d="M312 806 L312 636 Q412 590 512 636 L512 806 Q412 762 312 806 Z" fill="#F5EEDF"/>
+    <path d="M712 806 L712 636 Q612 590 512 636 L512 806 Q612 762 712 806 Z" fill="#F5EEDF" opacity="0.88"/>
+    <line x1="512" y1="636" x2="512" y2="806" stroke="#4E1B20" stroke-width="14"/>
+    <g stroke="#4E1B20" stroke-width="12" opacity="0.4" stroke-linecap="round">
+      <line x1="352" y1="672" x2="472" y2="688"/>
+      <line x1="352" y1="712" x2="472" y2="728"/>
+      <line x1="552" y1="688" x2="672" y2="672"/>
+      <line x1="552" y1="728" x2="672" y2="712"/>
+    </g>
+  </g>
+</svg>

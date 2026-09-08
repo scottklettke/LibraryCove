@@ -1,0 +1,31 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1C4B6E"/>
+      <stop offset="1" stop-color="#0D2A40"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg3)"/>
+
+  <!-- classic library stack: three flat books, bookmark ribbon on top -->
+  <g>
+    <!-- bottom book -->
+    <g>
+      <rect x="182" y="608" width="660" height="112" rx="34" fill="#2F8273"/>
+      <rect x="212" y="640" width="560" height="48" rx="24" fill="#062019" opacity="0.35"/>
+      <rect x="742" y="608" width="60" height="112" rx="30" fill="#F5EEDF" opacity="0.9"/>
+    </g>
+    <!-- middle book, offset left -->
+    <g>
+      <rect x="152" y="468" width="660" height="112" rx="34" fill="#B23A48"/>
+      <rect x="182" y="500" width="560" height="48" rx="24" fill="#2B0B10" opacity="0.35"/>
+      <rect x="182" y="468" width="60" height="112" rx="30" fill="#F5EEDF" opacity="0.9"/>
+    </g>
+    <!-- top book with ribbon -->
+    <g>
+      <rect x="232" y="328" width="560" height="112" rx="34" fill="#E3B95F"/>
+      <rect x="262" y="360" width="460" height="48" rx="24" fill="#3D2E10" opacity="0.3"/>
+      <path d="M560 328 h96 v150 l-48 -42 -48 42 Z" fill="#B23A48"/>
+    </g>
+  </g>
+</svg>

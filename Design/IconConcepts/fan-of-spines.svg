@@ -1,0 +1,32 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#123452"/>
+      <stop offset="1" stop-color="#0A1E31"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- faint reading lamp halo -->
+  <circle cx="512" cy="430" r="300" fill="#1B4368" opacity="0.55"/>
+
+  <!-- fanned book spines, pivoting around a shared base -->
+  <g>
+    <g transform="rotate(-19 512 810)">
+      <rect x="434" y="360" width="156" height="450" rx="30" fill="#E3B95F"/>
+      <rect x="454" y="396" width="116" height="26" rx="13" fill="#0A1E31" opacity="0.5"/>
+      <rect x="454" y="438" width="116" height="14" rx="7" fill="#0A1E31" opacity="0.35"/>
+    </g>
+    <g transform="rotate(19 512 810)">
+      <rect x="434" y="360" width="156" height="450" rx="30" fill="#2F8273"/>
+      <rect x="454" y="396" width="116" height="26" rx="13" fill="#062019" opacity="0.45"/>
+      <rect x="454" y="438" width="116" height="14" rx="7" fill="#062019" opacity="0.3"/>
+    </g>
+    <g>
+      <rect x="434" y="318" width="156" height="492" rx="30" fill="#F5EEDF"/>
+      <rect x="454" y="356" width="116" height="26" rx="13" fill="#123452" opacity="0.55"/>
+      <rect x="454" y="398" width="116" height="14" rx="7" fill="#123452" opacity="0.4"/>
+      <rect x="434" y="742" width="156" height="20" rx="10" fill="#B23A48"/>
+    </g>
+  </g>
+</svg>

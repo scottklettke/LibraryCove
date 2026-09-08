@@ -232,10 +232,6 @@ struct LibraryView: View {
                     Label("Cancel", systemImage: "xmark.circle.fill")
                 }
                 .accessibilityIdentifier("cancelSelection")
-                Text("\(selection.count) selected")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("selectionCount")
             } else {
                 modePicker
                 if viewMode != .dashboard {

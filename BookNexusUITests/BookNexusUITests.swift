@@ -97,6 +97,14 @@ final class BookNexusUITests: XCTestCase {
         let cancel = app.buttons["cancelSelection"]
         XCTAssertTrue(cancel.waitForExistence(timeout: 10),
                       "selection mode has no prominent Cancel button")
+
+        // The selected count must be fully readable. It used to sit in the
+        // toolbar where iOS clipped "1 selected" down to "1 s…"; it now
+        // lives in the full-width bar along the bottom.
+        app.staticTexts["Designing Data-Intensive Applications"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5),
+                      "selection count missing or truncated")
+
         cancel.tap()
 
         // Back to the normal toolbar: Select is reachable again and the

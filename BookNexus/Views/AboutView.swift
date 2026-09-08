@@ -28,8 +28,23 @@ struct AboutView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("App", value: "BookNexus")
-                    LabeledContent("Version", value: versionText)
+                    VStack(spacing: 10) {
+                        Image("BrandMark")
+                            .resizable()
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(width: 96, height: 96)
+                            .clipShape(RoundedRectangle(cornerRadius: 22))
+                            .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+                            .accessibilityLabel("BookNexus app icon")
+                            .accessibilityIdentifier("brandMarkAbout")
+                        Text("BookNexus")
+                            .font(.title2.weight(.bold))
+                        Text("Version \(versionText)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
                     Text("BookNexus is a personal book library manager for iPhone and iPad. It helps you catalog what you own, organize it the way you think, and make the most of your collection with AI assistance — all while keeping your data under your control.")
                         .font(.callout)
                         .foregroundStyle(.secondary)

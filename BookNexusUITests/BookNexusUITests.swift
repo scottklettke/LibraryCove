@@ -681,6 +681,11 @@ final class BookNexusUITests: XCTestCase {
         about.tap()
         XCTAssertTrue(app.navigationBars["About & Feedback"].waitForExistence(timeout: 10),
                       "About screen did not open")
+        // The app logo sits prominently at the top of the About page.
+        XCTAssertTrue(app.descendants(matching: .any)["brandMarkAbout"].waitForExistence(timeout: 5),
+                      "brand mark missing from the About page")
+        XCTAssertTrue(app.staticTexts["BookNexus"].waitForExistence(timeout: 5),
+                      "brand wordmark missing from the About page")
         // Open-source attribution for the bundled MarkdownUI dependency.
         XCTAssertTrue(app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'MarkdownUI'")

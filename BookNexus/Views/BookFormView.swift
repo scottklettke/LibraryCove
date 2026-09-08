@@ -668,6 +668,12 @@ struct BookFormView: View {
         }
     }
 
+    /// Wall-clock cap for the form's fetch chain (record + enrichment +
+    /// covers + description fallbacks). Each request already has a 12s
+    /// timeout; this bounds the WHOLE chain so the "Fetching description…"
+    /// row can't hang forever on a flaky network.
+    static let fetchDeadlineSeconds: TimeInterval = 45
+
     private func fetchDescription() async {
         isFetchingDescription = true
         fetchError = nil
@@ -680,18 +686,30 @@ struct BookFormView: View {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         }.filter { !$0.isEmpty }
 
+        // Copy the view state the lookup needs so the @Sendable closure
+        // captures plain values instead of the (non-Sendable) view.
+        let preferred = descriptionSource
+
         // Catalog metadata (tags/publisher/year/pages/covers) + a first-pass
         // description from the ISBN record (Wikipedia-preferred) or a title
-        // search.
-        let result: CatalogBook?
-        if let isbn {
-            result = try? await service.lookup(isbn: isbn, preferred: descriptionSource)
-        } else if !trimmedTitle.isEmpty {
-            let results = (try? await service.search(query: trimmedTitle, preferred: descriptionSource)) ?? []
-            result = results.first
-        } else {
-            result = nil
+        // search — capped so a stalled chain surfaces an error instead of
+        // an endless spinner.
+        let outcome = await withDeadline(seconds: Self.fetchDeadlineSeconds) {
+            () -> CatalogBook?? in
+            if let isbn {
+                return try? await service.lookup(isbn: isbn, preferred: preferred)
+            } else if !trimmedTitle.isEmpty {
+                let results = (try? await service.search(query: trimmedTitle, preferred: preferred)) ?? []
+                return results.first
+            } else {
+                return nil
+            }
         }
+        if outcome.timedOut {
+            fetchError = "The catalog is taking too long to answer — check your connection and tap again, or edit the fields by hand."
+            return
+        }
+        let result = outcome.value ?? nil
 
         // Description: use the record's text; when the ISBN came up empty, an
         // extra title-based lookup (Wikipedia by default) finds one for books
@@ -1246,12 +1264,23 @@ private struct DescriptionPickerSheet: View {
     }
 
     private func loadIfNeeded() async {
+        // Copy state into locals: the deadline closure is @Sendable and the
+        // view itself is not.
         let service = OpenLibraryService()
+        let isbn = self.isbn, title = self.title, authors = self.authors
+        let current = self.current, currentSource = self.currentSource
         isLoading = true
         defer { isLoading = false }
-        candidates = await service.descriptionCandidates(
-            isbn: isbn, title: title, authors: authors, current: current,
-            currentSource: currentSource)
+        // Cap the whole multi-source sweep: on a flaky network one stalled
+        // source used to leave "Searching sources…" spinning forever. On
+        // timeout the sheet shows its empty state (with the web-search
+        // escape hatch) instead of hanging.
+        let outcome = await withDeadline(seconds: BookFormView.fetchDeadlineSeconds) {
+            await service.descriptionCandidates(
+                isbn: isbn, title: title, authors: authors, current: current,
+                currentSource: currentSource)
+        }
+        candidates = outcome.value ?? []
     }
 
 }

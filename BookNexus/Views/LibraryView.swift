@@ -222,38 +222,54 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
-            modePicker
-            if viewMode != .dashboard {
-                Menu {
-                    Picker("Group by", selection: $grouping) {
-                        ForEach(LibraryGrouping.allCases) { group in
-                            Text(group.displayName).tag(group)
+            if isSelecting {
+                // Selection mode replaces the leading controls with a single
+                // obvious exit — previously the only way out was the
+                // "Done" item hiding inside the overflow "…" menu.
+                Button {
+                    toggleSelecting()
+                } label: {
+                    Label("Cancel", systemImage: "xmark.circle.fill")
+                }
+                .accessibilityIdentifier("cancelSelection")
+                Text("\(selection.count) selected")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("selectionCount")
+            } else {
+                modePicker
+                if viewMode != .dashboard {
+                    Menu {
+                        Picker("Group by", selection: $grouping) {
+                            ForEach(LibraryGrouping.allCases) { group in
+                                Text(group.displayName).tag(group)
+                            }
+                        }
+                    } label: {
+                        Label(groupLabel, systemImage: "rectangle.3.group")
+                    }
+                    Group {
+                        Button {
+                            showAuthorFilter = true
+                        } label: {
+                            Label(authorFilterLabel, systemImage: "person")
+                        }
+                        Button {
+                            showTagFilter = true
+                        } label: {
+                            Label(tagFilterLabel, systemImage: "tag")
                         }
                     }
-                } label: {
-                    Label(groupLabel, systemImage: "rectangle.3.group")
-                }
-                Group {
-                    Button {
-                        showAuthorFilter = true
+                    Menu {
+                        sortMenuItem(.title)
+                        sortMenuItem(.author)
+                        sortMenuItem(.dateAdded)
+                        Button("Tap a field again to reverse the order") {}
+                            .disabled(true)
+                            .accessibilityHidden(true)
                     } label: {
-                        Label(authorFilterLabel, systemImage: "person")
+                        Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
                     }
-                    Button {
-                        showTagFilter = true
-                    } label: {
-                        Label(tagFilterLabel, systemImage: "tag")
-                    }
-                }
-                Menu {
-                    sortMenuItem(.title)
-                    sortMenuItem(.author)
-                    sortMenuItem(.dateAdded)
-                    Button("Tap a field again to reverse the order") {}
-                        .disabled(true)
-                        .accessibilityHidden(true)
-                } label: {
-                    Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
                 }
             }
         }

@@ -76,6 +76,38 @@ final class BookNexusUITests: XCTestCase {
                       "did not return to the Add screen after cancelling the scanner")
     }
 
+    /// Selection mode must offer an obvious exit: a prominent Cancel on the
+    /// leading edge — previously the only way out was "Done" buried in the
+    /// overflow "…" menu.
+    func testSelectionModeShowsProminentCancel() throws {
+        let app = pendingScansApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        addSeededBooks(app)
+
+        let select = app.buttons["Select"]
+        if !select.waitForExistence(timeout: 10) {
+            let more = app.buttons["More"]
+            XCTAssertTrue(more.waitForExistence(timeout: 3), "Select missing from toolbar")
+            more.tap()
+            XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 3), "Select not in overflow")
+        }
+        app.buttons["Select"].tap()
+
+        let cancel = app.buttons["cancelSelection"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10),
+                      "selection mode has no prominent Cancel button")
+        cancel.tap()
+
+        // Back to the normal toolbar: Select is reachable again and the
+        // selection-mode Cancel is gone.
+        XCTAssertTrue(app.buttons["Select"].waitForExistence(timeout: 10)
+                          || app.buttons["More"].exists,
+                      "toolbar did not restore after cancelling selection")
+        XCTAssertFalse(app.buttons["cancelSelection"].exists,
+                       "Cancel survived exiting selection mode")
+    }
+
     /// "Add all" after scanning must land on the import/edit/swipe screen and
     /// actually add the books (not just claim they were added).
     func testAddAllOpensImportFlowAndAddsBooks() throws {

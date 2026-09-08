@@ -52,16 +52,20 @@ final class ScanQueueStore: ObservableObject {
     private let autoProcess: Bool
     private var catalog: CatalogService
     private var processor: Task<Void, Never>?
+    /// Wall-clock cap per lookup; injectable so tests can drive the timeout
+    /// path fast instead of waiting out the production 30s.
+    private let lookupDeadline: TimeInterval
 
     private static let key = "scanQueueItems"
     private static let legacyKey = "pendingScannedBooks"
-
     init(defaults: UserDefaults = .standard,
          catalog: CatalogService = OpenLibraryService(),
-         autoProcess: Bool = true) {
+         autoProcess: Bool = true,
+         lookupDeadline: TimeInterval = 30) {
         self.defaults = defaults
         self.catalog = catalog
         self.autoProcess = autoProcess
+        self.lookupDeadline = lookupDeadline
         self.items = Self.load(from: defaults)
     }
 
@@ -196,22 +200,44 @@ final class ScanQueueStore: ObservableObject {
         }
     }
 
+    /// Lookup outcome, so a thrown error keeps its text for the retry UI
+    /// (a plain `try?` would mislabel network failures as "no record").
+    private enum LookupOutcome: Sendable {
+        case found(CatalogBook)
+        case none
+        case failure(String)
+    }
+
     private func process(_ id: String) async {
         guard let idx = items.firstIndex(where: { $0.id == id }),
               items[idx].status == .queued else { return }
         items[idx].status = .processing
         persist()
         let isbn = items[idx].isbn
-        do {
-            if let book = try await catalog.lookup(isbn: isbn, preferred: .openlibrary) {
-                update(id: id, status: .ready, book: book, error: nil)
-            } else {
-                update(id: id, status: .unavailable,
-                       book: CatalogBook.manualStub(isbn: isbn), error: nil)
+        // Local copy: the @Sendable deadline closure can't touch the
+        // MainActor-isolated `catalog` property directly.
+        let catalog = self.catalog
+        let result = await withDeadline(seconds: lookupDeadline) {
+            do {
+                if let book = try await catalog.lookup(isbn: isbn, preferred: .openlibrary) {
+                    return LookupOutcome.found(book)
+                }
+                return LookupOutcome.none
+            } catch {
+                return LookupOutcome.failure(error.localizedDescription)
             }
-        } catch {
+        }
+        switch (result.value, result.timedOut) {
+        case (_, true):
             update(id: id, status: .failed, book: nil,
-                   error: error.localizedDescription)
+                   error: "The catalog took too long to answer. Retry when you have a better connection.")
+        case (.some(.found(let book)), false):
+            update(id: id, status: .ready, book: book, error: nil)
+        case (.some(.failure(let message)), false):
+            update(id: id, status: .failed, book: nil, error: message)
+        default:
+            update(id: id, status: .unavailable,
+                   book: CatalogBook.manualStub(isbn: isbn), error: nil)
         }
     }
 

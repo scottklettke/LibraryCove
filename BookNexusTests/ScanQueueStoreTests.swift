@@ -283,4 +283,35 @@ struct ScanQueueStoreTests {
         #expect(store.item(id: id)?.status == .ready)
         #expect(store.item(id: id)?.book?.id == id)
     }
+
+    /// A lookup that hangs (the freeze users saw — the "Fetching
+    /// description…" spinner never ended) must hit the wall-clock deadline
+    /// and become a retryable failure, not a forever-"processing" item.
+    @Test func hungLookupTimesOutIntoRetryableFailure() async {
+        // The sleep throws on cancellation the moment the deadline wins the
+        // race, so nothing lingers past the test.
+        catalog.lookupHandler = { _ in
+            try? await Task.sleep(for: .seconds(60))
+            return nil
+        }
+        let store = ScanQueueStore(defaults: defaults, catalog: catalog,
+                                   autoProcess: false, lookupDeadline: 0.2)
+        store.enqueue(isbn: "9780140328721")
+        await store.drain()
+
+        let item = store.item(id: "isbn-9780140328721")
+        #expect(item?.status == .failed)
+        #expect(item?.error?.contains("too long") == true)
+    }
+
+    /// A fast lookup must resolve normally under the deadline (no false
+    /// timeouts).
+    @Test func fastLookupBeatsTheDeadline() async {
+        catalog.lookupHandler = { isbn in testBook(isbn: isbn) }
+        let store = ScanQueueStore(defaults: defaults, catalog: catalog,
+                                   autoProcess: false, lookupDeadline: 5)
+        store.enqueue(isbn: "9780140328721")
+        await store.drain()
+        #expect(store.item(id: "isbn-9780140328721")?.status == .ready)
+    }
 }

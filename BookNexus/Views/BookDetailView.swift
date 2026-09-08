@@ -221,13 +221,26 @@ struct BookDetailView: View {
         defer { isFetchingDescription = false }
 
         let catalog = OpenLibraryService()
-        let result: CatalogBook?
-        if let isbn = book.isbn {
-            result = try? await catalog.lookup(isbn: isbn, preferred: .openlibrary)
-        } else {
-            let results = (try? await catalog.search(query: book.title, preferred: .openlibrary)) ?? []
-            result = results.first
+        // Copy the book's fields into locals: the deadline closure is
+        // @Sendable and the @Model book is not.
+        let isbn = book.isbn
+        let searchTerm = book.title
+        // Same cap as the form's fetch — a stalled lookup chain surfaces an
+        // error here instead of spinning "Fetching…" forever.
+        let outcome = await withDeadline(seconds: BookFormView.fetchDeadlineSeconds) {
+            () -> CatalogBook?? in
+            if let isbn {
+                return try? await catalog.lookup(isbn: isbn, preferred: .openlibrary)
+            } else {
+                let results = (try? await catalog.search(query: searchTerm, preferred: .openlibrary)) ?? []
+                return results.first
+            }
         }
+        if outcome.timedOut {
+            fetchError = "The catalog is taking too long to answer — try again when you have a better connection."
+            return
+        }
+        let result = outcome.value ?? nil
 
         guard let found = result, let description = found.description, !description.isEmpty else {
             fetchError = "No description found for this book."

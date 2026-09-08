@@ -77,6 +77,29 @@ protocol CatalogService: Sendable {
     func lookup(isbn: String, preferred: DescriptionSource) async throws -> CatalogBook?
 }
 
+
+/// Runs `work` with a hard wall-clock cap: whichever finishes first wins
+/// and the loser is cancelled. Request-level timeouts bound every network
+/// call, but a lookup is a CHAIN of calls (record + enrichment + covers +
+/// description fallbacks) — on a flaky network that chain can stretch for
+/// minutes. The cap turns an endless "Fetching description…" spinner into a
+/// timed-out result the caller can surface and retry.
+func withDeadline<T: Sendable>(
+    seconds: TimeInterval,
+    _ work: @escaping @Sendable () async -> T?
+) async -> (value: T?, timedOut: Bool) {
+    await withTaskGroup(of: (value: T?, timedOut: Bool).self) { group in
+        group.addTask { (value: await work(), timedOut: false) }
+        group.addTask {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            return (value: nil, timedOut: true)
+        }
+        let first = await group.next() ?? (value: nil, timedOut: true)
+        group.cancelAll()
+        return first
+    }
+}
+
 /// OpenLibrary search + Google Books cover enrichment.
 final class OpenLibraryService: CatalogService {
     private let openLibraryURL = URL(string: "https://openlibrary.org")!

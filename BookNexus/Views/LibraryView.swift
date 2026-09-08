@@ -565,11 +565,20 @@ struct LibraryView: View {
         .searchable(text: $searchText, prompt: "Search title, author, added by, notes…")
         .overlay {
             if books.isEmpty {
-                ContentUnavailableView(
-                    "Your library is empty",
-                    systemImage: "books.vertical",
-                    description: Text("Add your first book from the catalog or scan an ISBN.")
-                )
+                ContentUnavailableView {
+                    VStack(spacing: 12) {
+                        Image("BrandMark")
+                            .resizable()
+                            .aspectRatio(1, contentMode: .fit)
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .accessibilityIdentifier("brandMarkEmpty")
+                            .accessibilityLabel("BookNexus")
+                        Text("Your library is empty")
+                    }
+                } description: {
+                    Text("Add your first book from the catalog or scan an ISBN.")
+                }
             }
         }
         .overlay(alignment: .center) {
@@ -600,6 +609,7 @@ struct LibraryView: View {
         }
         .pickerStyle(.menu)
         .fixedSize()
+        .accessibilityIdentifier("modePicker")
     }
 
     // MARK: - Grid
@@ -811,7 +821,7 @@ struct LibraryView: View {
     private var dashboardView: some View {
         let libraryBooks = books.filter { $0.status != BookStatus.donated.rawValue }
         return List {
-            Section("Summary") {
+            Section {
                 LabeledContent("Total books", value: "\(libraryBooks.count)")
                 LabeledContent("Reading", value: "\(count(status: .reading))")
                 LabeledContent("To read", value: "\(count(status: .toRead))")
@@ -835,6 +845,17 @@ struct LibraryView: View {
                         Text("\(count(status: .donated))")
                             .foregroundStyle(.secondary)
                     }
+                }
+            } header: {
+                HStack(spacing: 8) {
+                    Image("BrandMark")
+                        .resizable()
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(width: 22, height: 22)
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+                        .accessibilityIdentifier("brandMarkHeader")
+                        .accessibilityLabel("BookNexus")
+                    Text("Summary")
                 }
             }
             Section("By location") {

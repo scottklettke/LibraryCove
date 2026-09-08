@@ -76,6 +76,53 @@ final class BookNexusUITests: XCTestCase {
                       "did not return to the Add screen after cancelling the scanner")
     }
 
+    /// The BookNexus brand mark shows on the in-library empty state — the
+    /// first screen a fresh install lands on.
+    func testEmptyLibraryShowsBrandMark() throws {
+        let app = baseApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+
+        XCTAssertTrue(app.staticTexts["Your library is empty"].waitForExistence(timeout: 10),
+                      "empty library state not shown")
+        XCTAssertTrue(app.descendants(matching: .any)["brandMarkEmpty"].exists,
+                      "brand mark missing from the empty library state")
+    }
+
+    /// The brand mark also sits in the dashboard's Summary header — the
+    /// app's stats home page — small but present.
+    func testDashboardHeaderShowsBrandMark() throws {
+        let app = pendingScansApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        addSeededBooks(app)
+
+        // The mode picker is a toolbar menu; drive it by its accessibility
+        // identifier (the visible label varies with the current mode).
+        let modePicker = app.descendants(matching: .any)["modePicker"].firstMatch
+        if !modePicker.waitForExistence(timeout: 10) {
+            // Leading items may collapse into the overflow menu.
+            let more = app.buttons["More"]
+            XCTAssertTrue(more.waitForExistence(timeout: 3), "mode picker missing from toolbar")
+            more.tap()
+        }
+        XCTAssertTrue(modePicker.waitForExistence(timeout: 3), "mode picker missing")
+        modePicker.tap()
+
+        // Menu options may surface as buttons or cells depending on the
+        // picker presentation — accept either.
+        let dashboardOption = app.buttons["dashboard"].exists
+            ? app.buttons["dashboard"]
+            : app.staticTexts["dashboard"]
+        XCTAssertTrue(dashboardOption.waitForExistence(timeout: 5), "dashboard option missing")
+        dashboardOption.tap()
+
+        XCTAssertTrue(app.staticTexts["Summary"].waitForExistence(timeout: 10),
+                      "dashboard summary section missing")
+        XCTAssertTrue(app.descendants(matching: .any)["brandMarkHeader"].exists,
+                      "brand mark missing from the dashboard header")
+    }
+
     /// Selection mode must offer an obvious exit: a prominent Cancel on the
     /// leading edge — previously the only way out was "Done" buried in the
     /// overflow "…" menu.

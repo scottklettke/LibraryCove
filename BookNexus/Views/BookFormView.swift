@@ -273,14 +273,8 @@ struct BookFormView: View {
                     showDescriptionPicker = false
                 },
                 onWebSearch: {
-                    // "description" biases results toward blurb pages
-                    // (Wikipedia, publisher, book sites) instead of shops
-                    // and review lists.
-                    let query = ([title, authorsList.first, "description"]
-                        .compactMap { $0 }
-                        .filter { !$0.isEmpty }
-                        .joined(separator: " "))
-                    webSearchURL = WebSearchEngine.selected.searchURL(for: query)
+                    webSearchURL = WebSearchEngine.bookDescriptionURL(title: title,
+                                                                      authors: authorsList)
                     showDescriptionPicker = false
                 })
         }

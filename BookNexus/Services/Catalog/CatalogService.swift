@@ -78,6 +78,19 @@ protocol CatalogService: Sendable {
 }
 
 
+/// Launch-environment seams that make catalog behaviour deterministic for
+/// UI tests. `UI_TEST_FAILING_LOOKUP_ISBNS` is a comma-separated list of
+/// ISBNs whose lookup returns "not found" — live catalog services
+/// fuzz-match even nonsense titles, so without this the empty-result path
+/// can't be tested reliably.
+enum CatalogServiceTestSeeds {
+    static let failingLookupISBNs: Set<String> = {
+        guard let raw = ProcessInfo.processInfo.environment["UI_TEST_FAILING_LOOKUP_ISBNS"] else { return [] }
+        return Set(raw.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) })
+    }()
+}
+
 /// Runs `work` with a hard wall-clock cap: whichever finishes first wins
 /// and the loser is cancelled. Request-level timeouts bound every network
 /// call, but a lookup is a CHAIN of calls (record + enrichment + covers +
@@ -179,6 +192,13 @@ final class OpenLibraryService: CatalogService {
 
     /// Look up a book by ISBN via OpenLibrary, then enrich with Google Books.
     func lookup(isbn: String, preferred: DescriptionSource = .wikipedia) async throws -> CatalogBook? {
+        // UI-test seam: force a "not found" for listed ISBNs so tests can
+        // exercise the empty-result path deterministically — live catalog
+        // fuzz-matching can answer even nonsense titles, which would make
+        // such tests flaky.
+        if CatalogServiceTestSeeds.failingLookupISBNs.contains(Book.normalizedISBN(isbn) ?? "") {
+            return nil
+        }
         guard let cleaned = Book.normalizedISBN(isbn) else { return nil }
         var components = URLComponents(string: "https://openlibrary.org/api/books")!
         components.queryItems = [
@@ -863,5 +883,18 @@ enum WebSearchEngine: String, CaseIterable, Identifiable {
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: "description.webSearchEngine")
         }
+    }
+    /// Builds the "search the web for this book's description" URL: title,
+    /// first author, then "description" — the extra word biases results
+    /// toward blurb pages (Wikipedia, publishers, book sites) over shops
+    /// and review lists. Nil when there's no title to search on.
+    static func bookDescriptionURL(title: String, authors: [String]) -> URL? {
+        let query = ([title, authors.first, "description"]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " "))
+        guard query.trimmingCharacters(in: .whitespacesAndNewlines) != "description",
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return selected.searchURL(for: query)
     }
 }

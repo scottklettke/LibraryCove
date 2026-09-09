@@ -398,4 +398,27 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
         #expect(WebSearchEngine.selected == .kagi)
         UserDefaults.standard.removeObject(forKey: "description.webSearchEngine")
     }
+
+    /// The shared builder both the edit form and the detail page use:
+    /// title + first author + "description", on the selected engine; nil
+    /// when there's no usable title to search on.
+    @Test func bookDescriptionURLAppendsDescriptionWord() throws {
+        UserDefaults.standard.removeObject(forKey: "description.webSearchEngine")
+        defer { UserDefaults.standard.removeObject(forKey: "description.webSearchEngine") }
+
+        let url = try #require(WebSearchEngine.bookDescriptionURL(
+            title: "Dune", authors: ["Frank Herbert", "Editor Someone"]))
+        let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let q = try #require(components.queryItems?.first { $0.name == "q" }?.value)
+        #expect(q == "Dune Frank Herbert description")
+        #expect(url.host == "duckduckgo.com")
+
+        // No (or blank) title → nothing to search; must not produce a
+        // bare "description" query.
+        #expect(WebSearchEngine.bookDescriptionURL(title: "", authors: ["Nobody"]) == nil)
+        #expect(WebSearchEngine.bookDescriptionURL(title: "   ", authors: []) == nil)
+
+        // Missing authors still searches on the title alone.
+        #expect(WebSearchEngine.bookDescriptionURL(title: "Dune", authors: []) != nil)
+    }
 }

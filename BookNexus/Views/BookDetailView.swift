@@ -14,6 +14,9 @@ struct BookDetailView: View {
     @State private var newNoteText = ""
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
+    /// Presenting the in-app web-search browser after a catalog fetch came
+    /// up empty, so the user can copy a description from any page.
+    @State private var webSearchURL: URL?
 
     var body: some View {
         List {
@@ -40,6 +43,20 @@ struct BookDetailView: View {
                     dismiss()
                 })
             }
+        }
+        .sheet(item: $webSearchURL) { url in
+            WebSearchBrowser(
+                url: url,
+                onImportSelection: { text, pageURL in
+                    // This browser is only reachable when the book has no
+                    // description, so import replaces rather than appends.
+                    book.bookDescription = text
+                    book.descriptionSource = pageURL?.host ?? url.host
+                    book.updatedAt = Date()
+                    try? modelContext.save()
+                    webSearchURL = nil
+                },
+                onClose: { webSearchURL = nil })
         }
     }
 
@@ -169,6 +186,16 @@ struct BookDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 }
+                // Once a catalog fetch came up empty, offer the web right
+                // here — highlight text on any page and import it.
+                if fetchError != nil {
+                    Button {
+                        openWebSearchForDescription()
+                    } label: {
+                        Label("Search the web", systemImage: "safari")
+                    }
+                    .accessibilityIdentifier("webSearchDescription")
+                }
             }
         }
     }
@@ -251,6 +278,19 @@ struct BookDetailView: View {
         book.descriptionSource = found.descriptionSource
         book.updatedAt = Date()
         try? modelContext.save()
+    }
+
+    /// Presents the in-app browser on the user's chosen search engine with
+    /// a description-biased query; the highlighted text can then be
+    /// imported into this book's description (attributed to the page it
+    /// came from, via the sheet's onImportSelection).
+    private func openWebSearchForDescription() {
+        guard let url = WebSearchEngine.bookDescriptionURL(title: book.title,
+                                                           authors: book.authors) else {
+            fetchError = "Add a title first — there's nothing to search for."
+            return
+        }
+        webSearchURL = url
     }
 
     private var addedByName: String {

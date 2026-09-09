@@ -16,7 +16,7 @@ struct RootView: View {
         }
         .task {
             resetDataIfNeeded()
-            // On relaunch after a sync-provider change: pour the captured
+            seedLibraryBooksIfNeeded(context: modelContext)
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
             // Embed any still file-only covers as data URLs so iCloud Sync
@@ -38,6 +38,48 @@ struct RootView: View {
         try? modelContext.delete(model: Book.self)
         try? modelContext.save()
         ScanQueueStore.shared.clear()
+    }
+
+    /// UI-test seam: seed the library with stored books at launch, so a
+    /// test can start from a known book (e.g. one with no description)
+    /// without driving the whole camera→queue→import flow. Mirrors the
+    /// other UI_TEST_* seams: JSON in, silent no-op when unset.
+    private func seedLibraryBooksIfNeeded(context: ModelContext) {
+        guard let raw = ProcessInfo.processInfo.environment["UI_TEST_LIBRARY_BOOKS"],
+              let data = raw.data(using: .utf8),
+              let seeds = try? JSONDecoder().decode([SeededBook].self, from: data) else { return }
+        for seed in seeds {
+            context.insert(Book(id: seed.id, title: seed.title, authors: seed.authors,
+                                isbn: seed.isbn, publicationYear: seed.publicationYear,
+                                bookDescription: seed.bookDescription,
+                                descriptionSource: seed.descriptionSource))
+        }
+        try? context.save()
+    }
+
+    private struct SeededBook: Decodable {
+        let id: String
+        let title: String
+        let authors: [String]
+        let isbn: String?
+        let publicationYear: Int?
+        let bookDescription: String?
+        let descriptionSource: String?
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(String.self, forKey: .id)
+            title = try c.decode(String.self, forKey: .title)
+            authors = try c.decode([String].self, forKey: .authors)
+            isbn = try c.decodeIfPresent(String.self, forKey: .isbn)
+            publicationYear = try c.decodeIfPresent(Int.self, forKey: .publicationYear)
+            bookDescription = try c.decodeIfPresent(String.self, forKey: .bookDescription)
+            descriptionSource = try c.decodeIfPresent(String.self, forKey: .descriptionSource)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, title, authors, isbn, publicationYear, bookDescription, descriptionSource
+        }
     }
 }
 

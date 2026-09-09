@@ -163,6 +163,57 @@ final class BookNexusUITests: XCTestCase {
                        "Cancel survived exiting selection mode")
     }
 
+    /// When "Fetch description" finds nothing, the detail page must
+    /// immediately offer a web search escape hatch — the same in-app
+    /// browser as the edit form. Uses the library-seed seam so the book
+    /// starts with NO description (importing would auto-fetch one), and an
+    /// unmatchable title/author so the catalog lookup fails deterministically.
+    func testFailedFetchOffersWebSearch() throws {
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_LIBRARY_BOOKS"] = #"""
+        [{"id":"seed-no-desc","title":"Zzyx Qwvpl Nonexistentum","authors":["Qwvpl Nobodysson"],"isbn":"9999999999999","publicationYear":1999}]
+        """#
+        // Force the catalog lookup to miss: live services fuzz-match even
+        // nonsense titles, so the seam is what makes "not found" certain.
+        app.launchEnvironment["UI_TEST_FAILING_LOOKUP_ISBNS"] = "9999999999999"
+        app.launch()
+        enterLibraryIfNeeded(app)
+
+        let zzyzx = app.staticTexts["Zzyx Qwvpl Nonexistentum"]
+        XCTAssertTrue(zzyzx.waitForExistence(timeout: 10), "seeded book missing from library")
+        zzyzx.firstMatch.tap()
+        if !app.navigationBars["Zzyx Qwvpl Nonexistentum"].waitForExistence(timeout: 10) {
+            zzyzx.firstMatch.tap() // first-run tap can be swallowed while UI settles
+            XCTAssertTrue(app.navigationBars["Zzyx Qwvpl Nonexistentum"].waitForExistence(timeout: 10),
+                          "detail page did not open")
+        }
+
+        // The Details list is lazy — scroll into view while waiting.
+        let fetch = app.buttons["Fetch description"]
+        XCTAssertTrue(scrollWhileWaiting(app, for: fetch, timeout: 15),
+                      "fetch description button missing")
+        fetch.tap()
+
+        // The lookup fails (made-up book) — up to the 45s deadline — and
+        // must come paired with the web offer, also below the fold.
+        let searchWeb = app.buttons["webSearchDescription"]
+        if !scrollWhileWaiting(app, for: searchWeb, timeout: 75) {
+            print("OFFER MISSING DETAIL DUMP:\n\(app.debugDescription)")
+            XCTFail("Search the web offer missing after failed fetch")
+        }
+        // The in-app web browser sheet presents (its Close toolbar item is
+        // the anchor). Re-tap once in case the tap landed mid-scroll-settle.
+        searchWeb.tap()
+        let close = app.buttons["Close"]
+        if !close.waitForExistence(timeout: 15) {
+            searchWeb.tap()
+            if !close.waitForExistence(timeout: 15) {
+                print("SHEET NOT OPENED DUMP:\n\(app.debugDescription)")
+                XCTFail("web search sheet did not open")
+            }
+        }
+    }
+
     /// "Add all" after scanning must land on the import/edit/swipe screen and
     /// actually add the books (not just claim they were added).
     func testAddAllOpensImportFlowAndAddsBooks() throws {
@@ -243,6 +294,23 @@ final class BookNexusUITests: XCTestCase {
                 break // last book: the flow completes and dismisses to the library
             }
         }
+    }
+
+    /// SwiftUI `List` renders lazily, so elements below the fold don't
+    /// exist in the hierarchy until scrolled into view — and some waits (a
+    /// catalog fetch, a lookup deadline) outlast a single scroll pass.
+    /// Polls for `element` up to `timeout` seconds, scrolling as it goes.
+    @discardableResult
+    private func scrollWhileWaiting(_ app: XCUIApplication, for element: XCUIElement,
+                                    timeout: TimeInterval, maxScrolls: Int = 8) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        var scrolls = 0
+        while Date() < deadline {
+            if element.isHittable { return true }
+            if scrolls < maxScrolls { app.swipeUp(); scrolls += 1 }
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+        }
+        return element.isHittable
     }
 
     /// Seeds and imports both books via the pending-scan banner, leaving the

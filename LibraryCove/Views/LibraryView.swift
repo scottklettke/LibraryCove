@@ -462,6 +462,39 @@ struct LibraryView: View {
         try? modelContext.save()
     }
 
+    /// Identifies which copy of a title a delete target is (location, loan,
+    /// or added date), and notes sibling copies that will remain. Used in
+    /// delete confirmations so multi-copy titles are unambiguous.
+    private func deleteContextMessage(for book: Book?) -> String {
+        guard let book else { return "Choose an action for this book." }
+        var parts: [String] = []
+        if let location = book.physicalLocation, !location.isEmpty {
+            parts.append("located in \(location)")
+        }
+        if let loanedTo = book.loanedTo, !loanedTo.isEmpty {
+            parts.append("loaned to \(loanedTo)")
+        }
+        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        let copyCount = BookMastering.otherCopies(of: book, in: all).count + 1
+        let identity: String
+        if parts.isEmpty {
+            let date = book.acquiredDate ?? book.createdAt
+            identity = "the copy added \(addedShortFormatter.string(from: date))"
+        } else {
+            identity = "the copy \(parts.joined(separator: ", "))"
+        }
+        if copyCount > 1 {
+            return "This is \(identity). You have \(copyCount) copies of this title — deleting removes only this one."
+        }
+        return "This is \(identity). Choose an action for this book."
+    }
+    private var addedShortFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }
+
     private func delete(_ books: [Book]) {
         // Read the id before delete(): after save() the backing data is
         // detached and even .id can fault.
@@ -791,7 +824,7 @@ struct LibraryView: View {
             }
             Button("Cancel", role: .cancel) { longPressBook = nil }
         } message: {
-            Text("Choose an action for this book.")
+            Text(deleteContextMessage(for: longPressBook))
         }
         .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
         .onChange(of: viewMode) { isScrolled = false }

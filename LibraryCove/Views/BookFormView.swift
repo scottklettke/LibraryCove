@@ -923,9 +923,36 @@ struct BookFormView: View {
 
     private var deleteMessage: String {
         if existing != nil {
-            return "This book will be removed from your library."
+            var parts: [String] = []
+            if let location = existing?.physicalLocation, !location.isEmpty {
+                parts.append("located in \(location)")
+            }
+            if let loanedTo = existing?.loanedTo, !loanedTo.isEmpty {
+                parts.append("loaned to \(loanedTo)")
+            }
+            let copyNote: String
+            if let book = existing, copyCount(of: book) > 1 {
+                copyNote = " You have \(copyCount(of: book)) copies of this title — only this copy is removed."
+            } else {
+                copyNote = ""
+            }
+            if parts.isEmpty {
+                return "This copy\(existing?.acquiredDate != nil ? " (added \(addedDateText))" : "") will be removed from your library.\(copyNote)"
+            }
+            return "This copy (\(parts.joined(separator: ", "))) will be removed from your library.\(copyNote)"
         }
         return "This book won't be added to your library."
+    }
+
+    /// Copies of the same title (normalized ISBN, else title match).
+    private func copyCount(of book: Book) -> Int {
+        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        return BookMastering.otherCopies(of: book, in: all).count + 1
+    }
+
+    private var addedDateText: String {
+        guard let date = existing?.acquiredDate ?? existing?.createdAt else { return "" }
+        return addedDateFormatter.string(from: date)
     }
 
 

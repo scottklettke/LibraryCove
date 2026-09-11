@@ -17,6 +17,11 @@ struct RootView: View {
         .task {
             resetDataIfNeeded()
             seedLibraryBooksIfNeeded(context: modelContext)
+            // Older merge imports could leave two Book rows sharing one id,
+            // which breaks copy discrimination on delete and id-based stale
+            // snapshot guards. Repair before anything reads books.
+            BookIDRepair.repairIfNeeded(context: modelContext)
+            // Pour a provider-switch snapshot into the fresh store so the
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
             // Embed any still file-only covers as data URLs so iCloud Sync

@@ -80,6 +80,7 @@
 		D86F7752E2772295D9338A70 /* FictionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */; };
 		D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D432F92F737332E449E2D8 /* ReadingList.swift */; };
 		E0ED3582C37823043D0AA5B5 /* AssignValuesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */; };
+		E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */; };
 		EC6B4F5E3217832234CFDA58 /* AILog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60568F8C2FF9B25112988E02 /* AILog.swift */; };
 		F2EE5C81D5B49CD370F0E923 /* FictionClassifierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819810B792B9D8D8081CCC84 /* FictionClassifierView.swift */; };
 		F3083778201C5DA7FC1738A2 /* CatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 474C8AAAAA2E23371D030C8D /* CatalogService.swift */; };
@@ -105,6 +106,7 @@
 
 /* Begin PBXFileReference section */
 		092D43C18016AEAE255215A3 /* GenreCleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanupView.swift; sourceTree = "<group>"; };
+		0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookIDRepair.swift; sourceTree = "<group>"; };
 		1BB0D4B843CB0997D5F3BB94 /* GenreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreStore.swift; sourceTree = "<group>"; };
 		251BB09509CE032E1C9352E8 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		2926F23B1B3B74D735ECF300 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
@@ -303,6 +305,7 @@
 			isa = PBXGroup;
 			children = (
 				C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */,
+				0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */,
 				572B0E293B7CC81FB4F4ED14 /* BookMastering.swift */,
 				613A860A534A8684B30EA259 /* CoverImageStore.swift */,
 				BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */,
@@ -570,6 +573,7 @@
 				687FA0D8F238AD7269653F59 /* BookDateRepair.swift in Sources */,
 				408232ECE5E9C1F012AAB46E /* BookDetailView.swift in Sources */,
 				69AB41ABD1AF3A18FBE7C5F0 /* BookFormView.swift in Sources */,
+				E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */,
 				8BC3805BEC3442DB8989D8AC /* BookMastering.swift in Sources */,
 				F3083778201C5DA7FC1738A2 /* CatalogService.swift in Sources */,
 				9F75747BF40F76516B82ABD5 /* Connection.swift in Sources */,

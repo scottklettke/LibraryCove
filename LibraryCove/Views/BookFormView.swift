@@ -404,7 +404,10 @@ struct BookFormView: View {
                 copies: allCopiesOfExisting,
                 currentBookID: existing?.id
             ) { chosen in
-                if chosen.id == existing?.id {
+                // Compare by OBJECT IDENTITY, not id: duplicate-id rows
+                // (from older merge imports) would otherwise route a sibling
+                // pick to deleteBook() and remove the wrong copy.
+                if chosen === existing {
                     deleteBook()
                 } else {
                     deleteArbitraryCopy(chosen)

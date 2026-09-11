@@ -132,6 +132,11 @@ struct LibraryView: View {
     @State private var shelfStore = ShelfStore()
     @State private var isSelecting = false
     @State private var selection = Set<String>()
+    /// Books deleted this session whose backing data has detached. SwiftData's
+    /// isDeleted flips back to false once save() commits, so this explicit set
+    /// is the only reliable "never render this row" signal during the
+    /// @Query refresh window after a delete.
+    @State private var deletedIDs = Set<String>()
     @State private var assignmentTarget: AssignmentTarget?
     @State private var longPressBook: Book?
     @State private var pushedBook: BookRoute?
@@ -142,7 +147,7 @@ struct LibraryView: View {
     @State private var exportOptions = PDFExportOptions()
 
     private var filteredBooks: [Book] {
-        let visible = books.filter { !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
+        let visible = books.filter { !deletedIDs.contains($0.id) && !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
         let searched: [Book]
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
@@ -327,7 +332,7 @@ struct LibraryView: View {
     /// so duplicate copies never flood the list. All copies remain reachable
     /// through a master's detail page.
     private var displayBooks: [Book] {
-        BookMastering.masters(of: filteredBooks)
+        BookMastering.masters(of: filteredBooks).filter { !deletedIDs.contains($0.id) }
     }
 
     /// Copies stored per normalized ISBN, for the "N copies" badge on masters.
@@ -458,12 +463,18 @@ struct LibraryView: View {
     }
 
     private func delete(_ books: [Book]) {
+        // Read the id before delete(): after save() the backing data is
+        // detached and even .id can fault.
+        let ids = books.map(\.id)
+        deletedIDs.formUnion(ids)
         for book in books {
             CoverImageStore.delete(forBookID: book.id)
             modelContext.delete(book)
         }
+        // One save for the whole batch — the deleted models detach here, so
+        // nothing may touch their attributes afterwards.
         try? modelContext.save()
-        if isSelecting { selection.subtract(books.map(\.id)) }
+        if isSelecting { selection.subtract(ids) }
     }
     /// Exports "what you see": the selection while selecting, otherwise the
     /// current filtered/sorted masters. SwiftData models are snapshotted on the
@@ -705,7 +716,7 @@ struct LibraryView: View {
     }
 
     private var visibleBooks: [Book] {
-        books.filter { !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
+        books.filter { !deletedIDs.contains($0.id) && !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
     }
 
     private var allAuthors: [String] {
@@ -1058,7 +1069,7 @@ struct LibraryView: View {
     // MARK: - Dashboard
 
     private var dashboardView: some View {
-        let libraryBooks = books.filter { $0.status != BookStatus.donated.rawValue }
+        let libraryBooks = books.filter { !deletedIDs.contains($0.id) && $0.status != BookStatus.donated.rawValue }
         return List {
             Section {
                 LabeledContent("Total books", value: "\(libraryBooks.count)")
@@ -1132,6 +1143,16 @@ struct BookGridCell: View {
     var copyCount = 0
 
     var body: some View {
+        if book.isDeleted {
+            // A deleted book can linger in a stale query snapshot during a
+            // re-render; reading its attributes would trap.
+            Color.clear.frame(width: 92, height: 134)
+        } else {
+            cellContent
+        }
+    }
+
+    private var cellContent: some View {
         VStack(alignment: .leading, spacing: 6) {
             AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 92, height: 134)
                 .overlay(alignment: .topLeading) {
@@ -1186,6 +1207,14 @@ struct BookListRow: View {
     var copyCount = 0
 
     var body: some View {
+        if book.isDeleted {
+            Color.clear.frame(height: 58)
+        } else {
+            rowContent
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 12) {
             AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 40, height: 58)
             VStack(alignment: .leading, spacing: 2) {

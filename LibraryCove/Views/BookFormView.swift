@@ -127,6 +127,10 @@ struct BookFormView: View {
     /// Message for the "Retrieve additional covers" button (shown in the
     /// cover section, not the description section).
     @State private var coversFetchMessage: String?
+    /// Set by deleteBook() before the model detaches. While true, the form
+    /// body must not read `existing`'s attributes (they trap after save()
+    /// detaches the backing data).
+    @State private var bookDeleted = false
     /// Set when the user deletes the description while an auto-fetch is in
     /// flight, so the fetch's late result doesn't clobber the cleared field.
     @State private var clearedFetchedDescription = false
@@ -210,8 +214,18 @@ struct BookFormView: View {
             || selectedCover != book.coverImageURL
     }
 
-
     var body: some View {
+        if bookDeleted {
+            // Deleted: every read of `existing`'s attributes would trap
+            // (backing data detached by save()). Render nothing during the
+            // dismissal animation.
+            Color.clear
+        } else {
+            formContent
+        }
+    }
+
+    private var formContent: some View {
         ScrollViewReader { proxy in
             Form {
                 coverSection
@@ -891,6 +905,11 @@ struct BookFormView: View {
     /// Deletes an already-saved book, or discards an unsaved import
     /// (when `existing` is nil the book was never inserted).
     private func deleteBook() {
+        // Flag FIRST: during the dismissal animation this view re-renders,
+        // and by the time save() commits the book's backing data has
+        // detached — any later read of existing's attributes (e.g. the cover
+        // section) would trap. bookDeleted forces attribute-free rendering.
+        bookDeleted = true
         if let book = existing {
             CoverImageStore.delete(forBookID: book.id)
             modelContext.delete(book)

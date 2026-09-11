@@ -11,6 +11,10 @@ struct BookDetailView: View {
     @Query private var users: [User]
 
     @State private var showEdit = false
+    /// Set by the edit form's onDeleted closure — the ONLY reliable deletion
+    /// signal. `book.isDeleted` flips back to false after save() commits
+    /// (the backing data detaches), so it can't guard the dismissal window.
+    @State private var bookDeleted = false
     @State private var newNoteText = ""
     @State private var isFetchingDescription = false
     @State private var fetchError: String?
@@ -19,11 +23,11 @@ struct BookDetailView: View {
     @State private var webSearchURL: URL?
 
     var body: some View {
-        if book.isDeleted {
-            // The book was deleted (e.g. from the edit form presented over
-            // this view). Reading any attribute of a deleted model traps —
-            // render nothing for the dismissal animation instead.
-            Color.clear.onAppear { dismiss() }
+        if bookDeleted {
+            // Deleted from the edit form presented over this view. Reading
+            // any attribute of a deleted (detached) model traps — render
+            // nothing for the dismissal animation instead.
+            Color.clear
         } else {
             detailList
         }
@@ -50,6 +54,11 @@ struct BookDetailView: View {
         .sheet(isPresented: $showEdit) {
             NavigationStack {
                 BookFormView(catalog: nil, existing: book, onDeleted: {
+                    // Flag BEFORE the sheet dismisses: during the dismissal
+                    // animation this view re-renders, and by then save() has
+                    // detached the book's backing data (isDeleted is already
+                    // false again).
+                    bookDeleted = true
                     showEdit = false
                     dismiss()
                 })

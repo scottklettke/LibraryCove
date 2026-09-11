@@ -19,7 +19,7 @@ enum SharedLibraryCoordinator {
         var errorDescription: String? {
             switch self {
             case .snapshotFailed:
-                return "The shared library's contents couldn't be read, so your private library was left untouched. Nothing was lost — try again, or export a backup first (Settings → Data → Export library)."
+                return "Stopping was blocked because neither the shared library nor your private library contains any books. If you expected books here, check Settings → Data → Export library, and report this via the feedback link — this state shouldn't be reachable."
             }
         }
     }
@@ -144,10 +144,11 @@ enum SharedLibraryCoordinator {
     /// shared-library mode that context IS the mirror, so importing into it
     /// would clobber the source (importArchive delete-alls).
     ///
-    /// Fail-safe: if the mirror exports nothing (no books), the private store
-    /// is left untouched and an error is thrown. An empty mirror means the
-    /// share migration never completed — replacing the private library with
-    /// nothing would wipe the user's data.
+    /// Fail-safe: an empty mirror is only acceptable when the PRIVATE store
+    /// still holds books (e.g. a failed share migration left the data at
+    /// home — nothing needs merging, so teardown proceeds). If BOTH are
+    /// empty there is nothing to save and the private store is not touched;
+    /// the error tells the user what happened.
     private static func moveMirrorContentIntoPrivateStore(mode: CopyMode) async throws {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
@@ -164,10 +165,18 @@ enum SharedLibraryCoordinator {
             throw FlowError.snapshotFailed
         }
         let summary = try LibraryDataService.previewArchive(data: data)
-        guard summary.books > 0 else {
-            // Empty mirror: the migration into the mirror never happened.
-            // Do NOT touch the private store — it still holds the library.
-            throw FlowError.snapshotFailed
+        if summary.books == 0 {
+            let privateBookCount = (try? privateContext.fetchCount(FetchDescriptor<Book>())) ?? 0
+            guard privateBookCount > 0 else {
+                // Both stores empty: the earlier wipe already happened and
+                // there is nothing left to bring home. Refuse to tear down
+                // silently — the user should know.
+                throw FlowError.snapshotFailed
+            }
+            // Mirror empty, private library intact: the books are already
+            // home (a failed share migration left them there). Skip the
+            // copy — tearing down the share is safe.
+            return
         }
         switch mode {
         case .merge:

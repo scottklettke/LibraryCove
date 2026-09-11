@@ -81,6 +81,7 @@
 		D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D432F92F737332E449E2D8 /* ReadingList.swift */; };
 		E0ED3582C37823043D0AA5B5 /* AssignValuesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */; };
 		E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */; };
+		E7814E33AA443721EF1CCFAB /* StopSharingMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5118C5C5776F2484EC0C06 /* StopSharingMigrationTests.swift */; };
 		EC6B4F5E3217832234CFDA58 /* AILog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60568F8C2FF9B25112988E02 /* AILog.swift */; };
 		F2EE5C81D5B49CD370F0E923 /* FictionClassifierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819810B792B9D8D8081CCC84 /* FictionClassifierView.swift */; };
 		F3083778201C5DA7FC1738A2 /* CatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 474C8AAAAA2E23371D030C8D /* CatalogService.swift */; };
@@ -159,7 +160,7 @@
 		BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		C011F248612BA0A3A5916731 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
-		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryRecord.swift; sourceTree = "<group>"; };
 		C29BC837621AF27DC2775241 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		C6E521F99961E68EE93C794F /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
@@ -184,6 +185,7 @@
 		F71D73D6B03EFC6FD3FA58B0 /* LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySync.swift; sourceTree = "<group>"; };
 		F9D70D16F6CB326CD2BBFE8E /* AskSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskSuggestions.swift; sourceTree = "<group>"; };
 		FA36AD4ADC1657A6FB06E8EC /* ShelfCategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfCategoriesView.swift; sourceTree = "<group>"; };
+		FB5118C5C5776F2484EC0C06 /* StopSharingMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopSharingMigrationTests.swift; sourceTree = "<group>"; };
 		FD45ABE9C8B08DD85A4F26DE /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		FE5A7F56050D2EA97A2F5292 /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
 		FF06E540D41058875FF285F9 /* LibraryContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryContext.swift; sourceTree = "<group>"; };
@@ -213,6 +215,7 @@
 				805FF4BF819A9897737AB444 /* ScanQueueStoreTests.swift */,
 				CA3814C7AF96A700B1B181B3 /* SharedLibraryTests.swift */,
 				70697CD6FB7E08D609131BE5 /* ShelfCategorizerTests.swift */,
+				FB5118C5C5776F2484EC0C06 /* StopSharingMigrationTests.swift */,
 				C6F7F346D75B7A64BF0FEDAB /* SyncTests.swift */,
 				C867BC5A92C34F8C7107E9BC /* WebSearchTests.swift */,
 			);
@@ -549,6 +552,7 @@
 				B43286294A6E05E7E9E1931D /* ScanQueueStoreTests.swift in Sources */,
 				3A9841CBAE496E1F8B01E604 /* SharedLibraryTests.swift in Sources */,
 				CFA5AD6A90EC419506E4C4BB /* ShelfCategorizerTests.swift in Sources */,
+				E7814E33AA443721EF1CCFAB /* StopSharingMigrationTests.swift in Sources */,
 				006E1D19CA0376B4CB0BC8E7 /* SyncTests.swift in Sources */,
 				582A2CD27D76F6494B202BEA /* WebSearchTests.swift in Sources */,
 			);
@@ -758,7 +762,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -778,7 +781,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

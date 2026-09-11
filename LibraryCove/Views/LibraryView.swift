@@ -139,6 +139,8 @@ struct LibraryView: View {
     @State private var deletedIDs = Set<String>()
     @State private var assignmentTarget: AssignmentTarget?
     @State private var longPressBook: Book?
+    /// Copy chooser for deleting one of several copies of a title.
+    @State private var copyPickerBook: Book?
     @State private var pushedBook: BookRoute?
     @State private var isExportingPDF = false
     @State private var pdfURL: URL?
@@ -488,6 +490,12 @@ struct LibraryView: View {
         }
         return "This is \(identity). Choose an action for this book."
     }
+    /// Number of OTHER copies of the same title (0 = the only copy).
+    private func copyCountExcludingSelf(_ book: Book) -> Int {
+        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        return BookMastering.otherCopies(of: book, in: all).count
+    }
+
     private var addedShortFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -802,6 +810,14 @@ struct LibraryView: View {
                 filteredTags = $0
             }
         }
+        .sheet(item: $copyPickerBook, onDismiss: { longPressBook = nil }) { book in
+            CopyDeletePicker(
+                title: book.title.isEmpty ? "Delete a copy" : book.title,
+                copies: [book] + BookMastering.otherCopies(of: book, in: books)
+            ) { chosen in
+                delete([chosen])
+            }
+        }
         .confirmationDialog(
             longPressBook?.title ?? "Book",
             isPresented: Binding(
@@ -818,19 +834,21 @@ struct LibraryView: View {
                 if let book = longPressBook { presentAssignment(.tags, [book]) }
                 longPressBook = nil
             }
-            Button("Delete", role: .destructive) {
-                if let book = longPressBook { delete([book]) }
-                longPressBook = nil
+            Button("Delete copy…", role: .destructive) {
+                if let book = longPressBook {
+                    if copyCountExcludingSelf(book) >= 1 {
+                        // Multi-copy: present the picker; longPressBook stays
+                        // (it marks "this one") and clears when the sheet closes.
+                        copyPickerBook = book
+                    } else {
+                        delete([book])
+                        longPressBook = nil
+                    }
+                }
             }
             Button("Cancel", role: .cancel) { longPressBook = nil }
         } message: {
             Text(deleteContextMessage(for: longPressBook))
-        }
-        .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
-        .onChange(of: viewMode) { isScrolled = false }
-        .onChange(of: grouping) { isScrolled = false }
-        .sheet(isPresented: $showAdd) {
-            AddBookView()
         }
         .sheet(isPresented: $showExportOptions) {
             pdfOptionsSheet

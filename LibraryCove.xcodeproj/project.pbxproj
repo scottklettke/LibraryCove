@@ -64,6 +64,7 @@
 		AB9642FF9D4FEB12D157230E /* LibraryCoveUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC5909E8FACB6C9C6B85631 /* LibraryCoveUITests.swift */; };
 		B34E809EC7201B78809C6979 /* MANUAL-TESTING.md in Resources */ = {isa = PBXBuildFile; fileRef = 5E1C6D16E83835E543DF54F2 /* MANUAL-TESTING.md */; };
 		B43286294A6E05E7E9E1931D /* ScanQueueStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 805FF4BF819A9897737AB444 /* ScanQueueStoreTests.swift */; };
+		B4365F596EAFE3AE5487A9EE /* CopyDeletePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69E85506FC987A4E642A1D6 /* CopyDeletePicker.swift */; };
 		B65CA5149E373620C70AF2C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 800C85F705062F215824B67B /* Assets.xcassets */; };
 		B880151FCDB82C06B5D6DE72 /* SyncSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF52B777835B4B62203D509E /* SyncSettings.swift */; };
 		BA8DF5DFEF3C5CD61085B02E /* PhotoCropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29DC06FD5BA7010411123D2 /* PhotoCropView.swift */; };
@@ -156,7 +157,7 @@
 		BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		C011F248612BA0A3A5916731 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
-		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryRecord.swift; sourceTree = "<group>"; };
 		C29BC837621AF27DC2775241 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		C6E521F99961E68EE93C794F /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
@@ -177,6 +178,7 @@
 		EF52B777835B4B62203D509E /* SyncSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncSettings.swift; sourceTree = "<group>"; };
 		F356CB4E3C4D061CFA93DD90 /* ShelfCategorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfCategorizer.swift; sourceTree = "<group>"; };
 		F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssignValuesSheet.swift; sourceTree = "<group>"; };
+		F69E85506FC987A4E642A1D6 /* CopyDeletePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyDeletePicker.swift; sourceTree = "<group>"; };
 		F71D73D6B03EFC6FD3FA58B0 /* LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySync.swift; sourceTree = "<group>"; };
 		F9D70D16F6CB326CD2BBFE8E /* AskSuggestions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AskSuggestions.swift; sourceTree = "<group>"; };
 		FA36AD4ADC1657A6FB06E8EC /* ShelfCategoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfCategoriesView.swift; sourceTree = "<group>"; };
@@ -358,6 +360,7 @@
 				F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */,
 				879330D2640D53E6B07D1D12 /* BookDetailView.swift */,
 				420CC7481F27D37D90912C4A /* BookFormView.swift */,
+				F69E85506FC987A4E642A1D6 /* CopyDeletePicker.swift */,
 				819810B792B9D8D8081CCC84 /* FictionClassifierView.swift */,
 				092D43C18016AEAE255215A3 /* GenreCleanupView.swift */,
 				B1F68A46FAA41AC80D5C0E10 /* ISBNScannerView.swift */,
@@ -571,6 +574,7 @@
 				F3083778201C5DA7FC1738A2 /* CatalogService.swift in Sources */,
 				9F75747BF40F76516B82ABD5 /* Connection.swift in Sources */,
 				C1CC389D5ACAB142279EA0C4 /* ConversationMemory.swift in Sources */,
+				B4365F596EAFE3AE5487A9EE /* CopyDeletePicker.swift in Sources */,
 				218A1C024D2299D73924C5BA /* CoverImageStore.swift in Sources */,
 				6D5E3BBD794062BE5E34B6AE /* ExportFormatGuide.swift in Sources */,
 				D86F7752E2772295D9338A70 /* FictionClassifier.swift in Sources */,
@@ -750,7 +754,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -770,7 +773,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

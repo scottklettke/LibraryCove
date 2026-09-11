@@ -143,6 +143,8 @@ struct BookFormView: View {
     @State private var webSearchURL: URL?
     @State private var showDuplicateAlert = false
     @State private var showDeleteConfirmation = false
+    /// Sheet for choosing which copy of a multi-copy title to delete.
+    @State private var showCopyPicker = false
     @State private var pendingInsertBook: Book?
     /// The already-in-library book a new add collides with, so the alert can
     /// offer deleting the duplicate.
@@ -341,7 +343,13 @@ struct BookFormView: View {
             if (existing != nil || catalog != nil) && showsToolbarDelete {
                 ToolbarItem(placement: .primaryAction) {
                     Button(role: .destructive) {
-                        showDeleteConfirmation = true
+                        // Multi-copy titles: let the user pick which copy
+                        // (by added date) instead of a blind confirm.
+                        if let book = existing, copyCount(of: book) > 1 {
+                            showCopyPicker = true
+                        } else {
+                            showDeleteConfirmation = true
+                        }
                     } label: {
                         Image(systemName: "trash")
                     }
@@ -389,6 +397,19 @@ struct BookFormView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(deleteMessage)
+        }
+        .sheet(isPresented: $showCopyPicker) {
+            CopyDeletePicker(
+                title: "Delete a copy",
+                copies: allCopiesOfExisting,
+                currentBookID: existing?.id
+            ) { chosen in
+                if chosen.id == existing?.id {
+                    deleteBook()
+                } else {
+                    deleteArbitraryCopy(chosen)
+                }
+            }
         }
     }
 
@@ -919,6 +940,27 @@ struct BookFormView: View {
             dismiss()
         }
         onDeleted()
+    }
+
+    /// Every copy of the edited title (the book itself + its siblings).
+    private var allCopiesOfExisting: [Book] {
+        guard let book = existing else { return [] }
+        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        return [book] + BookMastering.otherCopies(of: book, in: all)
+    }
+
+    /// Deletes a copy OTHER than the one being edited: the form stays open
+    /// on `existing`. If the picked copy is the edited one, callers route to
+    /// `deleteBook()` instead.
+    private func deleteArbitraryCopy(_ copy: Book) {
+        let id = copy.id
+        CoverImageStore.delete(forBookID: id)
+        modelContext.delete(copy)
+        try? modelContext.save()
+        // LibraryView guards stale-query rendering with deletedIDs; this
+        // delete happened outside that view, so tell it.
+        NotificationCenter.default.post(
+            name: .bookDeletedExternally, object: nil, userInfo: ["id": id])
     }
 
     private var deleteMessage: String {

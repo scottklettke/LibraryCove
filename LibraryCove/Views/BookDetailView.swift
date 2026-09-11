@@ -19,6 +19,17 @@ struct BookDetailView: View {
     @State private var webSearchURL: URL?
 
     var body: some View {
+        if book.isDeleted {
+            // The book was deleted (e.g. from the edit form presented over
+            // this view). Reading any attribute of a deleted model traps —
+            // render nothing for the dismissal animation instead.
+            Color.clear.onAppear { dismiss() }
+        } else {
+            detailList
+        }
+    }
+
+    private var detailList: some View {
         List {
             headerSection
             infoSection

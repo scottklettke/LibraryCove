@@ -142,9 +142,9 @@ struct LibraryView: View {
     @State private var exportOptions = PDFExportOptions()
 
     private var filteredBooks: [Book] {
-        let visible = books.filter { $0.status != BookStatus.donated.rawValue }
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let visible = books.filter { !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
         let searched: [Book]
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
             searched = visible
         } else {
@@ -705,7 +705,7 @@ struct LibraryView: View {
     }
 
     private var visibleBooks: [Book] {
-        books.filter { $0.status != BookStatus.donated.rawValue }
+        books.filter { !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
     }
 
     private var allAuthors: [String] {
@@ -943,6 +943,10 @@ struct LibraryView: View {
     }
 
     private func groupKey(for book: Book) -> String? {
+        // A just-deleted book can still appear in a stale query snapshot;
+        // reading its attributes traps ("detached ... without resolving
+        // attribute faults"). Skip it instead.
+        guard !book.isDeleted else { return nil }
         switch grouping {
         case .author: return book.authors.first
         case .genre: return book.tags.first

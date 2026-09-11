@@ -193,7 +193,7 @@ struct BookFormView: View {
 
     /// Whether the edit form differs from the existing book (drives the top Save button).
     private var hasChanges: Bool {
-        guard let book = existing else { return false }
+        guard let book = existing, !book.isDeleted else { return false }
         return title != book.title
             || authorsText != book.authors.joined(separator: ", ")
             || yearText != (book.publicationYear.map { String($0) } ?? "")

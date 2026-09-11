@@ -86,7 +86,7 @@ struct AboutView: View {
                     Text("Cover images are fetched via Open Library; their rights follow the source each cover came from.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Inspired by Cindy's Books (github.com/brainchillz/CindysBooks-IOS), an open approach to the same problem space.")
+                    Text("Developed independently. Cindy's Books (github.com/brainchillz/CindysBooks-IOS), discovered near release, informed one idea: storing each book's Open Library work key at lookup time for deterministic description fetches. All code is original.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } header: {

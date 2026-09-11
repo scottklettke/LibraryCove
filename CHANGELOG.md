@@ -25,5 +25,7 @@ ships via TestFlight. Until then this file is not maintained.
 ### Attribution
 
 - Added a "Data sources" section to About & Feedback crediting Open Library
-  (CC0 bibliographic data), Google Books, Wikipedia (CC BY-SA), and Cindy's
-  Books as inspiration.
+  (CC0 bibliographic data), Google Books, and Wikipedia (CC BY-SA). A
+  courtesy note covers Cindy's Books, an independently developed app
+  discovered near release whose work-key storage idea informed the
+  deterministic description fetches above; all code is original.

@@ -88,9 +88,12 @@ LibraryCove stands on the shoulders of open catalog data:
   and covers.
 - **Wikipedia** (wikipedia.org) — description extracts, available under the
   Creative Commons Attribution-ShareAlike License.
-- **Cindy's Books** (github.com/brainchillz/CindysBooks-IOS) — a kindred
-  offline library app whose work-key approach inspired LibraryCove's
-  deterministic Open Library description fetches.
+- **Cindy's Books** (github.com/brainchillz/CindysBooks-IOS) — an independent,
+  separately developed library app discovered while LibraryCove was already
+  built. Its per-book storage of the Open Library *work key* (looked up once,
+  then reused for direct synopsis fetches) informed one improvement here:
+  LibraryCove now captures that key during catalog lookups and uses it for
+  deterministic description fetches. All code is original.
 
 Open-source software used by the app:
 

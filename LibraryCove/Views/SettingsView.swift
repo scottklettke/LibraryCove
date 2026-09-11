@@ -1134,7 +1134,14 @@ struct CloudSharingSheet: UIViewControllerRepresentable {
         func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {
             // User tapped "Stop Sharing" inside the system sheet.
             Task { @MainActor in
-                try? await SharedLibraryCoordinator.stopSharing()
+                do {
+                    try await SharedLibraryCoordinator.stopSharing()
+                } catch {
+                    // The private library was left untouched (fail-safe);
+                    // surface why instead of failing silently. Settings
+                    // shows the engine's lastError.
+                    SharedLibraryEngine.shared.reportError(error.localizedDescription)
+                }
             }
         }
     }

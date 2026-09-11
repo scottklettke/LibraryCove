@@ -19,7 +19,7 @@ enum SharedLibraryCoordinator {
         var errorDescription: String? {
             switch self {
             case .snapshotFailed:
-                return "Couldn't prepare the library switch. Nothing changed."
+                return "The shared library's contents couldn't be read, so your private library was left untouched. Nothing was lost — try again, or export a backup first (Settings → Data → Export library)."
             }
         }
     }
@@ -121,11 +121,15 @@ enum SharedLibraryCoordinator {
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
     }
 
-    /// Owner stops sharing: everyone loses access. The owner keeps the data —
-    /// the mirror content REPLACES the private store (it is the same library
-    /// the owner started with), then relaunch returns to the prior provider.
+    /// Owner stops sharing: everyone loses access to the share. The owner's
+    /// data comes back via MERGE (dedup-insert — never wipes the private
+    /// store), not replace: a replace with an empty or partial mirror would
+    /// wipe the private library, and for an iCloud-backed private store the
+    /// deleteAll would even sync those deletions to the cloud. Merge keeps
+    /// the private store's existing books and adds anything newer from the
+    /// mirror; relaunch returns to the prior provider.
     static func stopSharing() async throws {
-        try await moveMirrorContentIntoPrivateStore(mode: .replace)
+        try await moveMirrorContentIntoPrivateStore(mode: .merge)
         try await SharedLibraryEngine.shared.stopSharingAsOwner()
         SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .localOnly
         SharedLibrarySettings.previousProvider = nil
@@ -139,6 +143,11 @@ enum SharedLibraryCoordinator {
     /// Explicitly not `Persistence.shared.mainContext`: while the app runs in
     /// shared-library mode that context IS the mirror, so importing into it
     /// would clobber the source (importArchive delete-alls).
+    ///
+    /// Fail-safe: if the mirror exports nothing (no books), the private store
+    /// is left untouched and an error is thrown. An empty mirror means the
+    /// share migration never completed — replacing the private library with
+    /// nothing would wipe the user's data.
     private static func moveMirrorContentIntoPrivateStore(mode: CopyMode) async throws {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
@@ -151,7 +160,15 @@ enum SharedLibraryCoordinator {
         let privateContext = ModelContext(privateContainer)
 
         let mirrorContext = ModelContext(SwiftDataSharedLibrarySync.containerForMigration())
-        guard let data = await LibraryDataService.export(context: mirrorContext) else { return }
+        guard let data = await LibraryDataService.export(context: mirrorContext) else {
+            throw FlowError.snapshotFailed
+        }
+        let summary = try LibraryDataService.previewArchive(data: data)
+        guard summary.books > 0 else {
+            // Empty mirror: the migration into the mirror never happened.
+            // Do NOT touch the private store — it still holds the library.
+            throw FlowError.snapshotFailed
+        }
         switch mode {
         case .merge:
             try LibraryDataService.mergeArchive(data: data, context: privateContext)

@@ -1,4 +1,20 @@
 import Foundation
+import NaturalLanguage
+
+/// Language preference for imported descriptions: English unless the book
+/// itself is specified otherwise.
+enum DescriptionLanguage {
+    /// Heuristic check that the text is English. Descriptions arrive from
+    /// multilingual sources (Open Library work records carry whatever
+    /// language the contributor wrote); when the book's language is unset
+    /// the app prefers English text.
+    static func isLikelyEnglish(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(text)
+        return recognizer.dominantLanguage == .english || recognizer.dominantLanguage == nil
+    }
+}
 
 /// A book found in an external catalog (OpenLibrary / Google Books).
 struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
@@ -269,7 +285,20 @@ final class OpenLibraryService: CatalogService {
         } else if let gb = await googleResult(isbn: cleaned) {
             var covers = catalog.coverURLs
             if let gcovers = gb["covers"] as? [String] { covers.append(contentsOf: gcovers) }
-            let description = gb["description"] as? String ?? catalog.description
+            // English by default: Open Library work/edition descriptions are
+            // whatever language the contributor wrote. When the OL text is
+            // not English and Google has one, Google (English-limited query)
+            // wins. A non-English description stands when the book itself is
+            // explicitly non-English.
+            let olDescription = catalog.description
+            let olIsEnglish = olDescription.map(DescriptionLanguage.isLikelyEnglish) ?? false
+            let gbDescription = gb["description"] as? String
+            let description: String?
+            if let gbDescription, !olIsEnglish {
+                description = gbDescription
+            } else {
+                description = olDescription ?? gbDescription
+            }
             let tags = gb["categories"] as? [String] ?? catalog.tags
             let publisher = gb["publisher"] as? String ?? catalog.publisher
             let pageCount = gb["pageCount"] as? Int ?? catalog.pageCount
@@ -287,9 +316,12 @@ final class OpenLibraryService: CatalogService {
                 description: description,
                 language: catalog.language,
                 coverURLs: covers,
-                descriptionSource: (gb["description"] as? String).flatMap { gbDesc in
-                    gbDesc != catalog.description ? "googlebooks" : nil
-                } ?? catalog.descriptionSource,
+                descriptionSource: {
+                    if let gbDescription, !olIsEnglish, description == gbDescription { return "googlebooks" }
+                    if let olDescription, description == olDescription { return "openlibrary" }
+                    if gbDescription != nil { return "googlebooks" }
+                    return catalog.descriptionSource
+                }(),
                 source: catalog.source,
                 olWorkKey: catalog.olWorkKey
             )
@@ -425,11 +457,14 @@ final class OpenLibraryService: CatalogService {
 
         return nil
     }
+
     /// Fetch a book's description straight from its OpenLibrary work record,
     /// using the work key captured at lookup time. Deterministic — no fuzzy
     /// title search, no risk of matching the wrong work. `nil` when the book
-    /// has no stored key or the fetch fails.
-    func fetchWorkDescription(olKey: String) async -> String? {
+    /// has no stored key or the fetch fails. English by default: when the
+    /// work record is not English, an English Google Books description for
+    /// the same title replaces it (`preferEnglish: false` keeps the original).
+    func fetchWorkDescription(olKey: String, title: String? = nil, preferEnglish: Bool = true) async -> String? {
         guard olKey.hasPrefix("/works/") else { return nil }
         guard let url = URL(string: "https://openlibrary.org\(olKey).json") else { return nil }
         do {
@@ -447,7 +482,14 @@ final class OpenLibraryService: CatalogService {
             } else {
                 desc = nil
             }
-            return desc.map { Self.truncate($0) }
+            guard let text = desc.map({ Self.truncate($0) }) else { return nil }
+            if preferEnglish, !DescriptionLanguage.isLikelyEnglish(text),
+               let fallbackTitle = title, !fallbackTitle.isEmpty,
+               let english = await googleTitleDescription(title: fallbackTitle, authors: [], preferEnglish: true),
+               DescriptionLanguage.isLikelyEnglish(english) {
+                return english
+            }
+            return text
         } catch {
             return nil
         }
@@ -490,7 +532,14 @@ final class OpenLibraryService: CatalogService {
             } else {
                 desc = nil
             }
-            return desc.map { Self.truncate($0) }
+            guard let text = desc.map({ Self.truncate($0) }) else { return nil }
+            if !DescriptionLanguage.isLikelyEnglish(text) {
+                if let english = await googleTitleDescription(title: title, authors: authors, preferEnglish: true),
+                   DescriptionLanguage.isLikelyEnglish(english) {
+                    return english
+                }
+            }
+            return text
         } catch {
             return nil
         }
@@ -521,12 +570,17 @@ final class OpenLibraryService: CatalogService {
         }
     }
 
-    private func googleResult(isbn: String) async -> [String: Any]? {
+    private func googleResult(isbn: String, preferEnglish: Bool = true) async -> [String: Any]? {
         var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
-        components.queryItems = [
+        var items = [
             URLQueryItem(name: "q", value: "isbn:\(isbn)"),
             URLQueryItem(name: "maxResults", value: "1"),
         ]
+        // lr=lang_en limits results to English-language volumes so the
+        // imported description is English by default. Skipped when the book
+        // is explicitly a non-English title.
+        if preferEnglish { items.append(URLQueryItem(name: "lr", value: "lang_en")) }
+        components.queryItems = items
         guard let url = components.url else { return nil }
         do {
             let (data, response) = try await session.data(from: url)
@@ -539,6 +593,7 @@ final class OpenLibraryService: CatalogService {
             return nil
         }
     }
+
 
     private func mapGoogleInfo(_ info: [String: Any]) -> [String: Any] {
         var mapped: [String: Any] = [:]
@@ -658,7 +713,7 @@ final class OpenLibraryService: CatalogService {
         }()
         async let wiki: String? = wikipediaBookExtract(title: title, authors: authors)
         async let ol: String? = {
-            if let olKey { return await fetchWorkDescription(olKey: olKey) }
+            if let olKey { return await fetchWorkDescription(olKey: olKey, title: title) }
             return await fetchWorkDescription(for: title, authors: authors)
         }()
         async let googleIsbn: String? = {
@@ -705,7 +760,7 @@ final class OpenLibraryService: CatalogService {
         // A stored OpenLibrary work key makes the OL leg deterministic; it
         // replaces the fuzzy-search variant wherever OL would be consulted.
         let olFetch: () async -> String? = {
-            if let olKey { return await self.fetchWorkDescription(olKey: olKey) }
+            if let olKey { return await self.fetchWorkDescription(olKey: olKey, title: title) }
             return await self.fetchWorkDescription(for: title, authors: authors)
         }
         switch preferred {
@@ -741,12 +796,16 @@ final class OpenLibraryService: CatalogService {
     }
 
     /// Google Books description by ISBN (Google often has the fullest text).
-    private func googleDescription(isbn: String) async -> String? {
+    /// English-limited by default; pass `preferEnglish: false` for explicitly
+    /// non-English books.
+    private func googleDescription(isbn: String, preferEnglish: Bool = true) async -> String? {
         var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
-        components.queryItems = [
+        var items = [
             URLQueryItem(name: "q", value: "isbn:\(isbn)"),
             URLQueryItem(name: "maxResults", value: "1"),
         ]
+        if preferEnglish { items.append(URLQueryItem(name: "lr", value: "lang_en")) }
+        components.queryItems = items
         guard let url = components.url else { return nil }
         guard let (data, response) = try? await session.data(from: url),
               let http = response as? HTTPURLResponse, http.statusCode == 200,
@@ -759,17 +818,19 @@ final class OpenLibraryService: CatalogService {
     }
 
     /// Google Books description by title+author — the extra source that still
-    /// works when the ISBN has no record.
-    private func googleTitleDescription(title: String, authors: [String]) async -> String? {
+    /// works when the ISBN has no record. English-limited by default.
+    private func googleTitleDescription(title: String, authors: [String], preferEnglish: Bool = true) async -> String? {
         var components = URLComponents(string: "https://www.googleapis.com/books/v1/volumes")!
         var query = "intitle:\"\(title)\""
         if let first = authors.first, !first.isEmpty {
             query += " inauthor:\"\(first)\""
         }
-        components.queryItems = [
+        var items = [
             URLQueryItem(name: "q", value: query),
             URLQueryItem(name: "maxResults", value: "1"),
         ]
+        if preferEnglish { items.append(URLQueryItem(name: "lr", value: "lang_en")) }
+        components.queryItems = items
         guard let url = components.url else { return nil }
         guard let (data, response) = try? await session.data(from: url),
               let http = response as? HTTPURLResponse, http.statusCode == 200,

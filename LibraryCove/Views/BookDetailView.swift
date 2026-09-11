@@ -259,7 +259,7 @@ struct BookDetailView: View {
         // Fast path: a stored Open Library work key resolves the work
         // deterministically — no ISBN record fetch, no fuzzy search.
         if let storedWorkKey, !storedWorkKey.isEmpty,
-           let text = await catalog.fetchWorkDescription(olKey: storedWorkKey),
+           let text = await catalog.fetchWorkDescription(olKey: storedWorkKey, title: searchTerm),
            !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             book.bookDescription = text
             book.descriptionSource = "openlibrary"

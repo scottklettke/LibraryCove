@@ -19,6 +19,6 @@ xcuserdata/
 # Git
 .DS_Store
 
-# BookNexus specific
-BookNexus.xcodeproj/project.xcworkspace/xcuserdata/
-BookNexus.xcodeproj/xcuserdata/
+# LibraryCove specific
+LibraryCove.xcodeproj/project.xcworkspace/xcuserdata/
+LibraryCove.xcodeproj/xcuserdata/

@@ -1,6 +1,6 @@
-# BookNexus Library Format
+# LibraryCove Library Format
 
-BookNexus exports your whole library as a single compressed (`.zip`) file. Inside it you
+LibraryCove exports your whole library as a single compressed (`.zip`) file. Inside it you
 will find:
 
 - `library.json` - your complete library in plain, human-readable JSON.
@@ -10,8 +10,8 @@ will find:
 The data is meant to be read, reviewed, and even edited by hand. You can add new books by
 adding new objects to the `books` array, re-zip the folder, and import it back into the app.
 
-BookNexus is open source. The same format is used by every BookNexus installation, so a
-file you create by hand today can be imported into any BookNexus app, on any device.
+LibraryCove is open source. The same format is used by every LibraryCove installation, so a
+file you create by hand today can be imported into any LibraryCove app, on any device.
 
 ----
 
@@ -40,7 +40,7 @@ cover (or a hand-made file) keeps whatever `coverImageURL` says.
 
 ```json
 {
-  "format": "booknexus-library",
+  "format": "librarycove-library",
   "version": 1,
   "exportedAt": "2026-08-12T12:34:56Z",
   "users": [],
@@ -147,7 +147,7 @@ Field reference:
 
 ### How to add a new book, step by step
 
-1. Export your library from BookNexus (Settings -> Data -> Export library) and unzip the file.
+1. Export your library from LibraryCove (Settings -> Data -> Export library) and unzip the file.
 2. Open `library.json` in any text or JSON editor (VS Code, TextEdit, etc.).
 3. Find the `"books"` array near the top: `"books": [`.
 4. Copy an existing book object (everything from `{` to the matching `}`), including its
@@ -164,7 +164,7 @@ Field reference:
 9. Zip the folder again (on macOS: right-click the folder -> Compress; on Windows: right-click
    -> Send to -> Compressed folder). The zip must contain `library.json` at its top level,
    with any cover JPEGs in a `covers/` folder alongside it.
-10. Open BookNexus, go to Settings -> Data -> Import library, and choose the zip. The app will
+10. Open LibraryCove, go to Settings -> Data -> Import library, and choose the zip. The app will
     show you how many books it found and replace your library with the file's contents.
 
 ## 5. Users  (family members)
@@ -307,16 +307,16 @@ A connection links two books:
   <https://jsonlint.com> to check.
 - Every id referenced by `bookID`, `listID`, `userID`, `book1ID`, `book2ID`, `ownerID`,
   `addedByID`, and `createdByID` must exist in the corresponding array.
-- The top-level `format` value must stay `"booknexus-library"` and `version` must stay `1`.
+- The top-level `format` value must stay `"librarycove-library"` and `version` must stay `1`.
 - When re-zipping, make sure the zip contains `library.json` at its top level (not nested
   inside another folder).
 
 ## 10. Importing
 
-BookNexus imports a zip by *replacing* your current library with the contents of the file.
+LibraryCove imports a zip by *replacing* your current library with the contents of the file.
 Export your library first if you want a copy of the current state.
 
 1. Settings -> Data -> Import library.
 2. Pick the zip file.
-3. Review the counts BookNexus shows you.
+3. Review the counts LibraryCove shows you.
 4. Confirm. Your library is replaced with the file's contents.

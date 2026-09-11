@@ -16,8 +16,13 @@ final class GenreStore {
     var tags: [String]
 
     init() {
-        if let saved = UserDefaults.standard.array(forKey: GenreStore.storageKey) as? [String] {
+        if let saved = UserDefaults.standard.array(forKey: Self.storageKey) as? [String] {
             tags = saved
+        } else if let legacy = UserDefaults.standard.array(forKey: "booknexus.tags") as? [String] {
+            // Pre-rename key; migrate once so existing devices keep their tags.
+            tags = legacy
+            UserDefaults.standard.set(legacy, forKey: Self.storageKey)
+            UserDefaults.standard.removeObject(forKey: "booknexus.tags")
         } else {
             tags = GenreStore.defaults
             persist()
@@ -43,6 +48,6 @@ final class GenreStore {
     }
 
     private func persist() {
-        UserDefaults.standard.set(tags, forKey: GenreStore.storageKey)
+        UserDefaults.standard.set(tags, forKey: Self.storageKey)
     }
 }

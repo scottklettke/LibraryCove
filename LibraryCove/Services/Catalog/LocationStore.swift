@@ -16,8 +16,13 @@ final class LocationStore {
     var locations: [String]
 
     init() {
-        if let saved = UserDefaults.standard.array(forKey: LocationStore.storageKey) as? [String] {
+        if let saved = UserDefaults.standard.array(forKey: Self.storageKey) as? [String] {
             locations = saved
+        } else if let legacy = UserDefaults.standard.array(forKey: "booknexus.locations") as? [String] {
+            // Pre-rename key; migrate once so existing devices keep their locations.
+            locations = legacy
+            UserDefaults.standard.set(legacy, forKey: Self.storageKey)
+            UserDefaults.standard.removeObject(forKey: "booknexus.locations")
         } else {
             locations = LocationStore.defaults
             persist()
@@ -43,6 +48,6 @@ final class LocationStore {
     }
 
     private func persist() {
-        UserDefaults.standard.set(locations, forKey: LocationStore.storageKey)
+        UserDefaults.standard.set(locations, forKey: Self.storageKey)
     }
 }

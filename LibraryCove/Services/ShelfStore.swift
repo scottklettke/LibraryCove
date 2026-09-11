@@ -7,12 +7,19 @@ import Observation
 @Observable
 final class ShelfStore {
     private static let storageKey = "librarycove.shelves"
+    /// Pre-rename key; read once so a device that stored shelves under the old
+    /// name keeps them.
+    private static let legacyStorageKey = "booknexus.shelves"
 
     var shelves: [String]
 
     init() {
-        if let saved = UserDefaults.standard.array(forKey: ShelfStore.storageKey) as? [String] {
+        if let saved = UserDefaults.standard.array(forKey: Self.storageKey) as? [String] {
             shelves = saved
+        } else if let legacy = UserDefaults.standard.array(forKey: Self.legacyStorageKey) as? [String] {
+            shelves = legacy
+            UserDefaults.standard.set(legacy, forKey: Self.storageKey)
+            UserDefaults.standard.removeObject(forKey: Self.legacyStorageKey)
         } else {
             shelves = []
         }
@@ -38,6 +45,6 @@ final class ShelfStore {
     }
 
     private func persist() {
-        UserDefaults.standard.set(shelves, forKey: ShelfStore.storageKey)
+        UserDefaults.standard.set(shelves, forKey: Self.storageKey)
     }
 }

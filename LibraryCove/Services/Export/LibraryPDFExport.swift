@@ -328,7 +328,7 @@ enum LibraryPDFExport {
                 .draw(in: chip.insetBy(dx: 13, dy: 13))
         }
 
-        "BOOKNEXUS".draw(
+        "LIBRARYCOVE".draw(
             at: CGPoint(x: margin, y: 142),
             withAttributes: [
                 .font: UIFont.systemFont(ofSize: 11, weight: .heavy),

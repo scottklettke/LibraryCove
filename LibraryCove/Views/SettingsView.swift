@@ -256,7 +256,9 @@ struct SettingsView: View {
                     Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
                 }
 
-                sharedLibrarySection
+                if syncProvider == .iCloud {
+                    sharedLibrarySection
+                }
 
                 Section {
                     Picker("Engine", selection: $aiEngine) {

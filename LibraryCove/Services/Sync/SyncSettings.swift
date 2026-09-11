@@ -7,10 +7,13 @@ enum SyncSettings {
     private static let snapshotFileName = "pending-sync-migration.zip"
 
     /// The provider the app should back its store with on next launch.
+    /// New installs (no stored choice) default to iCloud Sync — the
+    /// recommended mode. The backing store degrades gracefully to local
+    /// when no iCloud account is signed in, so the default is safe.
     static var selectedProvider: LibrarySync {
         get {
             guard let raw = UserDefaults.standard.string(forKey: providerKey),
-                  let kind = LibrarySync(rawValue: raw) else { return .localOnly }
+                  let kind = LibrarySync(rawValue: raw) else { return .iCloud }
             return kind
         }
         set {

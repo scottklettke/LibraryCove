@@ -115,8 +115,7 @@ enum SharedLibraryCoordinator {
             try await moveMirrorContentIntoPrivateStore(mode: .merge)
         }
         try await SharedLibraryEngine.shared.leaveAsParticipant()
-        SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .localOnly
-        SharedLibrarySettings.previousProvider = nil
+        try await restorePreviousProvider()
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
     }
@@ -131,12 +130,69 @@ enum SharedLibraryCoordinator {
     static func stopSharing() async throws {
         try await moveMirrorContentIntoPrivateStore(mode: .merge)
         try await SharedLibraryEngine.shared.stopSharingAsOwner()
-        SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .localOnly
-        SharedLibrarySettings.previousProvider = nil
+        try await restorePreviousProvider()
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
     }
 
+    /// Returns the user to their pre-share provider — usually. When the
+    /// handoff key is missing (consumed by an earlier teardown, or lost), a
+    /// blind `.localOnly` fallback would silently downgrade an iCloud user:
+    /// their books would sit in the local store while the iCloud store kept
+    /// the older copy. Instead, infer from the data:
+    ///   - known previousProvider → restore it (normal path);
+    ///   - unknown + iCloud-backed store holds books → write the merged
+    ///     library as a provider-switch snapshot and select .iCloud, so the
+    ///     relaunch moves it into the cloud store via the standard migration;
+    ///   - unknown + no iCloud store data → .localOnly (the books are already
+    ///     in the local store).
+    private static func restorePreviousProvider() async {
+        if let remembered = SharedLibrarySettings.previousProvider {
+            SyncSettings.selectedProvider = remembered
+            SharedLibrarySettings.previousProvider = nil
+            return
+        }
+        // Unknown destination: inspect the iCloud-backed store for data.
+        let schema = Schema([
+            Book.self, Note.self, ReadingList.self,
+            ReadingListItem.self, Connection.self, User.self,
+        ])
+        let cloudStoreURL = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                     in: .userDomainMask).first!
+            .appendingPathComponent("default-cloud.store")
+        var cloudHasBooks = false
+        if FileManager.default.fileExists(atPath: cloudStoreURL.path),
+           let cloudContainer = try? ModelContainer(for: schema,
+                                                    configurations: [ModelConfiguration(schema: nil,
+                                                                                        url: cloudStoreURL,
+                                                                                        allowsSave: true)]) {
+            let cloudContext = ModelContext(cloudContainer)
+            cloudHasBooks = ((try? cloudContext.fetchCount(FetchDescriptor<Book>())) ?? 0) > 0
+        }
+
+        if cloudHasBooks {
+            // The user's home is the iCloud store. Snapshot the merged
+            // library (it lives in the local store after our merge) and
+            // select iCloud — the standard relaunch migration moves it over.
+            let localStoreURL = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                         in: .userDomainMask).first!
+                .appendingPathComponent("default.store")
+            if FileManager.default.fileExists(atPath: localStoreURL.path),
+               let localContainer = try? ModelContainer(for: schema,
+                                                        configurations: [ModelConfiguration(schema: nil,
+                                                                                            url: localStoreURL,
+                                                                                            allowsSave: true)]),
+               let snapshot = await LibraryDataService.export(context: ModelContext(localContainer)),
+               SyncSettings.writeSnapshot(snapshot) {
+                SyncSettings.selectedProvider = .iCloud
+            } else {
+                // Couldn't stage the move — keep the books where they are.
+                SyncSettings.selectedProvider = .localOnly
+            }
+        } else {
+            SyncSettings.selectedProvider = .localOnly
+        }
+    }
     private enum CopyMode { case merge, replace }
 
     /// Moves the mirror store's content into the PRIVATE store container.

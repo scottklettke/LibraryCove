@@ -219,36 +219,41 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Sync provider", selection: $syncProvider) {
-                        // .sharedLibrary is entered only through the Share
-                        // Library / join flows — the snapshot-pour switch
-                        // would seed a share-less mirror with private data.
-                        ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
-                            Text(provider.isAvailableNow
-                                 ? provider.displayName
-                                 : "\(provider.displayName) (coming soon)")
-                                .tag(provider)
+                    // While a share is active the provider IS the shared
+                    // mirror; the picker (which excludes .sharedLibrary)
+                    // would render blank. Show read-only status and route
+                    // any change through the Stop Sharing confirmation.
+                    if SharedLibraryMembershipGate.membership != .none {
+                        LabeledContent("Sync provider", value: "Shared Library")
+                        LabeledContent("Status", value: syncStatusText(syncProvider))
+                    } else {
+                        Picker("Sync provider", selection: $syncProvider) {
+                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
+                                Text(provider.isAvailableNow
+                                     ? provider.displayName
+                                     : "\(provider.displayName) (coming soon)")
+                                    .tag(provider)
+                            }
                         }
-                    }
-                    .disabled(isSwitchingSync)
-                    LabeledContent("Status", value: syncStatusText(syncProvider))
-                    .confirmationDialog(
-                        "Stop sharing this library?",
-                        isPresented: Binding(
-                            get: { pendingProviderChange != nil },
-                            set: { if !$0 { pendingProviderChange = nil; syncProvider = SyncSettings.selectedProvider } }
-                        ),
-                        titleVisibility: .visible
-                    ) {
-                        Button("Stop Sharing & Switch", role: .destructive) {
-                            confirmedProviderChange()
+                        LabeledContent("Status", value: syncStatusText(syncProvider))
+                        .confirmationDialog(
+                            "Stop sharing this library?",
+                            isPresented: Binding(
+                                get: { pendingProviderChange != nil },
+                                set: { if !$0 { pendingProviderChange = nil; syncProvider = SyncSettings.selectedProvider } }
+                            ),
+                            titleVisibility: .visible
+                        ) {
+                            Button("Stop Sharing & Switch", role: .destructive) {
+                                confirmedProviderChange()
+                            }
+                            Button("Cancel", role: .cancel) {
+                                pendingProviderChange = nil
+                                syncProvider = SyncSettings.selectedProvider
+                            }
+                        } message: {
+                            Text("Changing the sync provider while a library is shared stops sharing it with everyone. Your books stay in your library — choose where to sync them next.")
                         }
-                        Button("Cancel", role: .cancel) {
-                            pendingProviderChange = nil
-                            syncProvider = SyncSettings.selectedProvider
-                        }
-                    } message: {
-                        Text("Changing the sync provider while a library is shared stops sharing it with everyone. Your books stay in your library — choose where to sync them next.")
                     }
                 } header: {
                     Text("Sync")
@@ -256,7 +261,7 @@ struct SettingsView: View {
                     Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
                 }
 
-                if syncProvider == .iCloud {
+                if syncProvider == .iCloud || SharedLibraryMembershipGate.membership != .none {
                     sharedLibrarySection
                 }
 

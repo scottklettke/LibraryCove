@@ -121,7 +121,12 @@ struct BookFormView: View {
     /// comma-joined union when identical texts merged across sources).
     @State private var activeDescriptionSource: String?
     @State private var isFetchingDescription = false
+    /// In-flight flag for the "Retrieve additional covers" button.
+    @State private var isFetchingCovers = false
     @State private var fetchError: String?
+    /// Message for the "Retrieve additional covers" button (shown in the
+    /// cover section, not the description section).
+    @State private var coversFetchMessage: String?
     /// Set when the user deletes the description while an auto-fetch is in
     /// flight, so the fetch's late result doesn't clobber the cleared field.
     @State private var clearedFetchedDescription = false
@@ -165,6 +170,9 @@ struct BookFormView: View {
             _description = State(initialValue: catalog.description ?? "")
             _activeDescriptionSource = State(initialValue: catalog.descriptionSource)
             _coverURLs = State(initialValue: catalog.coverURLs)
+            // Default to the catalog's first cover so Add-to-library always
+            // saves one even if the user never taps a thumbnail.
+            _selectedCover = State(initialValue: catalog.primaryCoverURL)
         } else if let existing {
             _title = State(initialValue: existing.title)
             _authorsText = State(initialValue: existing.authors.joined(separator: ", "))
@@ -176,6 +184,10 @@ struct BookFormView: View {
             _activeDescriptionSource = State(initialValue: existing.descriptionSource)
             _locationText = State(initialValue: existing.physicalLocation ?? "")
             _selectedCover = State(initialValue: existing.coverImageURL)
+            // Show the stored cover (if any) in the picker strip so the user
+            // sees what's set; more can be fetched with "Retrieve additional
+            // covers".
+            _coverURLs = State(initialValue: existing.coverImageURL.map { [$0] } ?? [])
         }
     }
 
@@ -387,6 +399,30 @@ struct BookFormView: View {
             }
         }
 
+        Button {
+            Task { await retrieveAdditionalCovers() }
+        } label: {
+            HStack {
+                Label(isFetchingCovers ? "Searching…" : "Retrieve additional covers",
+                      systemImage: isFetchingCovers ? "hourglass" : "photo.on.rectangle.angled")
+                    .font(.callout)
+                if isFetchingCovers {
+                    Spacer()
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(isFetchingCovers || trimmedTitleEmpty)
+        if let coversFetchMessage {
+            Text(coversFetchMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        if trimmedTitleEmpty {
+            Text("Add a title to search for covers.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
         ScrollView(.horizontal, showsIndicators: true) {
             HStack(spacing: 8) {
                 ForEach(coverURLs, id: \.self) { url in
@@ -404,6 +440,7 @@ struct BookFormView: View {
                             }
                     }
                     .buttonStyle(.plain)
+                    .contentShape(Rectangle())
                 }
                 Button {
                     showCamera = true
@@ -744,16 +781,62 @@ struct BookFormView: View {
         if clearedFetchedDescription { return }
 
         if !found.tags.isEmpty { tagsText = found.tags.joined(separator: ", ") }
-        if let publisher = found.publisher { publisherText = publisher }
-        if let language = found.language, !language.isEmpty { languageText = language }
-        if let pages = found.pageCount { pageCountText = String(pages) }
-        if let year = found.publicationYear { yearText = String(year) }
+        // Merge fetched covers with what's already in the strip instead of
+        // replacing it: the user may have already tapped a thumbnail from the
+        // catalog list while this fetch was in flight, and the fetch must not
+        // (a) drop that candidate or (b) disturb their selection. The chosen
+        // cover goes first so the selection stays visible.
+        var merged: [String] = []
+        if let selectedCover { merged.append(selectedCover) }
+        if let kept = existing?.coverImageURL, !merged.contains(kept) { merged.append(kept) }
+        var seen = Set(merged)
+        for url in found.coverURLs + coverURLs where seen.insert(url).inserted {
+            merged.append(url)
+        }
+        if merged != coverURLs {
+            coverURLs = merged
+        }
 
-        // Merge fetched covers with the book's current cover instead of
-        // replacing it, so editing never wipes the user's selection.
-        let keptCover = existing?.coverImageURL
-        let merged = (keptCover.map { [$0] } ?? []) + found.coverURLs.filter { $0 != keptCover }
-        if !merged.isEmpty { coverURLs = merged }
+    }
+
+    private var trimmedTitleEmpty: Bool {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// "Retrieve additional covers": looks up cover candidates on demand —
+    /// by ISBN when the form has one, else by title+author search — and
+    /// merges anything new into the picker strip. Never disturbs the current
+    /// selection; also keeps existing strip entries.
+    private func retrieveAdditionalCovers() async {
+        guard !trimmedTitleEmpty else { return }
+        isFetchingCovers = true
+        coversFetchMessage = nil
+        defer { isFetchingCovers = false }
+        let service = OpenLibraryService()
+        let isbn = catalogISBN
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let outcome = await withDeadline(seconds: Self.fetchDeadlineSeconds) {
+            () -> CatalogBook?? in
+            if let isbn {
+                return try? await service.lookup(isbn: isbn, preferred: .openlibrary)
+            } else {
+                let results = (try? await service.search(query: trimmedTitle, preferred: .openlibrary)) ?? []
+                return results.first
+            }
+        }
+        guard !outcome.timedOut, let found = outcome.value ?? nil else {
+            coversFetchMessage = "No additional covers found — try again or use the Photo option."
+            return
+        }
+        var merged: [String] = coverURLs
+        var seen = Set(merged)
+        for url in found.coverURLs where seen.insert(url).inserted {
+            merged.append(url)
+        }
+        if merged.count == coverURLs.count {
+            coversFetchMessage = "No additional covers found — try again or use the Photo option."
+        }
+        coverURLs = merged
     }
 
     private var authorsList: [String] {

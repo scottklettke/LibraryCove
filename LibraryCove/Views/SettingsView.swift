@@ -34,6 +34,9 @@ struct SettingsView: View {
     // Sync
     @State private var syncProvider: LibrarySync = SyncSettings.selectedProvider
     @State private var isSwitchingSync = false
+    /// A provider change while a share is active — held for the
+    /// "this stops sharing" confirmation before it is applied.
+    @State private var pendingProviderChange: LibrarySync?
     @State private var showSyncRestartNotice = false
 
     // Shared library
@@ -229,6 +232,24 @@ struct SettingsView: View {
                     }
                     .disabled(isSwitchingSync)
                     LabeledContent("Status", value: syncStatusText(syncProvider))
+                    .confirmationDialog(
+                        "Stop sharing this library?",
+                        isPresented: Binding(
+                            get: { pendingProviderChange != nil },
+                            set: { if !$0 { pendingProviderChange = nil; syncProvider = SyncSettings.selectedProvider } }
+                        ),
+                        titleVisibility: .visible
+                    ) {
+                        Button("Stop Sharing & Switch", role: .destructive) {
+                            confirmedProviderChange()
+                        }
+                        Button("Cancel", role: .cancel) {
+                            pendingProviderChange = nil
+                            syncProvider = SyncSettings.selectedProvider
+                        }
+                    } message: {
+                        Text("Changing the sync provider while a library is shared stops sharing it with everyone. Your books stay in your library — choose where to sync them next.")
+                    }
                 } header: {
                     Text("Sync")
                 } footer: {
@@ -896,10 +917,18 @@ struct SettingsView: View {
 
     // MARK: - Actions
 
-    // MARK: - Sync
-
     private func switchSyncProvider(to new: LibrarySync) {
         guard new != SyncSettings.selectedProvider else { return }
+        // A share is active: switching to another provider stops sharing it
+        // with everyone. Confirm before tearing anything down.
+        if SharedLibraryMembershipGate.membership != .none {
+            pendingProviderChange = new
+            return
+        }
+        performSwitch(to: new)
+    }
+
+    private func performSwitch(to new: LibrarySync) {
         guard new.isAvailableNow else {
             // Not implemented providers: show why and revert the picker.
             lastError = LibrarySyncError.notImplementedFor(new).errorDescription
@@ -922,6 +951,40 @@ struct SettingsView: View {
             }
             SyncSettings.selectedProvider = new
             showSyncRestartNotice = true
+        }
+    }
+
+    /// Confirmed: switching providers while a share is active stops sharing
+    /// the library with everyone. Tear the share down properly (owner: the
+    /// zone + share are removed and books return home; participant: leaves
+    /// with a copy), then apply the requested provider switch.
+    private func confirmedProviderChange() {
+        guard let target = pendingProviderChange else { return }
+        pendingProviderChange = nil
+        // Revert the picker immediately; the teardown/switch below sets it
+        // to the final state.
+        syncProvider = SyncSettings.selectedProvider
+        Task { @MainActor in
+            do {
+                switch SharedLibraryMembershipGate.membership {
+                case .owner:
+                    try await SharedLibraryCoordinator.stopSharing()
+                case .participant:
+                    try await SharedLibraryCoordinator.leave(keepCopy: true)
+                case .none:
+                    break
+                }
+            } catch {
+                lastError = error.localizedDescription
+                showError = true
+                return
+            }
+            // Teardown restored the pre-share provider; if the user asked
+            // for a different one, run the normal switch on top.
+            syncProvider = SyncSettings.selectedProvider
+            if target != SyncSettings.selectedProvider {
+                performSwitch(to: target)
+            }
         }
     }
 

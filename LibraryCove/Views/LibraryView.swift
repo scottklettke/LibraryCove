@@ -148,8 +148,11 @@ struct LibraryView: View {
         if query.isEmpty {
             searched = visible
         } else {
-            // Resolve owner names once for the whole filtered set.
-            let namesByID = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0.displayName) })
+            // Resolve owner names once for the whole filtered set. Duplicate
+            // user rows must not be fatal here (search runs on every
+            // keystroke) — the first name wins.
+            var namesByID: [String: String] = [:]
+            for user in users where namesByID[user.id] == nil { namesByID[user.id] = user.displayName }
             let activeName = users.first(where: \.isActive)?.displayName ?? ""
             searched = visible.filter { book in
                 let haystack = [
@@ -469,7 +472,8 @@ struct LibraryView: View {
         let exportBooks = isSelecting ? selectedBooks : displayBooks
         guard !exportBooks.isEmpty else { return }
         isExportingPDF = true
-        let ownerNames = Dictionary(uniqueKeysWithValues: users.map { ($0.id, $0.displayName) })
+        var ownerNames: [String: String] = [:]
+        for user in users where ownerNames[user.id] == nil { ownerNames[user.id] = user.displayName }
         let title = "Library Catalog"
         let filtersNote = Self.exportFiltersNote(
             isSelecting: isSelecting,

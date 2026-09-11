@@ -128,7 +128,9 @@ struct FictionClassifierView: View {
     }
 
     private var booksByID: [String: Book] {
-        Dictionary(uniqueKeysWithValues: books.map { ($0.id, $0) })
+        var out: [String: Book] = [:]
+        for book in books where out[book.id] == nil { out[book.id] = book }
+        return out
     }
 
     private func title(for id: String) -> String? {
@@ -154,7 +156,9 @@ struct FictionClassifierView: View {
             let parsed = try await FictionClassifier.generateProposals(books: books)
             // Merge proposals with their matching books; drop anything that
             // doesn't reference a real unclassified book.
-            let byID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, $0) })
+            let byID = books.reduce(into: [String: Book]()) { dict, book in
+                if dict[book.id] == nil { dict[book.id] = book }
+            }
             var list: [(bookID: String, kind: String)] = []
             for proposal in parsed {
                 guard let kind = proposal.kind, kind.isEmpty == false else { continue }

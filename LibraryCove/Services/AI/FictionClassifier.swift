@@ -103,7 +103,8 @@ enum FictionClassifier {
     /// Only keep proposals that reference real, unclassified books, and never
     /// overwrite a kind the user set by hand (proposals only target unset books).
     static func matching(_ proposals: [BookKindProposal], to books: [Book]) -> [(book: Book, kind: String)] {
-        let byID = Dictionary(uniqueKeysWithValues: books.map { ($0.id, $0) })
+        var byID: [String: Book] = [:]
+        for book in books where byID[book.id] == nil { byID[book.id] = book }
         var out: [(book: Book, kind: String)] = []
         for proposal in proposals {
             guard let kind = proposal.kind, let book = byID[proposal.bookID] else { continue }

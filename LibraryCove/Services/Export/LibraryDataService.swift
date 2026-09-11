@@ -346,8 +346,14 @@ enum LibraryDataService {
     // MARK: - Insertion (relationship rewiring by id)
 
     private static func insert(_ envelope: ExportEnvelope, into context: ModelContext) {
+        // User rows dedupe by id: merge imports can run repeatedly against
+        // the same library, and duplicate ids would trip the
+        // uniqueKeysWithValues dictionaries built from users elsewhere
+        // (search, PDF export) — a fatal crash. First row wins.
+        let existingUsers = (try? context.fetch(FetchDescriptor<User>())) ?? []
+        var knownUserIDs = Set(existingUsers.map(\.id))
         var users: [String: User] = [:]
-        for dto in envelope.users {
+        for dto in envelope.users where !knownUserIDs.contains(dto.id) {
             let user = User(id: dto.id,
                             email: dto.email,
                             displayName: dto.displayName,
@@ -359,7 +365,11 @@ enum LibraryDataService {
                             lastLoginAt: dto.lastLoginAt)
             context.insert(user)
             users[dto.id] = user
+            knownUserIDs.insert(dto.id)
         }
+        // Books may reference users that already exist locally (deduped away
+        // above) — resolve those to the existing rows so relationships wire.
+        for existing in existingUsers where users[existing.id] == nil { users[existing.id] = existing }
 
         var books: [String: Book] = [:]
         for dto in envelope.books {

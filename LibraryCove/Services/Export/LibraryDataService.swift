@@ -313,6 +313,11 @@ enum LibraryDataService {
     /// are the same book, not a distinct copy, so skipping makes a
     /// re-poured snapshot idempotent (a crash mid-pour before the snapshot
     /// is cleared would otherwise double-insert every row on retry).
+    /// Known tradeoff: legacy stores may hold distinct copies that SHARE
+    /// one id (pre-0a55c79 merge bug); for those the id-skip drops the
+    /// target's second row instead of merging content. Accepted — distinct
+    /// copies created since carry distinct UUIDs. If a user ever reports a
+    /// copy missing with MATCHING ids, this is where it went.
     @discardableResult
     static func copyArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)

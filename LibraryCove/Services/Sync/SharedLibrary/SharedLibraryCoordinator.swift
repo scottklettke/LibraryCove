@@ -223,10 +223,9 @@ enum SharedLibraryCoordinator {
     /// (when the mirror has books) and returns the resolved destination.
     /// Fail-safes:
     ///   - mirror export fails → abort (share stays; nothing destroyed).
-    ///   - mirror empty + destination empty → abort (nothing to save; the
-    ///     earlier wipe scenario — shouldn't be reachable).
-    ///   - mirror empty + destination has books → books are already home
-    ///     (a failed share migration left them there); skip the copy.
+    ///   - mirror empty → no copy (merge of nothing is a no-op; teardown
+    ///     proceeds so the user is never stuck in a share they want to
+    ///     leave — including legitimately empty libraries).
     private static func bringBooksHomeAndResolveDestination(keepBooks: Bool) async throws -> HomeDestination {
         let destination = resolveDestination()
         guard keepBooks else {
@@ -240,14 +239,14 @@ enum SharedLibraryCoordinator {
             throw FlowError.snapshotFailed
         }
         let summary = try LibraryDataService.previewArchive(data: data)
-        if summary.books == 0 {
-            let destinationCount = (try? destination.container.mainContext.fetchCount(FetchDescriptor<Book>())) ?? 0
-            guard destinationCount > 0 else {
-                throw FlowError.snapshotFailed
-            }
-            return destination
+        // An empty mirror is fine: with merge semantics, stopping a share of
+        // an empty library (or one whose books are already home) is a no-op
+        // copy followed by teardown — nothing can be lost, so the user is
+        // never stuck in a share they want to leave. Only a FAILED EXPORT
+        // aborts the flow.
+        if summary.books > 0 {
+            try LibraryDataService.mergeArchive(data: data, context: destination.container.mainContext)
         }
-        try LibraryDataService.mergeArchive(data: data, context: destination.container.mainContext)
         return destination
     }
 

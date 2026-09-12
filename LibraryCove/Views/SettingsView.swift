@@ -1120,11 +1120,15 @@ struct SettingsView: View {
 
     private func deleteAllData() {
         isDeleting = true
+        // Clear the LIVE store first: the UI and RootView's login switch
+        // read from Persistence.shared, so the user sees the empty state
+        // (login screen) immediately, without a restart.
+        LibraryDataService.deleteAll(context: modelContext)
         // While sharing, delete-all also ENDS the share (owner: zone and
         // share removed, participants lose access; participant: leaves the
-        // share). Mirror content is deliberately discarded — the user asked
-        // to delete everything. The private store is cleared directly so no
-        // copy survives there either.
+        // share). Then clear the destination private store so no copy
+        // survives there either; discardSharedContent removes the mirror
+        // store file.
         if SharedLibraryMembershipGate.membership != .none {
             Task { @MainActor in
                 do {
@@ -1136,14 +1140,9 @@ struct SettingsView: View {
                     showError = true
                 }
                 isDeleting = false
-                // The active member is gone, so RootView switches to the
-                // login screen — a truly fresh start.
             }
         } else {
-            LibraryDataService.deleteAll(context: modelContext)
             isDeleting = false
-            // The active member is gone, so RootView switches to the login
-            // screen — a truly fresh start.
         }
     }
 }

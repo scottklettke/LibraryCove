@@ -7,7 +7,9 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     let user: User
     @Environment(\.modelContext) private var modelContext
-
+    /// Switches the root TabView to the Library tab (used after Delete
+    /// Library so the user lands on the empty-library page).
+    @Environment(\.openLibraryTab) private var openLibraryTab
     // Export
     @State private var exportURL: URL?
     @State private var isExporting = false
@@ -1206,10 +1208,6 @@ struct SettingsView: View {
         }
     }
 
-    /// "Delete Library": removes books/notes/lists/connections, keeps the
-    /// member profile — the user lands on "Your library is empty" without a
-    /// login detour. While sharing, the share ends first (the content being
-    /// deleted is the shared content).
     private func deleteLibraryData() {
         isDeleting = true
         // Clear the LIVE store first: the UI reads from Persistence.shared,
@@ -1226,9 +1224,12 @@ struct SettingsView: View {
                     showError = true
                 }
                 isDeleting = false
+                // Land the user on the (now empty) Library page.
+                openLibraryTab()
             }
         } else {
             isDeleting = false
+            openLibraryTab()
         }
     }
 

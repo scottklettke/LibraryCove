@@ -169,6 +169,7 @@ struct MainTabView: View {
             .environment(\.openLibraryTab, { selectedTab = .library })
             SettingsView(user: user)
                 .tabItem { Label("Settings", systemImage: "gear") }
+                .environment(\.openLibraryTab, { selectedTab = .library })
                 .tag(AppTab.settings)
         }
     }
@@ -182,7 +183,7 @@ enum AppTab: Hashable {
 }
 
 /// Lets a tab (e.g. "Ask AI") hand the user back to the Library tab.
-private struct OpenLibraryTabKey: EnvironmentKey {
+struct OpenLibraryTabKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 

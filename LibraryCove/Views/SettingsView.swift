@@ -25,6 +25,8 @@ struct SettingsView: View {
 
     // Delete
     @State private var showDeleteLibraryConfirm = false
+    /// Shown when Delete Library is tapped with nothing to delete.
+    @State private var showLibraryAlreadyEmpty = false
     @State private var showDeleteEverythingConfirm = false
     @State private var showDeleteTypeConfirm = false
     @State private var deleteConfirmText = ""
@@ -207,7 +209,13 @@ struct SettingsView: View {
                     .disabled(isImporting)
 
                     Button(role: .destructive) {
-                        showDeleteLibraryConfirm = true
+                        // Nothing to delete: say so instead of showing a
+                        // destructive dialog for content that doesn't exist.
+                        if libraryContentCount == 0 {
+                            showLibraryAlreadyEmpty = true
+                        } else {
+                            showDeleteLibraryConfirm = true
+                        }
                     } label: {
                         Label("Delete Library", systemImage: "trash")
                     }
@@ -403,6 +411,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .alert("Nothing to delete", isPresented: $showLibraryAlreadyEmpty) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your library is already empty — there are no books, notes, reading lists, or connections to delete.")
+            }
             .confirmationDialog(
                 "Delete Library?",
                 isPresented: $showDeleteLibraryConfirm,
@@ -939,6 +952,16 @@ struct SettingsView: View {
             lastError = error.localizedDescription
             showError = true
         }
+    }
+
+    /// Books + notes + reading lists + list items + connections — the exact
+    /// scope of "Delete Library".
+    private var libraryContentCount: Int {
+        ((try? modelContext.fetchCount(FetchDescriptor<Book>())) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<Note>())) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingList>())) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingListItem>())) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<Connection>())) ?? 0)
     }
 
     private func refreshMembers() async {

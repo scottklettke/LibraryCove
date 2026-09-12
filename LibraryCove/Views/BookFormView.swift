@@ -245,16 +245,15 @@ struct BookFormView: View {
         }
         .task {
             // New-add from a catalog: enrich the form with catalog details.
-            if catalog != nil {
+            // A fully-manual entry (blank catalog stub) has nothing to fetch
+            // — skip the network entirely.
+            if catalog != nil, !(catalog?.title.isEmpty ?? true) || catalog?.isbn?.isEmpty == false {
                 await fetchDescription()
             } else if let existing,
                       (existing.bookDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
                 // Editing a book with no description: auto-fill from the catalog.
                 await fetchDescription()
             }
-            // Editing a book that already has a description (incl. an AI-revised
-            // or AI-summarized one) never auto-fetches — doing so would clobber
-            // the stored text with the original catalog description.
         }
         .sheet(isPresented: $showCamera) {
             // Camera first; once a photo is captured the sheet's content swaps

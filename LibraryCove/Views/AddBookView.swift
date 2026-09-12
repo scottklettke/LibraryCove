@@ -39,6 +39,9 @@ struct AddBookView: View {
     @State private var existingIsbns = Set<String>()
     @State private var existingBookNames = [String: String]()
     @State private var showScanReview = false
+    /// Set when the user picks "Add manually" — presents the book form on a
+    /// blank catalog stub.
+    @State private var manualEntry: CatalogBook?
     @State private var searchHistory: [String] = loadSearchHistory()
     @StateObject private var scanQueue = ScanQueueStore.shared
 
@@ -82,18 +85,27 @@ struct AddBookView: View {
             .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
                     Button {
                         showScanner = true
                     } label: {
                         Label("Scan ISBN", systemImage: "barcode.viewfinder")
                     }
-                    if !selectedIDs.isEmpty {
-                        Button("Add selected (\(selectedIDs.count))") {
-                            startImportFlow()
-                        }
+                    Button {
+                        manualEntry = CatalogBook.manualEntry()
+                    } label: {
+                        Label("Add manually", systemImage: "square.and.pencil")
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus.circle")
+                }
+                if !selectedIDs.isEmpty {
+                    Button("Add selected (\(selectedIDs.count))") {
+                        startImportFlow()
                     }
                 }
             }
+        }
             .fullScreenCover(isPresented: $showScanner) {
                 ScannerFlow(existingIsbns: existingIsbns, existingBookNames: existingBookNames, onFinished: {
                     showScanner = false
@@ -110,11 +122,14 @@ struct AddBookView: View {
                     dismiss()
                 })
             }
-            .sheet(isPresented: $showScanReview) {
-                ScanQueueReviewListView(onAllImported: {
-                    showScanReview = false
-                    dismiss()
-                })
+            .sheet(item: $manualEntry, onDismiss: { buildExistingSet() }) { stub in
+                NavigationStack {
+                    BookFormView(catalog: stub, existing: nil, onSaved: {
+                        buildExistingSet()
+                    }, dismissOnSave: true)
+                    .navigationTitle("Add a book")
+                    .navigationBarTitleDisplayMode(.inline)
+                }
             }
             .onAppear {
                 buildExistingSet()
@@ -195,6 +210,20 @@ struct AddBookView: View {
                                 }
                             }
                         }
+                    }
+                    Section {
+                        Button {
+                            manualEntry = CatalogBook.manualEntry()
+                        } label: {
+                            HStack {
+                                Image(systemName: "square.and.pencil")
+                                    .foregroundStyle(.blue)
+                                Text("Add manually")
+                                Spacer()
+                            }
+                        }
+                    } footer: {
+                        Text("Add a book by typing its details yourself — no ISBN or catalog search needed.")
                     }
                 } else {
                     ForEach(results) { result in

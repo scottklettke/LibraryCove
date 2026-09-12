@@ -59,6 +59,24 @@ struct CatalogBook: Identifiable, Sendable, Equatable, Hashable, Codable {
                            descriptionSource: nil,
                            source: "manual")
     }
+
+    /// A blank entry for fully-manual adds (no ISBN known). The id is a
+    /// fresh UUID so multiple manual entries never collide.
+    static func manualEntry() -> CatalogBook {
+        CatalogBook(id: "manual-\(UUID().uuidString)",
+                    title: "",
+                    authors: [],
+                    isbn: nil,
+                    publicationYear: nil,
+                    tags: [],
+                    publisher: nil,
+                    pageCount: nil,
+                    description: nil,
+                    language: nil,
+                    coverURLs: [],
+                    descriptionSource: nil,
+                    source: "manual")
+    }
 }
 
 /// Where a book description should be fetched from.

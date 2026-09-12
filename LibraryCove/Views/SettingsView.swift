@@ -983,12 +983,11 @@ struct SettingsView: View {
                                           lastLoginAt: active.lastLoginAt))
                 try? targetContext.save()
             }
-            // 4) Point the app at the new store — hot swap, no restart.
+            // 4) Point the app at the new store — hot swap, no restart, no
+            // popup: the picker and Status row already reflect the change.
             SyncSettings.selectedProvider = new
             Persistence.swapShared(to: targetContainer)
             syncProvider = new
-            lastResult = "Now syncing via \(new.displayName)."
-            showResult = true
         }
     }
 

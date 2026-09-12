@@ -156,25 +156,26 @@ struct BackupsView: View {
         }
     }
 
-    /// Backups grouped by the provider whose set they belong to, live set
-    /// first, then the parked companion sets.
-    private var groupedBackups: [(origin: LibrarySync, items: [BackupStore.Item])] {
-        var order: [LibrarySync] = [SyncSettings.selectedProvider]
-        if SyncSettings.selectedProvider != .localOnly { order.append(.localOnly) }
-        if SyncSettings.selectedProvider != .iCloud { order.append(.iCloud) }
-        return order.compactMap { origin in
-            let items = backups.filter { $0.origin == origin }
-            return items.isEmpty ? nil : (origin, items)
-        }
-    }
-
     private var backupListSection: some View {
         Section {
             if backups.isEmpty {
                 Text("No backups yet. Create one above — it's a good idea before deleting the library or importing.")
             } else {
-                ForEach(groupedBackups, id: \.origin) { group in
-                    backupGroupSection(group)
+                ForEach(backups) { backup in
+                    NavigationLink {
+                        BackupDetailView(backup: backup) {
+                            reload()
+                        }
+                    } label: {
+                        backupRowLabel(backup)
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            backupToDelete = backup
+                        } label: {
+                            Label("Delete backup", systemImage: "trash")
+                        }
+                    }
                 }
             }
         } header: {
@@ -182,37 +183,10 @@ struct BackupsView: View {
         }
     }
 
-    @ViewBuilder
-    private func backupGroupSection(_ group: (origin: LibrarySync, items: [BackupStore.Item])) -> some View {
-        let isCurrent = group.origin == SyncSettings.selectedProvider
-        Section {
-            ForEach(group.items) { backup in
-                NavigationLink {
-                    BackupDetailView(backup: backup) {
-                        reload()
-                    }
-                } label: {
-                    backupRowLabel(backup)
-                }
-                .contextMenu {
-                    Button(role: .destructive) {
-                        backupToDelete = backup
-                    } label: {
-                        Label("Delete backup", systemImage: "trash")
-                    }
-                }
-            }
-        } header: {
-            Text(isCurrent
-                 ? "Current backups — " + group.origin.displayName
-                 : "Backups from " + group.origin.displayName)
-        }
-    }
-
     private func backupRowLabel(_ backup: BackupStore.Item) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(backup.name)
+                Text("\(backup.name) (\(backup.origin.displayName))")
                     .font(.body)
                     .lineLimit(2)
                 Text(backup.sizeText)

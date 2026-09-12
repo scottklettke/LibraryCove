@@ -398,6 +398,9 @@ struct ImportPreviewView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
+            // A replace import tears down the active share and wipes the
+            // library — swiping the sheet away mid-run must not be possible.
+            .interactiveDismissDisabled(isImporting)
             .task {
                 loadPreview()
             }

@@ -1186,7 +1186,18 @@ struct SettingsView: View {
                 } else {
                     context = modelContext
                 }
+                // The user's chosen profile name survives a replace import:
+                // capture it, import (the archive's own members are
+                // installed, including its identity), then re-apply the
+                // name to every member row so the greeting/profile stays
+                // the user's.
+                let chosenName = user.displayName
                 let summary = try LibraryDataService.importArchive(data: pendingImportData, context: context)
+                let members = (try? context.fetch(FetchDescriptor<User>())) ?? []
+                for member in members where member.displayName != chosenName {
+                    member.displayName = chosenName
+                }
+                if !members.isEmpty { try? context.save() }
                 finishImport(summary, note: nil)
             } catch {
                 finishImport(nil, note: error.localizedDescription)

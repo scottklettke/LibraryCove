@@ -925,16 +925,15 @@ struct LibraryView: View {
         .accessibilityIdentifier("modePicker")
     }
 
-    /// "Hi, Scott" — the first word of the active member's display name
-    /// (the `user` instance passed from RootView — the same object Settings
-    /// renames). Falls back to a plain greeting when no name is resolvable.
+    /// "Hi, Scott J" — the active member's full display name (the `user`
+    /// instance passed from RootView — the same object Settings renames).
+    /// Falls back to a plain greeting when no name is resolvable.
     private var greetingText: String {
         let name = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
             return "Your library is empty"
         }
-        let firstName = name.split(separator: " ").first.map(String.init) ?? name
-        return "Hi, \(firstName)"
+        return "Hi, \(name)"
     }
 
     // MARK: - Grid

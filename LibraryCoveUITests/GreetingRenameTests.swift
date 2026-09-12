@@ -30,13 +30,13 @@ final class GreetingRenameTests: XCTestCase {
         let profileField = app.textFields.firstMatch
         XCTAssertTrue(profileField.waitForExistence(timeout: 8), "profile field missing")
         profileField.clearText(in: app)
-        profileField.typeText("Bob")
+        profileField.typeText("Bob Marley")
         if app.keyboards.count > 0 {
             app.keyboards.buttons["Return"].tap()
         }
 
         app.tabBars.buttons["Library"].tap()
-        let updated = app.staticTexts["Hi, Bob"]
+        let updated = app.staticTexts["Hi, Bob Marley"]
         if !updated.waitForExistence(timeout: 8) {
             let texts = app.staticTexts.allElementsBoundByIndex.prefix(12).map(\.label)
             XCTFail("greeting did not update after rename; visible texts: \(texts)")

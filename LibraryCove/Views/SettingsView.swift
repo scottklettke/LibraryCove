@@ -491,65 +491,15 @@ struct SettingsView: View {
         isSwitchingSync = true
         Task { @MainActor in
             defer { isSwitchingSync = false }
-            // 1) Snapshot the live library (zip keeps cover files).
-            guard let snapshot = await LibraryDataService.export(context: modelContext) else {
-                syncProvider = SyncSettings.selectedProvider
-                lastError = "Couldn't prepare your library for the switch. Nothing changed."
-                showError = true
-                return
-            }
-            // 2) Open the target store and import the snapshot into it.
-            let schema = Schema([
-                Book.self, Note.self, ReadingList.self,
-                ReadingListItem.self, Connection.self, User.self,
-            ])
-            let targetContainer = SyncStoreRegistry.makeContainer(for: new)
             do {
-                // MERGE, not replace: the target store may be CloudKit-
-                // backed, and deleteAll + re-insert floods it with new
-                // records while the old ones sync back down — duplicating
-                // the library on every switch. Merge keeps existing rows
-                // (matching by normalized ISBN, else title+authors) and
-                // adds only what's missing.
-                try LibraryDataService.mergeArchive(data: snapshot,
-                                                    context: ModelContext(targetContainer))
+                try await ProviderSwitcher.perform(to: new)
+                syncProvider = new
             } catch {
+                // Nothing changed (the switcher rolls back atomically).
                 syncProvider = SyncSettings.selectedProvider
                 lastError = "Couldn't move your library to the new store. Nothing changed."
                 showError = true
-                return
             }
-            // 3) Guarantee an active member in the target store. The login
-            // gate shows whenever no active User row exists — and a
-            // CloudKit-backed target may not have mirrored its User rows
-            // down yet at switch time (or a previous local wipe removed
-            // them). Carry the currently-active user over explicitly.
-            let targetContext = ModelContext(targetContainer)
-            let hasActiveUser = ((try? targetContext.fetchCount(
-                FetchDescriptor<User>(predicate: #Predicate { $0.isActive }))) ?? 0) > 0
-            if !hasActiveUser {
-                // SettingsView receives the active user; carry it over.
-                let active = self.user
-                targetContext.insert(User(id: active.id,
-                                          email: active.email,
-                                          displayName: active.displayName,
-                                          avatarURL: active.avatarURL,
-                                          timezone: active.timezone,
-                                          language: active.language,
-                                          isActive: true,
-                                          createdAt: active.createdAt,
-                                          lastLoginAt: active.lastLoginAt))
-                try? targetContext.save()
-            }
-            // 4) Point the app at the new store — hot swap, no restart, no
-            // popup: the picker and Status row already reflect the change.
-            // Backups move too, but only now that every fallible step
-            // (snapshot, merge, member carry) succeeded — a merge failure
-            // rolls back with the library's backup sets untouched.
-            BackupStore.mirrorForProviderSwitch(to: new)
-            SyncSettings.selectedProvider = new
-            Persistence.swapShared(to: targetContainer)
-            syncProvider = new
         }
     }
 

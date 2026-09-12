@@ -54,8 +54,7 @@ struct BackupsView: View {
         )) { payload in
             ImportPreviewView(
                 archiveData: payload.data,
-                sourceName: payload.name,
-                modelContext: modelContext
+                sourceName: payload.name
             ) { message in
                 lastResult = message
                 showResult = true
@@ -153,39 +152,69 @@ struct BackupsView: View {
         }
     }
 
+    /// Backups grouped by the provider whose set they belong to, live set
+    /// first, then the parked companion sets.
+    private var groupedBackups: [(origin: LibrarySync, items: [BackupStore.Item])] {
+        var order: [LibrarySync] = [SyncSettings.selectedProvider]
+        if SyncSettings.selectedProvider != .localOnly { order.append(.localOnly) }
+        if SyncSettings.selectedProvider != .iCloud { order.append(.iCloud) }
+        return order.compactMap { origin in
+            let items = backups.filter { $0.origin == origin }
+            return items.isEmpty ? nil : (origin, items)
+        }
+    }
+
     private var backupListSection: some View {
         Section {
             if backups.isEmpty {
                 Text("No backups yet. Create one above — it's a good idea before deleting the library or importing.")
             } else {
-                ForEach(backups) { backup in
-                    NavigationLink {
-                        BackupDetailView(backup: backup, modelContext: modelContext) {
-                            reload()
-                        }
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(backup.name)
-                                    .font(.body)
-                                    .lineLimit(2)
-                                Text(backup.sizeText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            backupToDelete = backup
-                        } label: {
-                            Label("Delete backup", systemImage: "trash")
-                        }
-                    }
+                ForEach(groupedBackups, id: \.origin) { group in
+                    backupGroupSection(group)
                 }
             }
         } header: {
             Text("Existing backups (\(backups.count))")
+        }
+    }
+
+    @ViewBuilder
+    private func backupGroupSection(_ group: (origin: LibrarySync, items: [BackupStore.Item])) -> some View {
+        let isCurrent = group.origin == SyncSettings.selectedProvider
+        Section {
+            ForEach(group.items) { backup in
+                NavigationLink {
+                    BackupDetailView(backup: backup) {
+                        reload()
+                    }
+                } label: {
+                    backupRowLabel(backup)
+                }
+                .contextMenu {
+                    Button(role: .destructive) {
+                        backupToDelete = backup
+                    } label: {
+                        Label("Delete backup", systemImage: "trash")
+                    }
+                }
+            }
+        } header: {
+            Text(isCurrent
+                 ? "Current backups — " + group.origin.displayName
+                 : "Backups from " + group.origin.displayName)
+        }
+    }
+
+    private func backupRowLabel(_ backup: BackupStore.Item) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(backup.name)
+                    .font(.body)
+                    .lineLimit(2)
+                Text(backup.sizeText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -226,19 +255,23 @@ struct BackupsView: View {
     // MARK: - Actions
 
     private func reload() {
-        backups = BackupStore.list()
+        backups = BackupStore.listAll()
     }
 
     private func createBackup() {
         isBackingUp = true
         Task { @MainActor in
             defer { isBackingUp = false }
-            guard let data = await LibraryDataService.export(context: modelContext) else {
+            // Resolve the live store at execution time: a restore-with-switch
+            // hot-swaps the container mid-session, and a captured environment
+            // context would then point at the outgoing store.
+            let liveContext = Persistence.shared.mainContext
+            guard let data = await LibraryDataService.export(context: liveContext) else {
                 lastError = LibraryDataError.exportFailed.errorDescription
                 showError = true
                 return
             }
-            let count = (try? modelContext.fetchCount(FetchDescriptor<Book>())) ?? 0
+            let count = (try? liveContext.fetchCount(FetchDescriptor<Book>())) ?? 0
             do {
                 let name = try BackupStore.save(data: data, bookCount: count)
                 lastResult = "Backup “\(name)” created."
@@ -255,7 +288,7 @@ struct BackupsView: View {
         isExporting = true
         Task { @MainActor in
             defer { isExporting = false }
-            guard let data = await LibraryDataService.export(context: modelContext) else {
+            guard let data = await LibraryDataService.export(context: Persistence.shared.mainContext) else {
                 lastError = LibraryDataError.exportFailed.errorDescription
                 showError = true
                 return
@@ -320,7 +353,6 @@ import SwiftData
 struct ImportPreviewView: View {
     let archiveData: Data
     let sourceName: String
-    let modelContext: ModelContext
     /// Called after a successful import so the presenter can refresh.
     var onImported: (_ message: String) -> Void = { _ in }
 
@@ -442,7 +474,10 @@ struct ImportPreviewView: View {
         isImporting = true
         Task { @MainActor in
             do {
-                let added = try LibraryDataService.mergeArchive(data: archiveData, context: modelContext)
+                // Resolve the live store at execution time: a restore can
+                // switch providers before importing, and the injected
+                // environment context would then point at the old store.
+                let added = try LibraryDataService.mergeArchive(data: archiveData, context: Persistence.shared.mainContext)
                 let skipped = (summary?.books ?? 0) - added.books
                 let note: String? = skipped > 0 ? " Skipped \(skipped) already in your library." : nil
                 finishImport(added, note: note)
@@ -465,7 +500,7 @@ struct ImportPreviewView: View {
                     try await SharedLibraryCoordinator.discardSharedContent()
                     context = try SharedLibraryCoordinator.privateContextAfterDiscard()
                 } else {
-                    context = modelContext
+                    context = Persistence.shared.mainContext
                 }
                 // The user's chosen profile name survives a replace import:
                 // capture it, import (the archive's own members are

@@ -22,17 +22,22 @@ enum BackupStore {
         let name: String
         let size: Int64
         let date: Date
-        var id: String { name }
+        /// The provider this backup set lives under: the live folder's
+        /// contents belong to the current provider; the parked companions
+        /// hold the other provider's set. Drives "Restore & switch" — a
+        /// backup made under iCloud can carry the user back to iCloud Sync.
+        let origin: LibrarySync
+        var id: String { origin.rawValue + "/" + name }
         var sizeText: String {
             ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         }
     }
 
-    /// All backups, newest first.
-    static func list() -> [Item] {
+    /// Backups in one directory, newest first.
+    private static func list(_ dir: URL, origin: LibrarySync) -> [Item] {
         let fm = FileManager.default
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        let contents = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let contents = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
         return contents
             .filter { $0.pathExtension == "zip" }
             .map { url in
@@ -40,9 +45,34 @@ enum BackupStore {
                 return Item(url: url,
                             name: url.deletingPathExtension().lastPathComponent,
                             size: Int64(values?.fileSize ?? 0),
-                            date: values?.contentModificationDate ?? Date.distantPast)
+                            date: values?.contentModificationDate ?? Date.distantPast,
+                            origin: origin)
             }
             .sorted { $0.date > $1.date }
+    }
+
+    /// The provider KIND the live backup set belongs to. While a shared
+    /// library is active the live set belongs to the shared mirror (not a
+    /// switchable provider), so it's tagged under the user's local/iCloud
+    /// kind — restore-with-switch must never route through the shared state.
+    private static var liveOrigin: LibrarySync {
+        SyncSettings.selectedProvider == .iCloud ? .iCloud : .localOnly
+    }
+
+    /// Backups of the CURRENT provider's set (the live `Backups` folder),
+    /// newest first.
+    static func list() -> [Item] {
+        list(directory, origin: liveOrigin)
+    }
+
+    /// Every backup on the device across all backup sets: the current
+    /// provider's live folder plus both parked companions (Local only /
+    /// iCloud Sync), each tagged with its origin, newest first overall.
+    static func listAll() -> [Item] {
+        var items = list(directory, origin: liveOrigin)
+        items += list(localBackupDirectory, origin: .localOnly)
+        items += list(cloudBackupDirectory, origin: .iCloud)
+        return items.sorted { $0.date > $1.date }
     }
 
     /// Saves `data` as a backup named by today's date, the book count, and a

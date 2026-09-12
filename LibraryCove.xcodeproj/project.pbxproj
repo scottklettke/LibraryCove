@@ -44,6 +44,7 @@
 		64AA32DA2F8F2D21220EC6B3 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA8F1D81A354EF33EDF40841 /* Persistence.swift */; };
 		6536D73E660E13DF24F4256F /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE34E9552373F09A16F784A /* AIModels.swift */; };
 		67374DB984295CE6881B89EE /* LibraryCoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C947C02C0CACC2809FB34C /* LibraryCoveApp.swift */; };
+		68228A44B582DE42CDBEC915 /* ProviderSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B83BE27057A2D7D5510732D /* ProviderSwitcher.swift */; };
 		687FA0D8F238AD7269653F59 /* BookDateRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */; };
 		69AB41ABD1AF3A18FBE7C5F0 /* BookFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420CC7481F27D37D90912C4A /* BookFormView.swift */; };
 		6A80E115A00F2B1F56DF5FDE /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293D31F3988AD1CD6BE3398B /* OpenAICompatibleProvider.swift */; };
@@ -135,6 +136,7 @@
 		57AA09FBA363FDDCE982E523 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
 		58C947C02C0CACC2809FB34C /* LibraryCoveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoveApp.swift; sourceTree = "<group>"; };
 		59D7FF358C6E993C9532C22D /* LibraryPDFExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryPDFExport.swift; sourceTree = "<group>"; };
+		5B83BE27057A2D7D5510732D /* ProviderSwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSwitcher.swift; sourceTree = "<group>"; };
 		5C938D002EF97DE5DEC8EACE /* SyncProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProvider.swift; sourceTree = "<group>"; };
 		5C9A9AD04A8389EB7D1C1C30 /* BackupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupStore.swift; sourceTree = "<group>"; };
 		5E1C6D16E83835E543DF54F2 /* MANUAL-TESTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "MANUAL-TESTING.md"; sourceTree = "<group>"; };
@@ -277,6 +279,7 @@
 			isa = PBXGroup;
 			children = (
 				F71D73D6B03EFC6FD3FA58B0 /* LibrarySync.swift */,
+				5B83BE27057A2D7D5510732D /* ProviderSwitcher.swift */,
 				C29BC837621AF27DC2775241 /* SyncCoordinator.swift */,
 				5C938D002EF97DE5DEC8EACE /* SyncProvider.swift */,
 				EF52B777835B4B62203D509E /* SyncSettings.swift */,
@@ -641,6 +644,7 @@
 				6A80E115A00F2B1F56DF5FDE /* OpenAICompatibleProvider.swift in Sources */,
 				64AA32DA2F8F2D21220EC6B3 /* Persistence.swift in Sources */,
 				BA8DF5DFEF3C5CD61085B02E /* PhotoCropView.swift in Sources */,
+				68228A44B582DE42CDBEC915 /* ProviderSwitcher.swift in Sources */,
 				D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */,
 				F90715CC5CA30B3EB8E4ED1C /* RootView.swift in Sources */,
 				7641284B6EC5A7F64408529A /* ScanQueueStore.swift in Sources */,

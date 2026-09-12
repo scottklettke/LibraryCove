@@ -877,7 +877,10 @@ struct LibraryView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .accessibilityIdentifier("brandMarkEmpty")
                             .accessibilityLabel("LibraryCove")
+                        Text(greetingText)
+                            .font(.title2.bold())
                         Text("Your library is empty")
+                            .font(.body)
                     }
                 } description: {
                     Text("Add your first book from the catalog or scan an ISBN.")
@@ -913,6 +916,18 @@ struct LibraryView: View {
         .pickerStyle(.menu)
         .fixedSize()
         .accessibilityIdentifier("modePicker")
+    }
+
+    /// "Hi, Scott" — the first word of the active member's display name.
+    /// Falls back to a plain greeting when no member is resolvable.
+    private var greetingText: String {
+        guard let name = users.first(where: \.isActive)?.displayName
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !name.isEmpty else {
+            return "Your library is empty"
+        }
+        let firstName = name.split(separator: " ").first.map(String.init) ?? name
+        return "Hi, \(firstName)"
     }
 
     // MARK: - Grid

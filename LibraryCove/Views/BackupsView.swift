@@ -183,10 +183,16 @@ struct BackupsView: View {
         }
     }
 
+    /// Inline provider tag after a backup's name — the user's wording:
+    /// "(Local)" rather than the picker's "Local only".
+    private func originTag(_ origin: LibrarySync) -> String {
+        origin == .localOnly ? "Local" : origin.displayName
+    }
+
     private func backupRowLabel(_ backup: BackupStore.Item) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(backup.name) (\(backup.origin.displayName))")
+                Text("\(backup.name) (\(originTag(backup.origin)))")
                     .font(.body)
                     .lineLimit(2)
                 Text(backup.sizeText)

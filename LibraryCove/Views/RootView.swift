@@ -38,6 +38,10 @@ struct RootView: View {
             // Pour a provider-switch snapshot into the fresh store so the
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
+            // CloudKit stores can deliver older identity records alongside
+            // the current one; keep exactly one active member so the login
+            // gate and greeting resolve deterministically.
+            SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: modelContext)
             // Clear sharing state orphaned by older builds (provider switched
             // away without tearing the share down) — otherwise Settings
             // shows Share Library controls under Local only.

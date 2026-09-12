@@ -285,6 +285,27 @@ extension SharedLibraryCoordinator {
         }
         SharedLibrarySettings.reset()
     }
+
+    /// Deactivates duplicate ACTIVE members: CloudKit stores can hold older
+    /// identity records, and mirroring delivers them alongside the current
+    /// one — multiple isActive rows make "first(where: \.isActive)"
+    /// nondeterministic across views. The newest row (by lastLoginAt, then
+    /// createdAt) stays active; the rest are marked inactive (never
+    /// deleted — they may hold "Added by" history).
+    static func repairDuplicateActiveMembersIfNeeded(context: ModelContext) {
+        let all = (try? context.fetch(FetchDescriptor<User>())) ?? []
+        let active = all.filter(\.isActive)
+        guard active.count > 1 else { return }
+        let sorted = active.sorted { lhs, rhs in
+            let l = lhs.lastLoginAt ?? lhs.createdAt
+            let r = rhs.lastLoginAt ?? rhs.createdAt
+            return l > r
+        }
+        for stale in sorted.dropFirst() {
+            stale.isActive = false
+        }
+        try? context.save()
+    }
 }
 
 enum SyncLibraryHandoff {

@@ -18,6 +18,7 @@
 		13816A00FBC090525B76F612 /* SharedLibraryMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43D6E17D5675CDD7C76A052 /* SharedLibraryMirror.swift */; };
 		154AC76B4EF91DB6A7EAC5F3 /* LibraryContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06E540D41058875FF285F9 /* LibraryContext.swift */; };
 		15CCFF7D779DD928E43019F0 /* WebSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE81543984D7068E79C68613 /* WebSearch.swift */; };
+		1E7AC6132CAF0D31BFA425E2 /* GreetingRenameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3648AC227DE66F1955A2954 /* GreetingRenameTests.swift */; };
 		1F938106147677D56A0E4692 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63692AC5935AA581F65A494E /* AuthService.swift */; };
 		218A1C024D2299D73924C5BA /* CoverImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613A860A534A8684B30EA259 /* CoverImageStore.swift */; };
 		2258029820ED360F7ED9EB0A /* AppleIntelligenceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A1E789F05B1CE6BEF28BAE /* AppleIntelligenceProvider.swift */; };
@@ -159,6 +160,7 @@
 		A38C4C27CCDAE0A942651A19 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FictionClassifier.swift; sourceTree = "<group>"; };
 		B1F68A46FAA41AC80D5C0E10 /* ISBNScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISBNScannerView.swift; sourceTree = "<group>"; };
+		B3648AC227DE66F1955A2954 /* GreetingRenameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreetingRenameTests.swift; sourceTree = "<group>"; };
 		B75CBF3F8BA0D3FA87E87611 /* AITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AITests.swift; sourceTree = "<group>"; };
 		BC9A41FBBC13349A8560B10A /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
@@ -421,6 +423,7 @@
 		FEFD7A78554311F7F208F23E /* LibraryCoveUITests */ = {
 			isa = PBXGroup;
 			children = (
+				B3648AC227DE66F1955A2954 /* GreetingRenameTests.swift */,
 				6CC5909E8FACB6C9C6B85631 /* LibraryCoveUITests.swift */,
 			);
 			path = LibraryCoveUITests;
@@ -541,6 +544,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1E7AC6132CAF0D31BFA425E2 /* GreetingRenameTests.swift in Sources */,
 				AB9642FF9D4FEB12D157230E /* LibraryCoveUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

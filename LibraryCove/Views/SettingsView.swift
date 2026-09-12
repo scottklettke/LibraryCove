@@ -169,7 +169,14 @@ struct SettingsView: View {
                                   text: Binding(get: { user.displayName },
                                                 set: { newValue in
                                                     let oldName = user.displayName
-                                                    user.displayName = newValue
+                                                    // A rename applies to EVERY User
+                                                    // row: CloudKit stores may hold
+                                                    // older identity records for the
+                                                    // same person, and mirroring would
+                                                    // otherwise clobber the renamed
+                                                    // row with a stale name.
+                                                    let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
+                                                    for row in allUsers { row.displayName = newValue }
                                                     // Persist immediately so the
                                                     // empty-page greeting follows
                                                     // the rename.

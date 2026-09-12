@@ -56,40 +56,52 @@ final class BarcodeScannerViewController: UIViewController, AVCaptureMetadataOut
         stop()
     }
 
+    /// Serial queue owning all blocking AVCaptureSession calls
+    /// (configuration + start/stop). `startRunning()`/`stopRunning()` block
+    /// the calling thread — on the main thread they can freeze the UI for
+    /// seconds or deadlock with a cold camera subsystem.
+    private let sessionQueue = DispatchQueue(label: "com.librarycove.scanner.session", qos: .userInitiated)
+
     func stop() {
-        if captureSession?.isRunning == true {
-            captureSession?.stopRunning()
+        if let session = captureSession, session.isRunning {
+            sessionQueue.async { session.stopRunning() }
         }
     }
 
     func reset() {
         didDetect = false
-        if captureSession?.isRunning != true {
-            captureSession?.startRunning()
+        if let session = captureSession, !session.isRunning {
+            sessionQueue.async { session.startRunning() }
         }
     }
 
     private func setupCamera() {
         let session = AVCaptureSession()
         session.sessionPreset = .high
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .back),
-              let input = try? AVCaptureDeviceInput(device: device) else {
-            return
-        }
-        session.addInput(input)
-
-        let output = AVCaptureMetadataOutput()
-        session.addOutput(output)
-        output.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-        output.metadataObjectTypes = [.ean13, .upce, .ean8, .code39]
-
+        // The preview layer must be created on the main thread (UI) and can
+        // attach before the session starts running.
         let previewLayer = AVCaptureVideoPreviewLayer(session: session)
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
         self.previewLayer = previewLayer
 
-        session.startRunning()
-        self.captureSession = session
+        sessionQueue.async { [weak self] in
+            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: AVMediaType.video, position: .back),
+                  let input = try? AVCaptureDeviceInput(device: device) else {
+                return
+            }
+            session.beginConfiguration()
+            session.addInput(input)
+            let output = AVCaptureMetadataOutput()
+            session.addOutput(output)
+            output.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
+            output.metadataObjectTypes = [.ean13, .upce, .ean8, .code39]
+            session.commitConfiguration()
+            session.startRunning()
+            DispatchQueue.main.async {
+                self?.captureSession = session
+            }
+        }
     }
 
     func metadataOutput(_ output: AVCaptureMetadataOutput,

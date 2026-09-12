@@ -227,7 +227,7 @@ struct SettingsView: View {
             .onChange(of: searchEngine) { _, newValue in
                 WebSearchEngine.selected = newValue
             }
-            .alert("Import complete", isPresented: $showResult) {
+            .alert("Done", isPresented: $showResult) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(lastResult ?? "")

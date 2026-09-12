@@ -45,15 +45,17 @@ final class ShareAcceptSceneDelegate: NSObject, UIWindowSceneDelegate {
 @main
 struct LibraryCoveApp: App {
     @UIApplicationDelegateAdaptor(ShareAcceptDelegate.self) private var shareAcceptDelegate
-    let container: ModelContainer
-
-    init() {
-        container = Persistence.shared
-    }
+    // @State so SwiftUI re-renders the scene when the store is hot-swapped
+    // after a sync-provider switch (Persistence.swapShared posts
+    // .syncStoreSwapped; the onReceive below picks up the new container).
+    @State private var container: ModelContainer = Persistence.shared
 
     var body: some Scene {
         WindowGroup {
             RootView()
+                .onReceive(NotificationCenter.default.publisher(for: Persistence.storeSwappedNotification)) { _ in
+                    container = Persistence.shared
+                }
         }
         .modelContainer(container)
     }

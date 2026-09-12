@@ -1,6 +1,6 @@
-import CloudKit
 import SwiftUI
 import SwiftData
+import CloudKit
 import UniformTypeIdentifiers
 
 /// Settings screen: profile, library data (export/import/delete), sync and AI.
@@ -37,7 +37,6 @@ struct SettingsView: View {
     /// A provider change while a share is active — held for the
     /// "this stops sharing" confirmation before it is applied.
     @State private var pendingProviderChange: LibrarySync?
-    @State private var showSyncRestartNotice = false
 
     // Shared library
     @State private var isPreparingShare = false
@@ -480,11 +479,6 @@ struct SettingsView: View {
             .onChange(of: searchEngine) { _, newValue in
                 WebSearchEngine.selected = newValue
             }
-            .alert("Restart to apply", isPresented: $showSyncRestartNotice) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Your library was captured. Quit and reopen LibraryCove to start using \(syncProvider.displayName); your data will be moved to that store when it relaunches.")
-            }
             .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [zipType]) { result in
                 handleFilePicker(result)
             }
@@ -902,7 +896,8 @@ struct SettingsView: View {
         defer { isPreparingShare = false }
         do {
             try await SharedLibraryCoordinator.stopSharing()
-            showSyncRestartNotice = true
+            lastResult = "Sharing stopped. Your books are back in your private library."
+            showResult = true
         } catch {
             lastError = error.localizedDescription
             showError = true
@@ -914,7 +909,10 @@ struct SettingsView: View {
         defer { isPreparingShare = false }
         do {
             try await SharedLibraryCoordinator.leave(keepCopy: keepCopy)
-            showSyncRestartNotice = true
+            lastResult = keepCopy
+                ? "You left the shared library. A copy of the shared books was added to your library."
+                : "You left the shared library."
+            showResult = true
         } catch {
             lastError = error.localizedDescription
             showError = true
@@ -951,17 +949,34 @@ struct SettingsView: View {
         isSwitchingSync = true
         Task { @MainActor in
             defer { isSwitchingSync = false }
-            // Snapshot the current library (zip keeps cover files) so the data
-            // moves into the target provider's store on relaunch.
-            guard let snapshot = await LibraryDataService.export(context: modelContext),
-                  SyncSettings.writeSnapshot(snapshot) else {
+            // 1) Snapshot the live library (zip keeps cover files).
+            guard let snapshot = await LibraryDataService.export(context: modelContext) else {
                 syncProvider = SyncSettings.selectedProvider
                 lastError = "Couldn't prepare your library for the switch. Nothing changed."
                 showError = true
                 return
             }
+            // 2) Open the target store and import the snapshot into it.
+            let schema = Schema([
+                Book.self, Note.self, ReadingList.self,
+                ReadingListItem.self, Connection.self, User.self,
+            ])
+            let targetContainer = SyncStoreRegistry.makeContainer(for: new)
+            do {
+                try LibraryDataService.importArchive(data: snapshot,
+                                                     context: ModelContext(targetContainer))
+            } catch {
+                syncProvider = SyncSettings.selectedProvider
+                lastError = "Couldn't move your library to the new store. Nothing changed."
+                showError = true
+                return
+            }
+            // 3) Point the app at the new store — hot swap, no restart.
             SyncSettings.selectedProvider = new
-            showSyncRestartNotice = true
+            Persistence.swapShared(to: targetContainer)
+            syncProvider = new
+            lastResult = "Now syncing via \(new.displayName)."
+            showResult = true
         }
     }
 

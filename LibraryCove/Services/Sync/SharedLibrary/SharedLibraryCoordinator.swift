@@ -107,32 +107,32 @@ enum SharedLibraryCoordinator {
     // MARK: - Leaving / stopping
 
     /// Participant leaves. `keepCopy` first MERGES the mirror content into
-    /// the private store (dedup-insert — never wipes the participant's own
-    /// books), then removes the user from the share. Relaunch returns to the
-    /// pre-sharing provider.
+    /// the destination private store (dedup-insert — never wipes the
+    /// participant's own books), then removes the user from the share. The
+    /// destination container is hot-swapped into the running app — no
+    /// restart needed.
     static func leave(keepCopy: Bool) async throws {
-        if keepCopy {
-            try await moveMirrorContentIntoPrivateStore(mode: .merge)
-        }
+        let destination = try await bringBooksHomeAndResolveDestination(keepBooks: keepCopy)
         try await SharedLibraryEngine.shared.leaveAsParticipant()
-        try await restorePreviousProvider()
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+        Persistence.swapShared(to: destination.container)
+        SyncSettings.selectedProvider = destination.kind
+        SharedLibrarySettings.previousProvider = nil
     }
 
     /// Owner stops sharing: everyone loses access to the share. The owner's
-    /// data comes back via MERGE (dedup-insert — never wipes the private
-    /// store), not replace: a replace with an empty or partial mirror would
-    /// wipe the private library, and for an iCloud-backed private store the
-    /// deleteAll would even sync those deletions to the cloud. Merge keeps
-    /// the private store's existing books and adds anything newer from the
-    /// mirror; relaunch returns to the prior provider.
+    /// data comes home via MERGE (dedup-insert — never wipes the private
+    /// store), the destination container is hot-swapped into the running
+    /// app, then the zone and share are removed.
     static func stopSharing() async throws {
-        try await moveMirrorContentIntoPrivateStore(mode: .merge)
+        let destination = try await bringBooksHomeAndResolveDestination(keepBooks: true)
         try await SharedLibraryEngine.shared.stopSharingAsOwner()
-        try await restorePreviousProvider()
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+        Persistence.swapShared(to: destination.container)
+        SyncSettings.selectedProvider = destination.kind
+        SharedLibrarySettings.previousProvider = nil
     }
 
     /// Tears the share down WITHOUT bringing any content home — for flows
@@ -168,89 +168,72 @@ enum SharedLibraryCoordinator {
             for: SyncSettings.selectedProvider
         ).makeStoreConfiguration()
         let container = try ModelContainer(for: schema, configurations: [configuration])
+        // Hot-swap: the UI must render this (post-discard) store now, not
+        // the removed mirror.
+        Persistence.swapShared(to: container)
         return ModelContext(container)
     }
 
-    /// Returns the user to their pre-share provider — usually. When the
-    /// handoff key is missing (consumed by an earlier teardown, or lost), a
-    /// blind `.localOnly` fallback would silently downgrade an iCloud user:
-    /// their books would sit in the local store while the iCloud store kept
-    /// the older copy. Instead, infer from the data:
-    ///   - known previousProvider → restore it (normal path);
-    ///   - unknown + iCloud-backed store holds books → write the merged
-    ///     library as a provider-switch snapshot and select .iCloud, so the
-    ///     relaunch moves it into the cloud store via the standard migration;
-    ///   - unknown + no iCloud store data → .localOnly (the books are already
-    ///     in the local store).
-    private static func restorePreviousProvider() async {
-        if let remembered = SharedLibrarySettings.previousProvider {
-            SyncSettings.selectedProvider = remembered
-            SharedLibrarySettings.previousProvider = nil
-            return
-        }
-        // Unknown destination: inspect the iCloud-backed store for data.
+
+    /// The store books come home to: a fresh container on the destination
+    /// provider, plus the provider kind for the settings flip.
+    struct HomeDestination {
+        let kind: LibrarySync
+        let container: ModelContainer
+    }
+
+    /// Resolves where books go after a share ends.
+    ///   - remembered previousProvider → that provider (normal path);
+    ///   - unknown + iCloud-backed store holds books → .iCloud (the user's
+    ///     home is the cloud store);
+    ///   - unknown + no cloud data → .localOnly (books are in the local
+    ///     store).
+    private static func resolveDestination() -> HomeDestination {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
+        if let remembered = SharedLibrarySettings.previousProvider {
+            let container = SyncStoreRegistry.makeContainer(for: remembered)
+            return HomeDestination(kind: remembered, container: container)
+        }
+        // Unknown destination: inspect the iCloud-backed store for data.
         let cloudStoreURL = FileManager.default.urls(for: .applicationSupportDirectory,
                                                      in: .userDomainMask).first!
             .appendingPathComponent("default-cloud.store")
         var cloudHasBooks = false
+        var cloudContainer: ModelContainer?
         if FileManager.default.fileExists(atPath: cloudStoreURL.path),
-           let cloudContainer = try? ModelContainer(for: schema,
-                                                    configurations: [ModelConfiguration(schema: nil,
-                                                                                        url: cloudStoreURL,
-                                                                                        allowsSave: true)]) {
-            let cloudContext = ModelContext(cloudContainer)
+           let container = try? ModelContainer(for: schema,
+                                               configurations: [ModelConfiguration(schema: nil,
+                                                                                    url: cloudStoreURL,
+                                                                                    allowsSave: true)]) {
+            let cloudContext = ModelContext(container)
             cloudHasBooks = ((try? cloudContext.fetchCount(FetchDescriptor<Book>())) ?? 0) > 0
+            cloudContainer = container
         }
-
-        if cloudHasBooks {
-            // The user's home is the iCloud store. Snapshot the merged
-            // library (it lives in the local store after our merge) and
-            // select iCloud — the standard relaunch migration moves it over.
-            let localStoreURL = FileManager.default.urls(for: .applicationSupportDirectory,
-                                                         in: .userDomainMask).first!
-                .appendingPathComponent("default.store")
-            if FileManager.default.fileExists(atPath: localStoreURL.path),
-               let localContainer = try? ModelContainer(for: schema,
-                                                        configurations: [ModelConfiguration(schema: nil,
-                                                                                            url: localStoreURL,
-                                                                                            allowsSave: true)]),
-               let snapshot = await LibraryDataService.export(context: ModelContext(localContainer)),
-               SyncSettings.writeSnapshot(snapshot) {
-                SyncSettings.selectedProvider = .iCloud
-            } else {
-                // Couldn't stage the move — keep the books where they are.
-                SyncSettings.selectedProvider = .localOnly
-            }
-        } else {
-            SyncSettings.selectedProvider = .localOnly
+        if cloudHasBooks, let cloudContainer {
+            return HomeDestination(kind: .iCloud, container: cloudContainer)
         }
+        return HomeDestination(kind: .localOnly,
+                               container: SyncStoreRegistry.makeContainer(for: .localOnly))
     }
-    private enum CopyMode { case merge, replace }
 
-    /// Moves the mirror store's content into the PRIVATE store container.
-    /// Explicitly not `Persistence.shared.mainContext`: while the app runs in
-    /// shared-library mode that context IS the mirror, so importing into it
-    /// would clobber the source (importArchive delete-alls).
-    ///
-    /// Fail-safe: an empty mirror is only acceptable when the PRIVATE store
-    /// still holds books (e.g. a failed share migration left the data at
-    /// home — nothing needs merging, so teardown proceeds). If BOTH are
-    /// empty there is nothing to save and the private store is not touched;
-    /// the error tells the user what happened.
-    private static func moveMirrorContentIntoPrivateStore(mode: CopyMode) async throws {
-        let schema = Schema([
-            Book.self, Note.self, ReadingList.self,
-            ReadingListItem.self, Connection.self, User.self,
-        ])
-        let configuration = try SyncStoreRegistry.provider(
-            for: SharedLibrarySettings.previousProvider ?? .localOnly
-        ).makeStoreConfiguration()
-        let privateContainer = try ModelContainer(for: schema, configurations: [configuration])
-        let privateContext = ModelContext(privateContainer)
+    /// Merges the mirror store's content into the destination private store
+    /// (when the mirror has books) and returns the resolved destination.
+    /// Fail-safes:
+    ///   - mirror export fails → abort (share stays; nothing destroyed).
+    ///   - mirror empty + destination empty → abort (nothing to save; the
+    ///     earlier wipe scenario — shouldn't be reachable).
+    ///   - mirror empty + destination has books → books are already home
+    ///     (a failed share migration left them there); skip the copy.
+    private static func bringBooksHomeAndResolveDestination(keepBooks: Bool) async throws -> HomeDestination {
+        let destination = resolveDestination()
+        guard keepBooks else {
+            // Deliberate discard (delete-all): destination container is
+            // returned empty; the caller clears it.
+            return destination
+        }
 
         let mirrorContext = ModelContext(SwiftDataSharedLibrarySync.containerForMigration())
         guard let data = await LibraryDataService.export(context: mirrorContext) else {
@@ -258,25 +241,25 @@ enum SharedLibraryCoordinator {
         }
         let summary = try LibraryDataService.previewArchive(data: data)
         if summary.books == 0 {
-            let privateBookCount = (try? privateContext.fetchCount(FetchDescriptor<Book>())) ?? 0
-            guard privateBookCount > 0 else {
-                // Both stores empty: the earlier wipe already happened and
-                // there is nothing left to bring home. Refuse to tear down
-                // silently — the user should know.
+            let destinationCount = (try? destination.container.mainContext.fetchCount(FetchDescriptor<Book>())) ?? 0
+            guard destinationCount > 0 else {
                 throw FlowError.snapshotFailed
             }
-            // Mirror empty, private library intact: the books are already
-            // home (a failed share migration left them there). Skip the
-            // copy — tearing down the share is safe.
-            return
+            return destination
         }
-        switch mode {
-        case .merge:
-            try LibraryDataService.mergeArchive(data: data, context: privateContext)
-        case .replace:
-            try LibraryDataService.importArchive(data: data, context: privateContext)
-        }
+        try LibraryDataService.mergeArchive(data: data, context: destination.container.mainContext)
+        return destination
     }
+
+    /// Swaps the destination container into the running app after a share
+    /// ends, so the UI reads the private store immediately.
+    @MainActor
+    static func adoptDestination(_ destination: HomeDestination) {
+        Persistence.swapShared(to: destination.container)
+        SyncSettings.selectedProvider = destination.kind
+        SharedLibrarySettings.previousProvider = nil
+    }
+
 }
 
 /// Persists the provider to return to when leaving/stopping the share.

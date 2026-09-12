@@ -850,6 +850,12 @@ struct LibraryView: View {
         } message: {
             Text(deleteContextMessage(for: longPressBook))
         }
+        .toolbar(isScrolled ? .hidden : .visible, for: .tabBar)
+        .onChange(of: viewMode) { isScrolled = false }
+        .onChange(of: grouping) { isScrolled = false }
+        .sheet(isPresented: $showAdd) {
+            AddBookView()
+        }
         .sheet(isPresented: $showExportOptions) {
             pdfOptionsSheet
         }

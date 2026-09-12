@@ -138,12 +138,32 @@ struct AdvancedSettingsView: View {
     /// "Delete everything and start fresh": a full factory reset — every
     /// record including the member identity, so the user is returned to the
     /// login screen as if the app had never been used.
+    /// A provider switch copies the library between the local
+    /// (default.store) and iCloud (default-cloud.store) stores via merge —
+    /// so after any switch, BOTH stores hold the books. Deleting only the
+    /// live store would leave a full copy in the other one, resurfacing on
+    /// the next switch. This clears whichever store is NOT currently live.
+    private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool) {
+        let schema = Schema([
+            Book.self, Note.self, ReadingList.self,
+            ReadingListItem.self, Connection.self, User.self,
+        ])
+        let otherProvider: LibrarySync = liveProvider == .iCloud ? .localOnly : .iCloud
+        let container = SyncStoreRegistry.makeContainer(for: otherProvider)
+        if contentOnly {
+            LibraryDataService.deleteLibraryContent(context: ModelContext(container))
+        } else {
+            LibraryDataService.deleteAll(context: ModelContext(container))
+        }
+    }
+
     private func deleteAllData() {
         isDeleting = true
         // Clear the LIVE store first: the UI and RootView's login switch
         // read from Persistence.shared, so the user sees the empty state
         // (login screen) immediately, without a restart.
         LibraryDataService.deleteAll(context: modelContext)
+        clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: false)
         wipeAIRemnantsAndSearchHistory()
         // While sharing, delete-all also ENDS the share (owner: zone and
         // share removed, participants lose access; participant: leaves the

@@ -1165,11 +1165,31 @@ struct SettingsView: View {
         UserDefaults.standard.removeObject(forKey: "searchHistory")
     }
 
+    /// A provider switch copies the library between the local
+    /// (default.store) and iCloud (default-cloud.store) stores via merge —
+    /// so after any switch, BOTH stores hold the books. Deleting only the
+    /// live store would leave a full copy in the other one, resurfacing on
+    /// the next switch. This clears whichever store is NOT currently live.
+    private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool) {
+        let schema = Schema([
+            Book.self, Note.self, ReadingList.self,
+            ReadingListItem.self, Connection.self, User.self,
+        ])
+        let otherProvider: LibrarySync = liveProvider == .iCloud ? .localOnly : .iCloud
+        let container = SyncStoreRegistry.makeContainer(for: otherProvider)
+        if contentOnly {
+            LibraryDataService.deleteLibraryContent(context: ModelContext(container))
+        } else {
+            LibraryDataService.deleteAll(context: ModelContext(container))
+        }
+    }
+
     private func deleteLibraryData() {
         isDeleting = true
         // Clear the LIVE store first: the UI reads from Persistence.shared,
         // so the empty state appears immediately.
         LibraryDataService.deleteLibraryContent(context: modelContext)
+        clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: true)
         wipeAIRemnantsAndSearchHistory()
         if SharedLibraryMembershipGate.membership != .none {
             Task { @MainActor in

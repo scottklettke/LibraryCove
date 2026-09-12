@@ -14,9 +14,15 @@ enum SyncCoordinator {
         guard SyncSettings.hasPendingSnapshot,
               let data = SyncSettings.readSnapshot() else { return }
         do {
-            // MERGE, not replace: the target store may be CloudKit-backed,
-            // where deleteAll + re-insert duplicates the library (old cloud
-            // records sync back down alongside the new rows).
+            // MERGE (deduped), not replace, and NOT copyArchive: the target
+            // store may be CloudKit-backed, where deleteAll + re-insert
+            // duplicates the library (old cloud records sync back down
+            // alongside the new rows). Dedupe is also the conservative
+            // choice here — this path hands off a shared-library snapshot
+            // or a legacy pre-hot-swap migration, where the destination may
+            // already hold overlapping content. (Provider switching uses
+            // LibraryDataService.copyArchive — the switch snapshot IS the
+            // authoritative library; see ProviderSwitcher.)
             let summary = try LibraryDataService.mergeArchive(data: data, context: context)
             // Only drop the snapshot once the target store is in charge, so a
             // failed launch retries safely.

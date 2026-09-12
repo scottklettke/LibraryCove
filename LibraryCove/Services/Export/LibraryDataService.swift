@@ -302,16 +302,24 @@ enum LibraryDataService {
         return ImportSummary(loaded.envelope)
     }
 
-    /// Copies an archive into the context 1:1 — NO dedupe. Duplicate books
-    /// in the archive stay duplicate books. Used by the provider-switch
-    /// engine, where the snapshot IS the user's authoritative library and
-    /// collapsing same-title copies would silently lose data (a later
-    /// backup of the target store would then be missing them). Existing
-    /// target rows are left alone (the archive's user rows dedupe by id so
-    /// relationships wire; books insert with their own UUIDs).
+    /// Copies an archive into the context 1:1 — NO dedupe by ISBN or
+    /// title+authors. Duplicate books in the archive (same title, distinct
+    /// UUIDs) stay duplicate books. Used by the provider-switch engine and
+    /// the shared-library hand-off, where the snapshot IS the user's
+    /// authoritative library and collapsing same-title copies would
+    /// silently lose data.
+    ///
+    /// Rows whose BOOK ID already exists in the target are skipped — those
+    /// are the same book, not a distinct copy, so skipping makes a
+    /// re-poured snapshot idempotent (a crash mid-pour before the snapshot
+    /// is cleared would otherwise double-insert every row on retry).
     @discardableResult
     static func copyArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
+        let existingBookIDs = Set((try? context.fetch(FetchDescriptor<Book>()))?.map(\.id) ?? [])
+        if !existingBookIDs.isEmpty {
+            loaded.envelope.books = loaded.envelope.books.filter { !existingBookIDs.contains($0.id) }
+        }
         restoreCovers(from: &loaded.envelope, files: loaded.files)
         insert(loaded.envelope, into: context)
         try context.save()

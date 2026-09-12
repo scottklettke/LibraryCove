@@ -29,9 +29,6 @@ struct SettingsView: View {
     @State private var showDeleteLibraryConfirm = false
     /// Shown when Delete Library is tapped with nothing to delete.
     @State private var showLibraryAlreadyEmpty = false
-    @State private var showDeleteEverythingConfirm = false
-    @State private var showDeleteTypeConfirm = false
-    @State private var deleteConfirmText = ""
     @State private var isDeleting = false
 
     @FocusState private var nameFieldFocused: Bool
@@ -416,15 +413,6 @@ struct SettingsView: View {
                     } label: {
                         Label("About & Feedback", systemImage: "info.circle")
                     }
-
-                    Button(role: .destructive) {
-                        showDeleteEverythingConfirm = true
-                    } label: {
-                        Label("Delete everything and start fresh", systemImage: "arrow.counterclockwise")
-                    }
-                    .disabled(isDeleting)
-                } footer: {
-                    Text("Removes every book, note, reading list, connection, and your member profile — the app returns to its first-launch state. Export a backup first if you want to keep anything.")
                 }
             }
             .navigationTitle("Settings")
@@ -444,24 +432,6 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This permanently deletes every book, note, reading list, and connection. Your member profile and settings stay." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
-            }
-            .alert(
-                "Delete everything and start fresh?",
-                isPresented: $showDeleteEverythingConfirm
-            ) {
-                Button("Cancel", role: .cancel) {}
-                Button("Continue", role: .destructive) {
-                    showDeleteTypeConfirm = true
-                }
-            } message: {
-                Text("This permanently deletes every book, note, reading list, connection, and member — a full reset, as if the app had never been used. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
-            }
-            .sheet(isPresented: $showDeleteTypeConfirm) {
-                DeleteLibraryConfirmView(confirmText: $deleteConfirmText) {
-                    deleteAllData()
-                    showDeleteTypeConfirm = false
-                }
-                .presentationDetents([.medium])
             }
             .sheet(isPresented: $showExportShare) {
                 exportShareSheet
@@ -1221,96 +1191,8 @@ struct SettingsView: View {
             openLibraryTab()
         }
     }
-
-    /// "Delete everything and start fresh": a full factory reset — every
-    /// record including the member identity, so the user is returned to the
-    /// login screen as if the app had never been used.
-    private func deleteAllData() {
-        isDeleting = true
-        // Clear the LIVE store first: the UI and RootView's login switch
-        // read from Persistence.shared, so the user sees the empty state
-        // (login screen) immediately, without a restart.
-        LibraryDataService.deleteAll(context: modelContext)
-        wipeAIRemnantsAndSearchHistory()
-        // While sharing, delete-all also ENDS the share (owner: zone and
-        // share removed, participants lose access; participant: leaves the
-        // share). Then clear the destination private store so no copy
-        // survives there either; discardSharedContent removes the mirror
-        // store file.
-        if SharedLibraryMembershipGate.membership != .none {
-            Task { @MainActor in
-                do {
-                    try await SharedLibraryCoordinator.discardSharedContent()
-                    let context = try SharedLibraryCoordinator.privateContextAfterDiscard()
-                    LibraryDataService.deleteAll(context: context)
-                } catch {
-                    lastError = error.localizedDescription
-                    showError = true
-                }
-                isDeleting = false
-            }
-        } else {
-            isDeleting = false
-        }
-    }
 }
 
-/// Second layer of the delete guard: requires typing DELETE to enable the
-/// destructive button.
-struct DeleteLibraryConfirmView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var confirmText: String
-    let onDelete: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 14) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 38))
-                    .foregroundStyle(.red)
-                Text("Delete ALL data?")
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                Text("This permanently erases every book, note, reading list, connection, and member from this device. There is no undo. To confirm, type DELETE below, then tap the red button.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                TextField("Type DELETE", text: $confirmText)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 260)
-                    .padding(8)
-                    .background(Color(uiColor: .secondarySystemFill))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                Button(role: .destructive) {
-                    onDelete()
-                } label: {
-                    Text("Permanently delete and start fresh")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .disabled(confirmText != "DELETE")
-                Button(role: .cancel) {
-                    dismiss()
-                    confirmText = ""
-                } label: {
-                    Text("Cancel")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.bordered)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(uiColor: .systemBackground))
-        }
-    }
-}
-
-/// SwiftUI wrapper for the standard CloudKit sharing sheet — the same UI
-/// Notes/Freeform use: invite by iMessage/mail/link, per-person permissions,
-/// remove participants.
 struct CloudSharingSheet: UIViewControllerRepresentable {
     let share: CKShare
     let container: CKContainer

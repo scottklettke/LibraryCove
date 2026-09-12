@@ -177,3 +177,53 @@ struct AdvancedSettingsView: View {
         UserDefaults.standard.removeObject(forKey: "searchHistory")
     }
 }
+struct DeleteLibraryConfirmView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Binding var confirmText: String
+    let onDelete: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 14) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 38))
+                    .foregroundStyle(.red)
+                Text("Delete ALL data?")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                Text("This permanently erases every book, note, reading list, connection, and member from this device. There is no undo. To confirm, type DELETE below, then tap the red button.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                TextField("Type DELETE", text: $confirmText)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 260)
+                    .padding(8)
+                    .background(Color(uiColor: .secondarySystemFill))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Text("Permanently delete and start fresh")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .disabled(confirmText != "DELETE")
+                Button(role: .cancel) {
+                    dismiss()
+                    confirmText = ""
+                } label: {
+                    Text("Cancel")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(uiColor: .systemBackground))
+        }
+    }
+}

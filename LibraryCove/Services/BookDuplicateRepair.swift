@@ -1,14 +1,17 @@
 import Foundation
 import SwiftData
 
-/// Consolidates duplicate copies created by provider-switch imports.
+/// Retired from the launch sequence: it grouped rows by normalized ISBN or
+/// title+authors and deleted extras — but duplicate copies of a book are
+/// now legitimate data (provider switches and restores copy 1:1 via
+/// LibraryDataService.copyArchive, commit 6951982), and this repair
+/// silently deleted them on the next launch. Its original trigger can no
+/// longer occur: pre-merge switching ran deleteAll + re-insert and CloudKit
+/// synced the old rows back down, but the current switch engine never
+/// deleteAlls (copyArchive skips already-present ids instead).
 ///
-/// Before merge-based switching, every Local-only ↔ iCloud round trip ran
-/// deleteAll + re-insert against the target store; on a CloudKit-backed
-/// store the old records sync back down alongside the new rows, leaving two
-/// (or more) rows per book. Rows are grouped by normalized ISBN (fallback:
-/// title + first author — same matching as BookMastering); the OLDEST row
-/// survives, absorbing the duplicates' relationships and non-empty fields.
+/// Kept for manual cleanup of legacy-flooded stores ONLY — invoke
+/// deliberately, never from a launch path.
 enum BookDuplicateRepair {
     @MainActor
     static func repairIfNeeded(context: ModelContext) {

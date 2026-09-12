@@ -32,9 +32,16 @@ struct RootView: View {
             // which breaks copy discrimination on delete and id-based stale
             // snapshot guards. Repair before anything reads books.
             BookIDRepair.repairIfNeeded(context: modelContext)
-            // Consolidate same-book duplicates left by pre-merge provider
-            // switches (Local↔iCloud round trips re-inserted rows).
-            BookDuplicateRepair.repairIfNeeded(context: modelContext)
+            // NOTE: BookDuplicateRepair is intentionally NOT run here
+            // anymore. It grouped rows by ISBN/title+authors and deleted
+            // extras — but duplicate copies of a book are now legitimate,
+            // first-class data (switches and restores copy 1:1 via
+            // LibraryDataService.copyArchive, 6951982). Running it would
+            // silently delete the user's intentional copies one launch
+            // after every restore. Its pre-merge flood signature (old rows
+            // syncing back down after deleteAll) can no longer occur: the
+            // switch engine never deleteAlls. The type stays for manual
+            // cleanup if ever needed.
             // Pour a provider-switch snapshot into the fresh store so the
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)

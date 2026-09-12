@@ -168,7 +168,7 @@ struct MainTabView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                LibraryView()
+                LibraryView(user: user)
             }
             .tabItem { Label("Library", systemImage: "books.vertical") }
             .tag(AppTab.library)

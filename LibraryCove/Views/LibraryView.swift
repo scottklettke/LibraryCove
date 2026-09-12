@@ -113,6 +113,10 @@ private struct ScrollOffsetTracker: View {
 /// Main library screen: all books with cover grid, list, by-location, and dashboard views.
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
+    /// The active member — the greeting reads THIS object (the same
+    /// instance Settings renames), not a query result that could resolve to
+    /// a different row when duplicate active members exist.
+    let user: User
     @Query(sort: \Book.title) private var books: [Book]
     /// Members — resolve "Added by" names for search.
     @Query private var users: [User]
@@ -921,12 +925,12 @@ struct LibraryView: View {
         .accessibilityIdentifier("modePicker")
     }
 
-    /// "Hi, Scott" — the first word of the active member's display name.
-    /// Falls back to a plain greeting when no member is resolvable.
+    /// "Hi, Scott" — the first word of the active member's display name
+    /// (the `user` instance passed from RootView — the same object Settings
+    /// renames). Falls back to a plain greeting when no name is resolvable.
     private var greetingText: String {
-        guard let name = users.first(where: \.isActive)?.displayName
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-            !name.isEmpty else {
+        let name = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
             return "Your library is empty"
         }
         let firstName = name.split(separator: " ").first.map(String.init) ?? name

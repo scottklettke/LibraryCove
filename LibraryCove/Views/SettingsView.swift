@@ -159,261 +159,20 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    HStack {
-                        TextField("Library name",
-                                  text: Binding(get: { user.displayName },
-                                                set: { newValue in
-                                                    let oldName = user.displayName
-                                                    // A rename applies to EVERY User
-                                                    // row: CloudKit stores may hold
-                                                    // older identity records for the
-                                                    // same person, and mirroring would
-                                                    // otherwise clobber the renamed
-                                                    // row with a stale name.
-                                                    let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
-                                                    for row in allUsers { row.displayName = newValue }
-                                                    // Persist immediately so the
-                                                    // empty-page greeting follows
-                                                    // the rename.
-                                                    try? modelContext.save()
-                                                    // Keep the share-title default
-                                                    // in sync when it was derived
-                                                    // from the old name ("Scott's
-                                                    // Library" -> "Bob's Library");
-                                                    // a custom name is left alone.
-                                                    let derived = SharedLibrarySettings
-                                                        .defaultShareTitle(for: oldName)
-                                                    if SharedLibrarySettings.preferredShareTitle == nil
-                                                        || SharedLibrarySettings.preferredShareTitle == derived {
-                                                        SharedLibrarySettings.preferredShareTitle =
-                                                            SharedLibrarySettings.defaultShareTitle(for: newValue)
-                                                    }
-                                                }))
-                            .focused($nameFieldFocused)
-                        Button {
-                            nameFieldFocused = true
-                        } label: {
-                            Image(systemName: "pencil")
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Edit library name")
-                    }
-                } header: {
-                    Text("Profile")
-                } footer: {
-                    Text("Tap the pencil to edit the name used for “Added by” on your books.")
-                }
+                profileSection
 
-                Section {
-                    Button {
-                        exportLibrary()
-                    } label: {
-                        HStack {
-                            Label("Export library", systemImage: "square.and.arrow.up")
-                            Spacer()
-                            if isExporting {
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isExporting)
+                dataSection
 
-                    Button {
-                        showFileImporter = true
-                    } label: {
-                        HStack {
-                            Label("Import library", systemImage: "tray.and.arrow.down")
-                            Spacer()
-                            if isImporting {
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isImporting)
-
-                    Button(role: .destructive) {
-                        // Nothing to delete: say so instead of showing a
-                        // destructive dialog for content that doesn't exist.
-                        if libraryContentCount == 0 {
-                            showLibraryAlreadyEmpty = true
-                        } else {
-                            showDeleteLibraryConfirm = true
-                        }
-                    } label: {
-                        Label("Delete Library", systemImage: "trash")
-                    }
-                    .disabled(isDeleting)
-                } header: {
-                    Text("Data")
-                } footer: {
-                    Text("Export saves your whole library as a zipped, readable file you can review and edit. Import restores from such a file by replacing the current library. Delete Library removes every book (with notes and lists) but keeps your member profile — export first to keep a backup.")
-                }
-
-                Section {
-                    // While a share is active the provider IS the shared
-                    // mirror; the picker (which excludes .sharedLibrary)
-                    // would render blank. Show read-only status and route
-                    // any change through the Stop Sharing confirmation.
-                    if SharedLibraryMembershipGate.membership != .none {
-                        LabeledContent("Sync provider", value: "Shared Library")
-                        LabeledContent("Status", value: syncStatusText(syncProvider))
-                    } else {
-                        Picker("Sync provider", selection: $syncProvider) {
-                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
-                                Text(provider.isAvailableNow
-                                     ? provider.displayName
-                                     : "\(provider.displayName) (coming soon)")
-                                    .tag(provider)
-                            }
-                        }
-                        LabeledContent("Status", value: syncStatusText(syncProvider))
-                        .confirmationDialog(
-                            "Stop sharing this library?",
-                            isPresented: Binding(
-                                get: { pendingProviderChange != nil },
-                                set: { if !$0 { pendingProviderChange = nil; syncProvider = SyncSettings.selectedProvider } }
-                            ),
-                            titleVisibility: .visible
-                        ) {
-                            Button("Stop Sharing & Switch", role: .destructive) {
-                                confirmedProviderChange()
-                            }
-                            Button("Cancel", role: .cancel) {
-                                pendingProviderChange = nil
-                                syncProvider = SyncSettings.selectedProvider
-                            }
-                        } message: {
-                            Text("Changing the sync provider while a library is shared stops sharing it with everyone. Your books stay in your library — choose where to sync them next.")
-                        }
-                    }
-                } header: {
-                    Text("Sync")
-                } footer: {
-                    Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
-                }
+                syncSection
 
                 if syncProvider == .iCloud || SharedLibraryMembershipGate.membership != .none {
                     sharedLibrarySection
                 }
 
-                Section {
-                    Picker("Engine", selection: $aiEngine) {
-                        ForEach(AIEngine.allCases) { engine in
-                            Text(engine.isAvailableNow
-                                 ? engine.displayName
-                                 : "\(engine.displayName) (coming soon)")
-                                .tag(engine)
-                        }
-                    }
-                    Toggle("Ground answers with web search", isOn: webSearchBinding)
-                    LabeledContent("Status") {
-                        Text(aiStatusText)
-                            .foregroundStyle(aiStatusColor)
-                    }
-                    if aiEngine == .openAI {
-                        TextField("Endpoint URL", text: $aiBaseURL, prompt: Text("http://localhost:11434/v1"))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .textContentType(.URL)
-                            .accessibilityIdentifier("aiEndpointField")
-                        Picker("Model", selection: $aiModel) {
-                            Text("Auto (detect from server)").tag("")
-                            ForEach(modelPickerOptions, id: \.self) { id in
-                                Text(pickerLabel(for: id)).tag(id)
-                            }
-                        }
-                        .accessibilityIdentifier("aiModelPicker")
-                        // Since the server decides the model, show what the
-                        // app would send right now instead of hiding it.
-                        if AIConfig.openAIModel.isEmpty {
-                            if let note = modelListNote {
-                                Text(note)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else if let auto = autoChatModel {
-                                Text("Will use \(auto) — discovered from this server.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("Will ask the server which model it runs.")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        LabeledContent("Saved") {
-                            Text("Automatically as you type")
-                                .foregroundStyle(.secondary)
-                        }
-                        Button {
-                            Task { await testConnection() }
-                        } label: {
-                            Label(isTesting ? "Testing…" : "Test connection",
-                                  systemImage: isTesting ? "arrow.triangle.2.circlepath" : "bolt.fill")
-                        }
-                        .disabled(isTesting || trimmedBaseURL.isEmpty)
-                        if let testResult {
-                            LabeledContent(testResultIsError ? "Test failed" : "Test result") {
-                                Text(testResult)
-                                    .font(.caption)
-                                    .foregroundStyle(testResultIsError ? Color.red : Color.green)
-                                    .multilineTextAlignment(.trailing)
-                            }
-                        }
-                    }
-                    Toggle("Show tokens/second", isOn: Binding(
-                        get: { AIConfig.showTokenRate },
-                        set: { AIConfig.showTokenRate = $0 }
-                    ))
-                    Picker("Context window", selection: $contextWindow) {
-                        let options = [2048, 4096, 8192, 16384, 32768, 65536]
-                        let present: [Int] = options.contains(AIConfig.maxContextTokens)
-                            ? options
-                            : (options + [AIConfig.maxContextTokens]).sorted()
-                        ForEach(present, id: \.self) { tokens in
-                            Text("\(tokens / 1024)K tokens").tag(tokens)
-                        }
-                    }
-                    if let note = detectedContextNote {
-                        Text(note)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("AI")
-                } footer: {
-                    Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library. Ground answers with web search is keyless: Ask AI looks up a Wikipedia article and DuckDuckGo results and cites their URLs; it adds a short fetch per question when enabled and stays off unless you turn it on.")
-                }
+                aiEngineSection
 
-                Section {
-                    Picker("Search engine", selection: $searchEngine) {
-                        ForEach(WebSearchEngine.allCases) { engine in
-                            Text(engine.displayName).tag(engine)
-                        }
-                    }
-                    .accessibilityIdentifier("searchEnginePicker")
-                } header: {
-                    Text("Description lookup")
-                } footer: {
-                    Text("Used by \"Search the web\" when you fetch a book's description. iOS doesn't reveal Safari's default engine, so LibraryCove keeps its own choice; DuckDuckGo is the default.")
-                }
+                trailingSections
 
-                Section {
-                    NavigationLink {
-                        AdvancedSettingsView()
-                    } label: {
-                        Label("Advanced", systemImage: "gearshape.2")
-                    }
-                }
-
-                Section {
-                    NavigationLink {
-                        AboutView()
-                    } label: {
-                        Label("About & Feedback", systemImage: "info.circle")
-                    }
-                }
             }
             .navigationTitle("Settings")
             .alert("Nothing to delete", isPresented: $showLibraryAlreadyEmpty) {
@@ -421,17 +180,13 @@ struct SettingsView: View {
             } message: {
                 Text("Your library is already empty — there are no books, notes, reading lists, or connections to delete.")
             }
-            .confirmationDialog(
-                "Delete Library?",
-                isPresented: $showDeleteLibraryConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Delete Library", role: .destructive) {
+            .sheet(isPresented: $showDeleteLibraryConfirm) {
+                DeleteLibrarySheet(
+                    sharingActive: SharedLibraryMembershipGate.membership != .none,
+                    hasBackups: !BackupStore.list().isEmpty
+                ) {
                     deleteLibraryData()
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This permanently deletes every book, note, reading list, and connection. Your member profile and settings stay." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
             }
             .sheet(isPresented: $showExportShare) {
                 exportShareSheet
@@ -946,6 +701,10 @@ struct SettingsView: View {
                 ReadingListItem.self, Connection.self, User.self,
             ])
             let targetContainer = SyncStoreRegistry.makeContainer(for: new)
+            // Carry the backups along with the library: the Backups folder
+            // moves between the local and iCloud companions so each
+            // provider sees its own backup set.
+            BackupStore.mirrorForProviderSwitch(to: new)
             do {
                 // MERGE, not replace: the target store may be CloudKit-
                 // backed, and deleteAll + re-insert floods it with new
@@ -1023,6 +782,277 @@ struct SettingsView: View {
                 performSwitch(to: target)
             }
         }
+    }
+
+    private var trailingSections: some View {
+        Group {
+                Section {
+                    Picker("Search engine", selection: $searchEngine) {
+                        ForEach(WebSearchEngine.allCases) { engine in
+                            Text(engine.displayName).tag(engine)
+                        }
+                    }
+                    .accessibilityIdentifier("searchEnginePicker")
+                } header: {
+                    Text("Description lookup")
+                } footer: {
+                    Text("Used by \"Search the web\" when you fetch a book's description. iOS doesn't reveal Safari's default engine, so LibraryCove keeps its own choice; DuckDuckGo is the default.")
+                }
+
+                Section {
+                    NavigationLink {
+                        AdvancedSettingsView()
+                    } label: {
+                        Label("Advanced", systemImage: "gearshape.2")
+                    }
+                }
+
+                Section {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("About & Feedback", systemImage: "info.circle")
+                    }
+                }
+        }
+    }
+
+    private var profileSection: some View {
+                Section {
+                    HStack {
+                        TextField("Library name",
+                                  text: Binding(get: { user.displayName },
+                                                set: { newValue in
+                                                    let oldName = user.displayName
+                                                    // A rename applies to EVERY User
+                                                    // row: CloudKit stores may hold
+                                                    // older identity records for the
+                                                    // same person, and mirroring would
+                                                    // otherwise clobber the renamed
+                                                    // row with a stale name.
+                                                    let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
+                                                    for row in allUsers { row.displayName = newValue }
+                                                    // Persist immediately so the
+                                                    // empty-page greeting follows
+                                                    // the rename.
+                                                    try? modelContext.save()
+                                                    // Keep the share-title default
+                                                    // in sync when it was derived
+                                                    // from the old name ("Scott's
+                                                    // Library" -> "Bob's Library");
+                                                    // a custom name is left alone.
+                                                    let derived = SharedLibrarySettings
+                                                        .defaultShareTitle(for: oldName)
+                                                    if SharedLibrarySettings.preferredShareTitle == nil
+                                                        || SharedLibrarySettings.preferredShareTitle == derived {
+                                                        SharedLibrarySettings.preferredShareTitle =
+                                                            SharedLibrarySettings.defaultShareTitle(for: newValue)
+                                                    }
+                                                }))
+                            .focused($nameFieldFocused)
+                        Button {
+                            nameFieldFocused = true
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Edit library name")
+                    }
+                } header: {
+                    Text("Profile")
+                } footer: {
+                    Text("Tap the pencil to edit the name used for “Added by” on your books.")
+                }
+    }
+
+    private var dataSection: some View {
+                Section {
+                    Button {
+                        exportLibrary()
+                    } label: {
+                        HStack {
+                            Label("Export library", systemImage: "square.and.arrow.up")
+                            Spacer()
+                            if isExporting {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isExporting)
+
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        HStack {
+                            Label("Import library", systemImage: "tray.and.arrow.down")
+                            Spacer()
+                            if isImporting {
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isImporting)
+
+                    Button(role: .destructive) {
+                        // Nothing to delete: say so instead of showing a
+                        // destructive dialog for content that doesn't exist.
+                        if libraryContentCount == 0 {
+                            showLibraryAlreadyEmpty = true
+                        } else {
+                            showDeleteLibraryConfirm = true
+                        }
+                    } label: {
+                        Label("Delete Library", systemImage: "trash")
+                    }
+                    .disabled(isDeleting)
+
+                    NavigationLink {
+                        BackupsView()
+                    } label: {
+                        Label("Backups", systemImage: "externaldrive")
+                    }
+                } header: {
+                    Text("Data")
+                } footer: {
+                    Text("Export saves your whole library as a zipped, readable file you can review and edit. Import restores from such a file by replacing the current library. Backups keep dated snapshots on this device. Delete Library removes every book (with notes and lists) but keeps your member profile.")
+                }
+    }
+
+    private var syncSection: some View {
+                Section {
+                    // While a share is active the provider IS the shared
+                    // mirror; the picker (which excludes .sharedLibrary)
+                    // would render blank. Show read-only status and route
+                    // any change through the Stop Sharing confirmation.
+                    if SharedLibraryMembershipGate.membership != .none {
+                        LabeledContent("Sync provider", value: "Shared Library")
+                        LabeledContent("Status", value: syncStatusText(syncProvider))
+                    } else {
+                        Picker("Sync provider", selection: $syncProvider) {
+                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
+                                Text(provider.isAvailableNow
+                                     ? provider.displayName
+                                     : "\(provider.displayName) (coming soon)")
+                                    .tag(provider)
+                            }
+                        }
+                        LabeledContent("Status", value: syncStatusText(syncProvider))
+                        .confirmationDialog(
+                            "Stop sharing this library?",
+                            isPresented: Binding(
+                                get: { pendingProviderChange != nil },
+                                set: { if !$0 { pendingProviderChange = nil; syncProvider = SyncSettings.selectedProvider } }
+                            ),
+                            titleVisibility: .visible
+                        ) {
+                            Button("Stop Sharing & Switch", role: .destructive) {
+                                confirmedProviderChange()
+                            }
+                            Button("Cancel", role: .cancel) {
+                                pendingProviderChange = nil
+                                syncProvider = SyncSettings.selectedProvider
+                            }
+                        } message: {
+                            Text("Changing the sync provider while a library is shared stops sharing it with everyone. Your books stay in your library — choose where to sync them next.")
+                        }
+                    }
+                } header: {
+                    Text("Sync")
+                } footer: {
+                    Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
+                }
+    }
+
+    private var aiEngineSection: some View {
+                Section {
+                    Picker("Engine", selection: $aiEngine) {
+                        ForEach(AIEngine.allCases) { engine in
+                            Text(engine.isAvailableNow
+                                 ? engine.displayName
+                                 : "\(engine.displayName) (coming soon)")
+                                .tag(engine)
+                        }
+                    }
+                    Toggle("Ground answers with web search", isOn: webSearchBinding)
+                    LabeledContent("Status") {
+                        Text(aiStatusText)
+                            .foregroundStyle(aiStatusColor)
+                    }
+                    if aiEngine == .openAI {
+                        TextField("Endpoint URL", text: $aiBaseURL, prompt: Text("http://localhost:11434/v1"))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .accessibilityIdentifier("aiEndpointField")
+                        Picker("Model", selection: $aiModel) {
+                            Text("Auto (detect from server)").tag("")
+                            ForEach(modelPickerOptions, id: \.self) { id in
+                                Text(pickerLabel(for: id)).tag(id)
+                            }
+                        }
+                        .accessibilityIdentifier("aiModelPicker")
+                        // Since the server decides the model, show what the
+                        // app would send right now instead of hiding it.
+                        if AIConfig.openAIModel.isEmpty {
+                            if let note = modelListNote {
+                                Text(note)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else if let auto = autoChatModel {
+                                Text("Will use \(auto) — discovered from this server.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Will ask the server which model it runs.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        LabeledContent("Saved") {
+                            Text("Automatically as you type")
+                                .foregroundStyle(.secondary)
+                        }
+                        Button {
+                            Task { await testConnection() }
+                        } label: {
+                            Label(isTesting ? "Testing…" : "Test connection",
+                                  systemImage: isTesting ? "arrow.triangle.2.circlepath" : "bolt.fill")
+                        }
+                        .disabled(isTesting || trimmedBaseURL.isEmpty)
+                        if let testResult {
+                            LabeledContent(testResultIsError ? "Test failed" : "Test result") {
+                                Text(testResult)
+                                    .font(.caption)
+                                    .foregroundStyle(testResultIsError ? Color.red : Color.green)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                    Toggle("Show tokens/second", isOn: Binding(
+                        get: { AIConfig.showTokenRate },
+                        set: { AIConfig.showTokenRate = $0 }
+                    ))
+                    Picker("Context window", selection: $contextWindow) {
+                        let options = [2048, 4096, 8192, 16384, 32768, 65536]
+                        let present: [Int] = options.contains(AIConfig.maxContextTokens)
+                            ? options
+                            : (options + [AIConfig.maxContextTokens]).sorted()
+                        ForEach(present, id: \.self) { tokens in
+                            Text("\(tokens / 1024)K tokens").tag(tokens)
+                        }
+                    }
+                    if let note = detectedContextNote {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("AI")
+                } footer: {
+                    Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library. Ground answers with web search is keyless: Ask AI looks up a Wikipedia article and DuckDuckGo results and cites their URLs; it adds a short fetch per question when enabled and stays off unless you turn it on.")
+                }
+
     }
 
     private func exportLibrary() {
@@ -1188,6 +1218,8 @@ struct SettingsView: View {
         isDeleting = true
         // Clear the LIVE store first: the UI reads from Persistence.shared,
         // so the empty state appears immediately.
+        // (Backup deletion is governed by the sheet's "Keep saved backups"
+        // toggle, which calls BackupStore.deleteAll() itself.)
         LibraryDataService.deleteLibraryContent(context: modelContext)
         clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: true)
         wipeAIRemnantsAndSearchHistory()

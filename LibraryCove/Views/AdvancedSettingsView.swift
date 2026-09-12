@@ -32,7 +32,7 @@ struct AdvancedSettingsView: View {
                 showDeleteTypeConfirm = true
             }
         } message: {
-            Text("This permanently deletes every book, note, reading list, connection, and member — a full reset, as if the app had never been used. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
+            Text("This permanently deletes every book, note, reading list, connection, and member — a full reset, as if the app had never been used. All backups are deleted too. Export a copy first if you want one. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
         }
         .sheet(isPresented: $showDeleteTypeConfirm) {
             DeleteLibraryConfirmView(confirmText: $deleteConfirmText) {
@@ -164,6 +164,9 @@ struct AdvancedSettingsView: View {
         // (login screen) immediately, without a restart.
         LibraryDataService.deleteAll(context: modelContext)
         clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: false)
+        // A full reset wipes EVERYTHING, backups included — all three
+        // backup folders (live + parked companions).
+        BackupStore.deleteAll()
         // A full reset behaves like a brand-new install: the provider
         // choice returns to the default (.iCloud) on next launch.
         SyncSettings.resetProvider()
@@ -204,6 +207,9 @@ struct DeleteLibraryConfirmView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var confirmText: String
     let onDelete: () -> Void
+    @State private var isExporting = false
+    @State private var exportURL: URL?
+    @State private var exportFailed = false
 
     var body: some View {
         NavigationStack {
@@ -214,7 +220,7 @@ struct DeleteLibraryConfirmView: View {
                 Text("Delete ALL data?")
                     .font(.headline)
                     .multilineTextAlignment(.center)
-                Text("This permanently erases every book, note, reading list, connection, and member from this device. There is no undo. To confirm, type DELETE below, then tap the red button.")
+                Text("This permanently erases every book, note, reading list, connection, member, and backup from this device. There is no undo. To confirm, type DELETE below, then tap the red button.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -226,6 +232,25 @@ struct DeleteLibraryConfirmView: View {
                     .padding(8)
                     .background(Color(uiColor: .secondarySystemFill))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Button {
+                    exportFirst()
+                } label: {
+                    HStack {
+                        Label("Export a copy first", systemImage: "square.and.arrow.up")
+                        Spacer()
+                        if isExporting {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(isExporting)
+                if let exportURL {
+                    ShareLink(item: exportURL) {
+                        Label("Save or share export", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
@@ -247,6 +272,34 @@ struct DeleteLibraryConfirmView: View {
             .padding(24)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(uiColor: .systemBackground))
+            .alert("Couldn't export", isPresented: $exportFailed) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("The library export failed. Nothing was deleted — you can try again or cancel.")
+            }
+        }
+    }
+
+    /// Writes the current library to a temp zip the user can share before
+    /// the full wipe. Same export format as Settings > Export library.
+    private func exportFirst() {
+        isExporting = true
+        Task { @MainActor in
+            defer { isExporting = false }
+            guard let data = await LibraryDataService.export(context: Persistence.shared.mainContext) else {
+                exportFailed = true
+                return
+            }
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let filename = "LibraryCove-Library-\(formatter.string(from: Date())).zip"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+            do {
+                try data.write(to: url)
+                exportURL = url
+            } catch {
+                exportFailed = true
+            }
         }
     }
 }

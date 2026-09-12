@@ -13,6 +13,9 @@ struct BackupsView: View {
     @State private var isBackingUp = false
     @State private var lastResult: String?
     @State private var showResult = false
+    /// True when `lastResult` reports a created backup (vs. an import),
+    /// so the alert title says "Backup complete" instead of "Import complete".
+    @State private var resultIsBackup = false
     @State private var lastError: String?
     @State private var showError = false
     /// Backup pending deletion (drives the confirm dialog).
@@ -56,13 +59,14 @@ struct BackupsView: View {
                 archiveData: payload.data,
                 sourceName: payload.name
             ) { message in
+                resultIsBackup = false
                 lastResult = message
                 showResult = true
                 reload()
                 openLibraryTab()
             }
         }
-        .alert("Import complete", isPresented: $showResult) {
+        .alert(resultIsBackup ? "Backup complete" : "Import complete", isPresented: $showResult) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(lastResult ?? "")
@@ -274,6 +278,7 @@ struct BackupsView: View {
             let count = (try? liveContext.fetchCount(FetchDescriptor<Book>())) ?? 0
             do {
                 let name = try BackupStore.save(data: data, bookCount: count)
+                resultIsBackup = true
                 lastResult = "Backup “\(name)” created."
                 showResult = true
             } catch {

@@ -403,7 +403,7 @@ struct SettingsView: View {
                     showDeleteTypeConfirm = true
                 }
             } message: {
-                Text("This permanently deletes every book, note, reading list, connection, and member. This cannot be undone.")
+                Text("This permanently deletes every book, note, reading list, connection, and member. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
             }
             .sheet(isPresented: $showDeleteTypeConfirm) {
                 DeleteLibraryConfirmView(confirmText: $deleteConfirmText) {
@@ -723,9 +723,13 @@ struct SettingsView: View {
     private var replaceWarning: String {
         let current = (try? modelContext.fetchCount(FetchDescriptor<Book>())) ?? 0
         let incoming = previewSummary?.books ?? 0
-        return "This removes \(current) book\(current == 1 ? "" : "s") (with their notes and lists) "
+        var text = "This removes \(current) book\(current == 1 ? "" : "s") (with their notes and lists) "
             + "and imports \(incoming) book\(incoming == 1 ? "" : "s") from the file instead. "
             + "This cannot be undone."
+        if SharedLibraryMembershipGate.membership != .none {
+            text += " Importing also stops sharing the library with everyone — the imported books become your private library."
+        }
+        return text
     }
 
     // MARK: - Merge list (pushed inside the import preview sheet)
@@ -1051,7 +1055,18 @@ struct SettingsView: View {
         isImporting = true
         Task { @MainActor in
             do {
-                let summary = try LibraryDataService.importArchive(data: pendingImportData, context: modelContext)
+                // A replace import while sharing ends the share: the
+                // imported content is the user's new private library, not a
+                // continuation of the share. Mirror content is deliberately
+                // discarded, so the import runs on the private store.
+                let context: ModelContext
+                if SharedLibraryMembershipGate.membership != .none {
+                    try await SharedLibraryCoordinator.discardSharedContent()
+                    context = try SharedLibraryCoordinator.privateContextAfterDiscard()
+                } else {
+                    context = modelContext
+                }
+                let summary = try LibraryDataService.importArchive(data: pendingImportData, context: context)
                 finishImport(summary, note: nil)
             } catch {
                 finishImport(nil, note: error.localizedDescription)
@@ -1105,10 +1120,31 @@ struct SettingsView: View {
 
     private func deleteAllData() {
         isDeleting = true
-        LibraryDataService.deleteAll(context: modelContext)
-        isDeleting = false
-        // The active member is gone, so RootView switches to the login screen —
-        // a truly fresh start.
+        // While sharing, delete-all also ENDS the share (owner: zone and
+        // share removed, participants lose access; participant: leaves the
+        // share). Mirror content is deliberately discarded — the user asked
+        // to delete everything. The private store is cleared directly so no
+        // copy survives there either.
+        if SharedLibraryMembershipGate.membership != .none {
+            Task { @MainActor in
+                do {
+                    try await SharedLibraryCoordinator.discardSharedContent()
+                    let context = try SharedLibraryCoordinator.privateContextAfterDiscard()
+                    LibraryDataService.deleteAll(context: context)
+                } catch {
+                    lastError = error.localizedDescription
+                    showError = true
+                }
+                isDeleting = false
+                // The active member is gone, so RootView switches to the
+                // login screen — a truly fresh start.
+            }
+        } else {
+            LibraryDataService.deleteAll(context: modelContext)
+            isDeleting = false
+            // The active member is gone, so RootView switches to the login
+            // screen — a truly fresh start.
+        }
     }
 }
 

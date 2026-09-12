@@ -135,6 +135,42 @@ enum SharedLibraryCoordinator {
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
     }
 
+    /// Tears the share down WITHOUT bringing any content home — for flows
+    /// that deliberately discard the shared library's contents ("Delete all
+    /// data", a replace-import that will install different content). Removes
+    /// the zone/share, resets membership, discards the mirror store, and
+    /// points the provider at the pre-share provider (or iCloud when
+    /// unknown). The caller then operates on a fresh private context.
+    static func discardSharedContent() async throws {
+        switch SharedLibraryMembershipGate.membership {
+        case .owner:
+            try await SharedLibraryEngine.shared.stopSharingAsOwner()
+        case .participant:
+            try await SharedLibraryEngine.shared.leaveAsParticipant()
+        case .none:
+            break
+        }
+        SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .iCloud
+        SharedLibrarySettings.previousProvider = nil
+        try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
+        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+    }
+
+    /// A context on the PRIVATE store for flows that just ended a share and
+    /// now operate on fresh/foreign content (delete-all, replace-import).
+    @MainActor
+    static func privateContextAfterDiscard() throws -> ModelContext {
+        let schema = Schema([
+            Book.self, Note.self, ReadingList.self,
+            ReadingListItem.self, Connection.self, User.self,
+        ])
+        let configuration = try SyncStoreRegistry.provider(
+            for: SyncSettings.selectedProvider
+        ).makeStoreConfiguration()
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        return ModelContext(container)
+    }
+
     /// Returns the user to their pre-share provider — usually. When the
     /// handoff key is missing (consumed by an earlier teardown, or lost), a
     /// blind `.localOnly` fallback would silently downgrade an iCloud user:

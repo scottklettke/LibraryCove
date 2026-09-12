@@ -245,7 +245,7 @@ enum LibraryDataService {
 
     /// Unzips and validates an archive, returning its envelope plus the raw
     /// file entries (so bundled cover JPEGs can be restored).
-    private static func loadArchive(_ data: Data) throws -> (envelope: ExportEnvelope, files: [String: Data]) {
+    static func loadArchive(_ data: Data) throws -> (envelope: ExportEnvelope, files: [String: Data]) {
         let files: [String: Data]
         do {
             files = try ZipArchive.unzip(data)

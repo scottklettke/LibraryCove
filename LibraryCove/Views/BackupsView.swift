@@ -1,9 +1,10 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
-/// Backup manager: create a backup of the current library state, browse
-/// existing backups (name by date + book count, size), and delete them
-/// individually.
+/// Backup + data hub: create a backup of the current library state, export
+/// the library as a shareable zip, import from a zip file, browse existing
+/// backups (name by date + book count, size), and restore from a backup.
 struct BackupsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openLibraryTab) private var openLibraryTab
@@ -16,59 +17,52 @@ struct BackupsView: View {
     @State private var showError = false
     /// Backup pending deletion (drives the confirm dialog).
     @State private var backupToDelete: BackupStore.Item?
+    // Export (share a zip of the current library).
+    @State private var isExporting = false
+    @State private var exportURL: URL?
+    @State private var showExportShare = false
+    // Import from a zip file (same flow as the old Settings > Import library).
+    @State private var showFileImporter = false
+    @State private var isImporting = false
+    @State private var pendingImportData: Data?
+    @State private var pendingImportName: String?
+
+    private var zipType: UTType {
+        UTType(filenameExtension: "zip") ?? .data
+    }
 
     var body: some View {
         Form {
-            Section {
-                Button {
-                    createBackup()
-                } label: {
-                    HStack {
-                        Label("Back up library now", systemImage: "externaldrive.badge.plus")
-                        Spacer()
-                        if isBackingUp {
-                            ProgressView()
-                        }
-                    }
-                }
-                .disabled(isBackingUp)
-            } header: {
-                Text("Backup")
-            } footer: {
-                Text("Saves a zip of your whole library (books, notes, reading lists, covers) under its date and book count. Backups stay on this device and follow the library when you switch between Local only and iCloud Sync.")
-            }
-
-            Section {
-                if backups.isEmpty {
-                    Text("No backups yet. Create one above — it's a good idea before deleting the library or importing.")
-                } else {
-                    ForEach(backups) { backup in
-                        Button {
-                            backupToDelete = backup
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(backup.name)
-                                        .font(.body)
-                                        .lineLimit(2)
-                                    Text(backup.sizeText)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: "trash")
-                                    .foregroundStyle(.red)
-                            }
-                        }
-                    }
-                }
-            } header: {
-                Text("Existing backups (\(backups.count))")
-            }
+            backupSection
+            zipTransferSection
+            backupListSection
         }
         .navigationTitle("Backups")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { reload() }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [zipType]) { result in
+            handleFilePicker(result)
+        }
+        .sheet(isPresented: $showExportShare) {
+            exportShareSheet
+        }
+        .sheet(item: Binding(
+            get: { pendingImportData.map { ImportPayload(data: $0, name: pendingImportName ?? "file") } },
+            set: { payload in
+                if payload == nil { pendingImportData = nil; pendingImportName = nil }
+            }
+        )) { payload in
+            ImportPreviewView(
+                archiveData: payload.data,
+                sourceName: payload.name,
+                modelContext: modelContext
+            ) { message in
+                lastResult = message
+                showResult = true
+                reload()
+                openLibraryTab()
+            }
+        }
         .alert("Import complete", isPresented: $showResult) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -102,6 +96,135 @@ struct BackupsView: View {
         }
     }
 
+    // MARK: - Sections
+
+    private var backupSection: some View {
+        Section {
+            Button {
+                createBackup()
+            } label: {
+                HStack {
+                    Label("Back up library now", systemImage: "externaldrive.badge.plus")
+                    Spacer()
+                    if isBackingUp {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isBackingUp)
+        } header: {
+            Text("Backup")
+        } footer: {
+            Text("Saves a zip of your whole library (books, notes, reading lists, covers) under its date and book count. Backups stay on this device and follow the library when you switch between Local only and iCloud Sync.")
+        }
+    }
+
+    private var zipTransferSection: some View {
+        Section {
+            Button {
+                exportLibrary()
+            } label: {
+                HStack {
+                    Label("Export library", systemImage: "square.and.arrow.up")
+                    Spacer()
+                    if isExporting {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isExporting)
+
+            Button {
+                showFileImporter = true
+            } label: {
+                HStack {
+                    Label("Import library", systemImage: "tray.and.arrow.down")
+                    Spacer()
+                    if isImporting {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(isImporting)
+        } header: {
+            Text("Export & Import")
+        } footer: {
+            Text("Export saves your whole library as a zipped, readable file you can save, share, or edit. Import restores from such a file — you choose to add only its new books or replace the whole library. The same choice is offered when restoring a backup.")
+        }
+    }
+
+    private var backupListSection: some View {
+        Section {
+            if backups.isEmpty {
+                Text("No backups yet. Create one above — it's a good idea before deleting the library or importing.")
+            } else {
+                ForEach(backups) { backup in
+                    NavigationLink {
+                        BackupDetailView(backup: backup, modelContext: modelContext) {
+                            reload()
+                        }
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(backup.name)
+                                    .font(.body)
+                                    .lineLimit(2)
+                                Text(backup.sizeText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            backupToDelete = backup
+                        } label: {
+                            Label("Delete backup", systemImage: "trash")
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Existing backups (\(backups.count))")
+        }
+    }
+
+    private var exportShareSheet: some View {
+        NavigationStack {
+            VStack(spacing: 16) {
+                Image(systemName: "square.and.arrow.up")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.blue)
+                Text("Library export ready")
+                    .font(.headline)
+                Text("The file contains library.json, cover images, and README-FORMAT.md inside a zip you can save, review, and edit.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                if let exportURL {
+                    // Sharing a file:// URL hands the zip to the share sheet
+                    // (Save to Files, Mail, AirDrop…), keeping its filename.
+                    ShareLink(item: exportURL) {
+                        Label("Save or share export", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding()
+            .navigationTitle("Export library")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showExportShare = false }
+                }
+            }
+        }
+    }
+
+    // MARK: - Actions
+
     private func reload() {
         backups = BackupStore.list()
     }
@@ -125,6 +248,243 @@ struct BackupsView: View {
                 showError = true
             }
             reload()
+        }
+    }
+
+    private func exportLibrary() {
+        isExporting = true
+        Task { @MainActor in
+            defer { isExporting = false }
+            guard let data = await LibraryDataService.export(context: modelContext) else {
+                lastError = LibraryDataError.exportFailed.errorDescription
+                showError = true
+                return
+            }
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let filename = "LibraryCove-Library-\(formatter.string(from: Date())).zip"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+            do {
+                try data.write(to: url)
+                exportURL = url
+                showExportShare = true
+            } catch {
+                lastError = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+
+    private func handleFilePicker(_ result: Result<URL, Error>) {
+        guard case .success(let url) = result else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        // Copy into a private temporary location so the bytes stay readable
+        // after the security scope closes, then validate before previewing
+        // (no writes yet).
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("zip")
+        do {
+            try FileManager.default.copyItem(at: url, to: tempURL)
+            let data = try Data(contentsOf: tempURL)
+            _ = try LibraryDataService.previewArchive(data: data)
+            try FileManager.default.removeItem(at: tempURL)
+            pendingImportName = url.lastPathComponent
+            pendingImportData = data
+        } catch {
+            lastError = (error as? LibraryDataError)?.errorDescription
+                ?? (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+            showError = true
+        }
+    }
+}
+
+/// Identifies the archive feeding the import preview sheet (`Identifiable`
+/// so `.sheet(item:)` can present it from optional data).
+private struct ImportPayload: Identifiable {
+    let data: Data
+    let name: String
+    var id: String { name + String(data.hashValue) }
+}
+
+import SwiftData
+
+/// Preview + execution of an import from an archive (zip file or backup).
+/// Offers the same two choices the old Settings > Import library did:
+/// add only new books (merge, duplicates skipped) or replace the whole
+/// library. Replace preserves the active member's profile name and tears
+/// down an active share first.
+struct ImportPreviewView: View {
+    let archiveData: Data
+    let sourceName: String
+    let modelContext: ModelContext
+    /// Called after a successful import so the presenter can refresh.
+    var onImported: (_ message: String) -> Void = { _ in }
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var summary: ImportSummary?
+    @State private var loadError: String?
+    @State private var showReplaceConfirm = false
+    @State private var isImporting = false
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                Image(systemName: "tray.and.arrow.down")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.blue)
+                Text("How do you want to import?")
+                    .font(.headline)
+                Text("From “\(sourceName)” — this file contains:")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Text(summary?.formatted ?? "No items.")
+                    .font(.callout.bold())
+                    .multilineTextAlignment(.center)
+
+                if let loadError {
+                    Text(loadError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Button {
+                        performMergeImport()
+                    } label: {
+                        Label("Add new books only", systemImage: "plus.circle")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isImporting)
+
+                    Button {
+                        showReplaceConfirm = true
+                    } label: {
+                        Text("Replace library with this file")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .disabled(isImporting)
+                }
+
+                if isImporting {
+                    ProgressView()
+                }
+            }
+            .padding()
+            .navigationTitle("Import library")
+            .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog(
+                "Replace your library?",
+                isPresented: $showReplaceConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Replace and import", role: .destructive) {
+                    performReplaceImport()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(replaceWarning)
+            }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .task {
+                loadPreview()
+            }
+        }
+    }
+
+    private var replaceWarning: String {
+        let incoming = summary?.books ?? 0
+        return "This deletes every book, note, reading list, and connection currently in your library, then imports \(incoming) book\(incoming == 1 ? "" : "s") from the file. Your member profile stays. This cannot be undone."
+    }
+
+    private func loadPreview() {
+        do {
+            summary = try LibraryDataService.previewArchive(data: archiveData)
+        } catch {
+            loadError = (error as? LibraryDataError)?.errorDescription
+                ?? (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
+    }
+
+    private func finishImport(_ imported: ImportSummary?, note: String?) {
+        isImporting = false
+        if let imported {
+            onImported(importMessage(for: imported, note: note))
+            dismiss()
+        } else if let note {
+            loadError = note
+        }
+    }
+
+    /// Human-readable outcome: what was imported, plus skipped-duplicates
+    /// note for merges.
+    private func importMessage(for imported: ImportSummary, note: String?) -> String {
+        "Imported \(imported.formatted)." + (note ?? "")
+    }
+
+    private func performMergeImport() {
+        isImporting = true
+        Task { @MainActor in
+            do {
+                let added = try LibraryDataService.mergeArchive(data: archiveData, context: modelContext)
+                let skipped = (summary?.books ?? 0) - added.books
+                let note: String? = skipped > 0 ? " Skipped \(skipped) already in your library." : nil
+                finishImport(added, note: note)
+            } catch {
+                finishImport(nil, note: error.localizedDescription)
+            }
+        }
+    }
+
+    private func performReplaceImport() {
+        isImporting = true
+        Task { @MainActor in
+            do {
+                // A replace import while sharing ends the share: the
+                // imported content is the user's new private library, not a
+                // continuation of the share. Mirror content is deliberately
+                // discarded, so the import runs on the private store.
+                let context: ModelContext
+                if SharedLibraryMembershipGate.membership != .none {
+                    try await SharedLibraryCoordinator.discardSharedContent()
+                    context = try SharedLibraryCoordinator.privateContextAfterDiscard()
+                } else {
+                    context = modelContext
+                }
+                // The user's chosen profile name survives a replace import:
+                // capture it, import (the archive's own members are
+                // installed, including its identity), then re-apply the
+                // name to every member row so the greeting/profile stays
+                // the user's.
+                let activeUser = ((try? context.fetch(FetchDescriptor<User>(
+                    predicate: #Predicate { $0.isActive }
+                ))) ?? []).first
+                let chosenName = activeUser?.displayName
+                let imported = try LibraryDataService.importArchive(data: archiveData, context: context)
+                let members = (try? context.fetch(FetchDescriptor<User>())) ?? []
+                if let chosenName {
+                    for member in members where member.displayName != chosenName {
+                        member.displayName = chosenName
+                    }
+                }
+                if !members.isEmpty { try? context.save() }
+                finishImport(imported, note: nil)
+            } catch {
+                finishImport(nil, note: error.localizedDescription)
+            }
         }
     }
 }

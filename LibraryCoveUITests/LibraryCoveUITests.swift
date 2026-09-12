@@ -562,18 +562,23 @@ final class LibraryCoveUITests: XCTestCase {
                        "lookup still spinning after 45s — background processor never resolved it")
     }
 
-    /// Settings must expose all three data-management options.
+    /// Settings exposes data management: Delete Library directly, and
+    /// Export/Import inside the Backups page (they merged there).
     func testSettingsShowsDataOptions() throws {
         let app = pendingScansApp()
         app.launch()
         enterLibraryIfNeeded(app)
         app.tabBars.buttons["Settings"].tap()
 
-        XCTAssertTrue(app.buttons["Export library"].waitForExistence(timeout: 10), "Export row missing")
-        XCTAssertTrue(app.buttons["Import library"].exists, "Import row missing")
-        XCTAssertTrue(app.buttons["Delete all data"].exists, "Delete row missing")
+        XCTAssertTrue(app.buttons["Delete Library"].waitForExistence(timeout: 10), "Delete Library row missing")
+        XCTAssertTrue(app.buttons["Backups"].exists, "Backups link missing")
 
-        // Export actually builds the zip and presents the share sheet.
+        // Export/Import live inside Backups; Export builds the zip and
+        // presents the share sheet.
+        app.buttons["Backups"].tap()
+        XCTAssertTrue(app.buttons["Export library"].waitForExistence(timeout: 10), "Export row missing in Backups")
+        XCTAssertTrue(app.buttons["Import library"].exists, "Import row missing in Backups")
+
         app.buttons["Export library"].tap()
         XCTAssertTrue(app.staticTexts["Library export ready"].waitForExistence(timeout: 10),
                       "export share sheet did not appear")

@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftData
 import CloudKit
-import UniformTypeIdentifiers
 
 /// Settings screen: profile, library data (export/import/delete), sync and AI.
 struct SettingsView: View {
@@ -10,21 +9,6 @@ struct SettingsView: View {
     /// Switches the root TabView to the Library tab (used after Delete
     /// Library so the user lands on the empty-library page).
     @Environment(\.openLibraryTab) private var openLibraryTab
-    // Export
-    @State private var exportURL: URL?
-    @State private var isExporting = false
-    @State private var showExportShare = false
-
-    // Import
-    @State private var showFileImporter = false
-    @State private var pendingImportData: Data?
-    @State private var previewSummary: ImportSummary?
-    @State private var showImportPreview = false
-    @State private var showReplaceConfirm = false
-    @State private var showMergeList = false
-    @State private var mergeCandidates: [BookDTO] = []
-    @State private var isImporting = false
-
     // Delete
     @State private var showDeleteLibraryConfirm = false
     /// Shown when Delete Library is tapped with nothing to delete.
@@ -70,10 +54,6 @@ struct SettingsView: View {
     @State private var showResult = false
     @State private var lastError: String?
     @State private var showError = false
-
-    private var zipType: UTType {
-        UTType(filenameExtension: "zip") ?? .data
-    }
 
     /// Changes whenever any AI setting shifts, so the status re-checks
     /// after edits (engine, base URL, or key). Includes only the key's
@@ -188,12 +168,6 @@ struct SettingsView: View {
                     deleteLibraryData()
                 }
             }
-            .sheet(isPresented: $showExportShare) {
-                exportShareSheet
-            }
-            .sheet(isPresented: $showImportPreview) {
-                importPreviewSheet
-            }
             .sheet(isPresented: $showSharingSheet) {
                 if let share = shareSheetShare {
                     CloudSharingSheet(share: share)
@@ -252,9 +226,6 @@ struct SettingsView: View {
             }
             .onChange(of: searchEngine) { _, newValue in
                 WebSearchEngine.selected = newValue
-            }
-            .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [zipType]) { result in
-                handleFilePicker(result)
             }
             .alert("Import complete", isPresented: $showResult) {
                 Button("OK", role: .cancel) {}
@@ -337,174 +308,6 @@ struct SettingsView: View {
             return "Could not reach the endpoint — \(underlying.localizedDescription). Check the URL and that the server is running."
         default:
             return error.errorDescription ?? "Connection failed."
-        }
-    }
-
-    // MARK: - Export share sheet
-
-    private var exportShareSheet: some View {
-        NavigationStack {
-            VStack(spacing: 16) {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.blue)
-                Text("Library export ready")
-                    .font(.headline)
-                Text("The file contains library.json, cover images, and README-FORMAT.md inside a zip you can save, review, and edit.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                if let exportURL {
-                    // Sharing a file:// URL hands the zip to the share sheet
-                    // (Save to Files, Mail, AirDrop…), keeping its filename.
-                    ShareLink(item: exportURL) {
-                        Label("Save or share export", systemImage: "square.and.arrow.down")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 8)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            }
-            .padding()
-            .navigationTitle("Export library")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { showExportShare = false }
-                }
-            }
-        }
-    }
-
-    // MARK: - Import preview sheet
-
-    private var importPreviewSheet: some View {
-        NavigationStack {
-            VStack(spacing: 12) {
-                Image(systemName: "tray.and.arrow.down")
-                    .font(.system(size: 36))
-                    .foregroundStyle(.blue)
-                Text("How do you want to import?")
-                    .font(.headline)
-                Text("This file contains:")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(previewSummary?.formatted ?? "No items.")
-                    .font(.callout.bold())
-
-                Button {
-                    presentMergeList()
-                } label: {
-                    Label("Add new books only", systemImage: "plus.circle")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isImporting)
-
-                Button {
-                    showReplaceConfirm = true
-                } label: {
-                    Text("Replace library with this file")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.bordered)
-                .tint(.red)
-                .disabled(isImporting)
-            }
-            .padding()
-            .navigationTitle("Import library")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(isPresented: $showMergeList) {
-                mergeListContent
-            }
-            .confirmationDialog(
-                "Replace your library?",
-                isPresented: $showReplaceConfirm,
-                titleVisibility: .visible
-            ) {
-                Button("Replace and import", role: .destructive) {
-                    performReplaceImport()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(self.replaceWarning)
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showImportPreview = false }
-                }
-            }
-        }
-    }
-
-    private var replaceWarning: String {
-        let current = (try? modelContext.fetchCount(FetchDescriptor<Book>())) ?? 0
-        let incoming = previewSummary?.books ?? 0
-        var text = "This removes \(current) book\(current == 1 ? "" : "s") (with their notes and lists) "
-            + "and imports \(incoming) book\(incoming == 1 ? "" : "s") from the file instead. "
-            + "This cannot be undone."
-        if SharedLibraryMembershipGate.membership != .none {
-            text += " Importing also stops sharing the library with everyone — the imported books become your private library."
-        }
-        return text
-    }
-
-    // MARK: - Merge list (pushed inside the import preview sheet)
-
-    private var mergeListContent: some View {
-        Group {
-            if mergeCandidates.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.system(size: 36))
-                        .foregroundStyle(.green)
-                    Text("Nothing new to import")
-                        .font(.headline)
-                    Text("Every book in the file is already in your library.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .padding()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    Section {
-                        ForEach(mergeCandidates, id: \.id) { book in
-                            LabeledContent {
-                                Text(book.authors.joined(separator: ", "))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.trailing)
-                            } label: {
-                                Text(book.title)
-                                    .font(.body)
-                            }
-                        }
-                    } footer: {
-                        Text("Books already in your library are skipped.")
-                    }
-                }
-            }
-        }
-        .navigationTitle("Books to import (\(mergeCandidates.count))")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    showMergeList = false
-                    mergeCandidates = []
-                }
-            }
-            if !mergeCandidates.isEmpty {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Import \(mergeCandidates.count)") {
-                        performMergeImport()
-                    }
-                    .disabled(isImporting)
-                }
-            }
         }
     }
 
@@ -867,32 +670,6 @@ struct SettingsView: View {
 
     private var dataSection: some View {
                 Section {
-                    Button {
-                        exportLibrary()
-                    } label: {
-                        HStack {
-                            Label("Export library", systemImage: "square.and.arrow.up")
-                            Spacer()
-                            if isExporting {
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isExporting)
-
-                    Button {
-                        showFileImporter = true
-                    } label: {
-                        HStack {
-                            Label("Import library", systemImage: "tray.and.arrow.down")
-                            Spacer()
-                            if isImporting {
-                                ProgressView()
-                            }
-                        }
-                    }
-                    .disabled(isImporting)
-
                     Button(role: .destructive) {
                         // Nothing to delete: say so instead of showing a
                         // destructive dialog for content that doesn't exist.
@@ -914,7 +691,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Data")
                 } footer: {
-                    Text("Export saves your whole library as a zipped, readable file you can review and edit. Import restores from such a file by replacing the current library. Backups keep dated snapshots on this device. Delete Library removes every book (with notes and lists) but keeps your member profile.")
+                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes every book (with notes and lists) but keeps your member profile.")
                 }
     }
 
@@ -1053,136 +830,6 @@ struct SettingsView: View {
                     Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library. Ground answers with web search is keyless: Ask AI looks up a Wikipedia article and DuckDuckGo results and cites their URLs; it adds a short fetch per question when enabled and stays off unless you turn it on.")
                 }
 
-    }
-
-    private func exportLibrary() {
-        isExporting = true
-        Task { @MainActor in
-            let data = await LibraryDataService.export(context: modelContext)
-            isExporting = false
-            guard let data else {
-                lastError = LibraryDataError.exportFailed.errorDescription
-                showError = true
-                return
-            }
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            let filename = "LibraryCove-Library-\(formatter.string(from: Date())).zip"
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-            do {
-                try data.write(to: url)
-                exportURL = url
-                showExportShare = true
-            } catch {
-                lastError = error.localizedDescription
-                showError = true
-            }
-        }
-    }
-
-    private func handleFilePicker(_ result: Result<URL, Error>) {
-        guard case .success(let url) = result else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-
-        // Copy into a private temporary location so the bytes stay readable
-        // after the security scope closes, then preview (no writes yet).
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("zip")
-        do {
-            try FileManager.default.copyItem(at: url, to: tempURL)
-            let data = try Data(contentsOf: tempURL)
-            let summary = try LibraryDataService.previewArchive(data: data)
-            try FileManager.default.removeItem(at: tempURL)
-            pendingImportData = data
-            previewSummary = summary
-            showImportPreview = true
-        } catch {
-            lastError = (error as? LibraryDataError)?.errorDescription
-                ?? (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
-            showError = true
-        }
-    }
-
-    private func performReplaceImport() {
-        guard let pendingImportData else { return }
-        isImporting = true
-        Task { @MainActor in
-            do {
-                // A replace import while sharing ends the share: the
-                // imported content is the user's new private library, not a
-                // continuation of the share. Mirror content is deliberately
-                // discarded, so the import runs on the private store.
-                let context: ModelContext
-                if SharedLibraryMembershipGate.membership != .none {
-                    try await SharedLibraryCoordinator.discardSharedContent()
-                    context = try SharedLibraryCoordinator.privateContextAfterDiscard()
-                } else {
-                    context = modelContext
-                }
-                // The user's chosen profile name survives a replace import:
-                // capture it, import (the archive's own members are
-                // installed, including its identity), then re-apply the
-                // name to every member row so the greeting/profile stays
-                // the user's.
-                let chosenName = user.displayName
-                let summary = try LibraryDataService.importArchive(data: pendingImportData, context: context)
-                let members = (try? context.fetch(FetchDescriptor<User>())) ?? []
-                for member in members where member.displayName != chosenName {
-                    member.displayName = chosenName
-                }
-                if !members.isEmpty { try? context.save() }
-                finishImport(summary, note: nil)
-            } catch {
-                finishImport(nil, note: error.localizedDescription)
-            }
-        }
-    }
-
-    private func presentMergeList() {
-        guard let pendingImportData else { return }
-        do {
-            mergeCandidates = try LibraryDataService.mergeCandidates(data: pendingImportData, context: modelContext)
-            showMergeList = true
-        } catch {
-            lastError = (error as? LibraryDataError)?.errorDescription
-                ?? (error as? LocalizedError)?.errorDescription
-                ?? error.localizedDescription
-            showError = true
-        }
-    }
-
-    private func performMergeImport() {
-        guard let pendingImportData else { return }
-        isImporting = true
-        Task { @MainActor in
-            do {
-                let added = try LibraryDataService.mergeArchive(data: pendingImportData, context: modelContext)
-                showMergeList = false
-                mergeCandidates = []
-                let skipped = (previewSummary?.books ?? 0) - added.books
-                finishImport(added, note: skipped > 0 ? " Skipped \(skipped) already in your library." : nil)
-            } catch {
-                finishImport(nil, note: error.localizedDescription)
-            }
-        }
-    }
-
-    private func finishImport(_ summary: ImportSummary?, note: String?) {
-        isImporting = false
-        if let summary {
-            pendingImportData = nil
-            previewSummary = nil
-            showImportPreview = false
-            showReplaceConfirm = false
-            lastResult = "Imported \(summary.formatted)." + (note ?? "")
-            showResult = true
-        } else {
-            lastError = note ?? "Something went wrong."
-            showError = true
-        }
     }
 
     /// Removes AI remnants and search history so "the entire library is

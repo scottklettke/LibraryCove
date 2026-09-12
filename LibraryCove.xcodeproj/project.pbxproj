@@ -20,6 +20,7 @@
 		15CCFF7D779DD928E43019F0 /* WebSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE81543984D7068E79C68613 /* WebSearch.swift */; };
 		1E7AC6132CAF0D31BFA425E2 /* GreetingRenameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3648AC227DE66F1955A2954 /* GreetingRenameTests.swift */; };
 		1F938106147677D56A0E4692 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63692AC5935AA581F65A494E /* AuthService.swift */; };
+		20CCCD758E10C89DACBE559B /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9E94650797FC4FF53FF470 /* BackupDetailView.swift */; };
 		218A1C024D2299D73924C5BA /* CoverImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613A860A534A8684B30EA259 /* CoverImageStore.swift */; };
 		2258029820ED360F7ED9EB0A /* AppleIntelligenceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A1E789F05B1CE6BEF28BAE /* AppleIntelligenceProvider.swift */; };
 		3204DC79AC1E225302FF1CF9 /* MasteringAndClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9385EE72F524938D7844319D /* MasteringAndClassifierTests.swift */; };
@@ -51,6 +52,7 @@
 		7641284B6EC5A7F64408529A /* ScanQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */; };
 		77155B1A3685C6D28C37221B /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE5A7F56050D2EA97A2F5292 /* Book.swift */; };
 		774F60FA5F718BF106C3A18B /* SyncProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C938D002EF97DE5DEC8EACE /* SyncProvider.swift */; };
+		77C73ABC12E5D02DA69E72B5 /* LibraryDataService+ArchiveBooks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9378B61813092CA7718B0309 /* LibraryDataService+ArchiveBooks.swift */; };
 		7EBBBACE1070800C7F1CCD63 /* LibraryPDFExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70E20044857B7D8213F50D4 /* LibraryPDFExportTests.swift */; };
 		80A35C4ED9E3F1DDA74A7ACA /* LibraryExportDTOs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 843751992516D7A70DDE2E98 /* LibraryExportDTOs.swift */; };
 		81D36BEDDFC9EEEE5315FC08 /* SharedLibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C90AA78140D70FC0FF92009 /* SharedLibraryModels.swift */; };
@@ -156,7 +158,9 @@
 		86870DD9F76E5AAFCF889635 /* ConversationMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMemory.swift; sourceTree = "<group>"; };
 		879330D2640D53E6B07D1D12 /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
 		88A1E789F05B1CE6BEF28BAE /* AppleIntelligenceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceProvider.swift; sourceTree = "<group>"; };
+		8E9E94650797FC4FF53FF470 /* BackupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailView.swift; sourceTree = "<group>"; };
 		8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataService.swift; sourceTree = "<group>"; };
+		9378B61813092CA7718B0309 /* LibraryDataService+ArchiveBooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryDataService+ArchiveBooks.swift"; sourceTree = "<group>"; };
 		9385EE72F524938D7844319D /* MasteringAndClassifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MasteringAndClassifierTests.swift; sourceTree = "<group>"; };
 		93F50C84CAADE351A33A75EA /* LibraryDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataServiceTests.swift; sourceTree = "<group>"; };
 		9485B6DD41D29D7D9B96C8EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -356,6 +360,7 @@
 			children = (
 				4D710F3248A8B830BA85A4AB /* ExportFormatGuide.swift */,
 				8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */,
+				9378B61813092CA7718B0309 /* LibraryDataService+ArchiveBooks.swift */,
 				843751992516D7A70DDE2E98 /* LibraryExportDTOs.swift */,
 				59D7FF358C6E993C9532C22D /* LibraryPDFExport.swift */,
 				C011F248612BA0A3A5916731 /* ZipArchive.swift */,
@@ -381,6 +386,7 @@
 				C64026BA61B06F5581ECC18A /* AdvancedSettingsView.swift */,
 				DA04E88EA8596412A10827BF /* AIAskView.swift */,
 				F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */,
+				8E9E94650797FC4FF53FF470 /* BackupDetailView.swift */,
 				C44869DF584EC707A877F252 /* BackupsView.swift */,
 				879330D2640D53E6B07D1D12 /* BookDetailView.swift */,
 				420CC7481F27D37D90912C4A /* BookFormView.swift */,
@@ -596,6 +602,7 @@
 				D24A30A1D37E97E9BF3C8EC5 /* AskSuggestions.swift in Sources */,
 				E0ED3582C37823043D0AA5B5 /* AssignValuesSheet.swift in Sources */,
 				1F938106147677D56A0E4692 /* AuthService.swift in Sources */,
+				20CCCD758E10C89DACBE559B /* BackupDetailView.swift in Sources */,
 				4B9516D72CF280A4ED8C4696 /* BackupStore.swift in Sources */,
 				6232AFFCDC756947FC756F94 /* BackupsView.swift in Sources */,
 				77155B1A3685C6D28C37221B /* Book.swift in Sources */,
@@ -620,6 +627,7 @@
 				A2CFEE49C97A1B58B5056225 /* ISBNScannerView.swift in Sources */,
 				154AC76B4EF91DB6A7EAC5F3 /* LibraryContext.swift in Sources */,
 				67374DB984295CE6881B89EE /* LibraryCoveApp.swift in Sources */,
+				77C73ABC12E5D02DA69E72B5 /* LibraryDataService+ArchiveBooks.swift in Sources */,
 				D793B9297FBCB7F9F2F3B63B /* LibraryDataService.swift in Sources */,
 				80A35C4ED9E3F1DDA74A7ACA /* LibraryExportDTOs.swift in Sources */,
 				03573280A6566BDDF955A015 /* LibraryPDFExport.swift in Sources */,

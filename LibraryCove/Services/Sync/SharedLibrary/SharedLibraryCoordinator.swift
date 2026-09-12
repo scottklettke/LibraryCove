@@ -259,10 +259,34 @@ enum SharedLibraryCoordinator {
         SyncSettings.selectedProvider = destination.kind
         SharedLibrarySettings.previousProvider = nil
     }
-
 }
 
-/// Persists the provider to return to when leaving/stopping the share.
+extension SharedLibraryCoordinator {
+    /// Cleans up ORPHANED sharing state: membership is recorded but the app
+    /// is no longer running on the shared-library provider (e.g. the user
+    /// switched providers in an older build, before switch-away warned and
+    /// tore the share down). Without this, Settings shows Share Library
+    /// controls under Local only.
+    ///
+    /// Best-effort cloud cleanup first (owner: revoke the zone/share;
+    /// participant: remove self from the share), then clear all local
+    /// sharing state. Runs at launch and ignores cloud failures — the local
+    /// state must be consistent with the provider regardless.
+    static func repairOrphanedMembershipIfNeeded() async {
+        guard SyncSettings.selectedProvider != .sharedLibrary,
+              SharedLibrarySettings.membership != .none else { return }
+        switch SharedLibraryMembershipGate.membership {
+        case .owner:
+            try? await SharedLibraryEngine.shared.stopSharingAsOwner()
+        case .participant:
+            try? await SharedLibraryEngine.shared.leaveAsParticipant()
+        case .none:
+            break
+        }
+        SharedLibrarySettings.reset()
+    }
+}
+
 enum SyncLibraryHandoff {
     private static let key = "sharedLibrary.previousProvider"
 

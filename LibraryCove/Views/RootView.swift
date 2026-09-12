@@ -27,6 +27,10 @@ struct RootView: View {
             // Pour a provider-switch snapshot into the fresh store so the
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
+            // Clear sharing state orphaned by older builds (provider switched
+            // away without tearing the share down) — otherwise Settings
+            // shows Share Library controls under Local only.
+            await SharedLibraryCoordinator.repairOrphanedMembershipIfNeeded()
             // Embed any still file-only covers as data URLs so iCloud Sync
             // pushes cover images to other devices. Skipped in shared mode:
             // the mirror's covers are fingerprint-tracked CKAsset copies and

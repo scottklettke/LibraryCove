@@ -4,14 +4,25 @@ import SwiftData
 /// Root view: auth gate → main tab layout.
 struct RootView: View {
     @Query private var users: [User]
+
+    /// True when the store has ANY member rows (active or not) — the app
+    /// has been set up before. Only a completely fresh store (no member
+    /// rows at all) shows the welcome flow.
+    private var hasAnyMember: Bool {
+        !users.isEmpty
+    }
     @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         Group {
             if let currentUser = users.first(where: \.isActive) {
                 MainTabView(user: currentUser)
-            } else {
+            } else if hasAnyMember {
+                // A store with members but no active user is a pre-welcome
+                // install (or post-reset) — legacy login still applies.
                 LoginView()
+            } else {
+                WelcomeView(onComplete: {})
             }
         }
         .task {

@@ -61,9 +61,26 @@ final class LibraryCoveUITests: XCTestCase {
     /// Fresh installs land on the login screen; create a local user so the
     /// library tab (with its toolbar) is reachable.
     private func enterLibraryIfNeeded(_ app: XCUIApplication) {
+        // Legacy login screen ("Enter library") or the first-launch welcome
+        // flow (swipe pages → name form → "Create My Library").
         let enter = app.buttons["Enter library"]
         if enter.waitForExistence(timeout: 5) {
             enter.tap()
+            return
+        }
+        let create = app.buttons["Create My Library"]
+        if create.waitForExistence(timeout: 5) {
+            // Advance through the welcome pages to the setup form.
+            let cont = app.buttons["Continue"]
+            for _ in 0..<3 where cont.waitForExistence(timeout: 2) {
+                cont.tap()
+            }
+            let nameField = app.textFields["Your name"]
+            if nameField.waitForExistence(timeout: 3) {
+                nameField.tap()
+                nameField.typeText("Tester")
+            }
+            create.tap()
         }
     }
 

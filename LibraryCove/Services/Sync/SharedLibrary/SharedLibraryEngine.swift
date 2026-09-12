@@ -27,6 +27,7 @@ enum SharedLibrarySettings {
         static let ownerShareRecordName = "sharedLibrary.ownerShareRecordName"
         static let shareURL = "sharedLibrary.shareURL"
         static let shareTitle = "sharedLibrary.shareTitle"
+        static let preferredShareTitle = "sharedLibrary.preferredShareTitle"
         static let acceptedZoneName = "sharedLibrary.acceptedZoneName"
         static let acceptedZoneOwnerName = "sharedLibrary.acceptedZoneOwnerName"
         static let changeToken = "sharedLibrary.changeToken"
@@ -69,6 +70,15 @@ enum SharedLibrarySettings {
     static var shareTitle: String? {
         get { d.string(forKey: Key.shareTitle) }
         set { d.set(newValue, forKey: Key.shareTitle) }
+    }
+
+    /// The library name the user chose at welcome (e.g. "Scott's Library").
+    /// Used as the DEFAULT share title when a share is created; reset() does
+    /// not clear it because it's the user's library identity, not share
+    /// state.
+    static var preferredShareTitle: String? {
+        get { d.string(forKey: Key.preferredShareTitle) }
+        set { d.set(newValue, forKey: Key.preferredShareTitle) }
     }
 
     /// Participant side: zone ID components of the accepted share's zone.

@@ -894,8 +894,12 @@ struct SettingsView: View {
         isPreparingShare = true
         defer { isPreparingShare = false }
         do {
+            // The user's chosen library name (welcome flow) wins; fall back
+            // to the classic "<Name>'s Library".
+            let title = SharedLibrarySettings.preferredShareTitle
+                ?? "\(user.displayName)'s Library"
             let share = try await SharedLibraryCoordinator.beginShare(
-                currentTitle: "\(user.displayName)'s Library")
+                currentTitle: title)
             shareSheetShare = share
             showSharingSheet = true
         } catch {

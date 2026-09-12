@@ -164,6 +164,9 @@ struct AdvancedSettingsView: View {
         // (login screen) immediately, without a restart.
         LibraryDataService.deleteAll(context: modelContext)
         clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: false)
+        // A full reset behaves like a brand-new install: the provider
+        // choice returns to the default (.iCloud) on next launch.
+        SyncSettings.resetProvider()
         wipeAIRemnantsAndSearchHistory()
         // While sharing, delete-all also ENDS the share (owner: zone and
         // share removed, participants lose access; participant: leaves the

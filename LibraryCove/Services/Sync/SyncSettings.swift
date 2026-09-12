@@ -21,6 +21,13 @@ enum SyncSettings {
         }
     }
 
+    /// Removes the stored provider choice; `selectedProvider` falls back to
+    /// its default (.iCloud). Used by "Delete everything and start fresh"
+    /// so a full reset behaves like a brand-new install.
+    static func resetProvider() {
+        UserDefaults.standard.removeObject(forKey: providerKey)
+    }
+
     // MARK: - Migration snapshot
 
     /// Where a snapshot of the current library is stashed when the provider

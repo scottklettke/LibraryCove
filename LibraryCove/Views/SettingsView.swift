@@ -24,7 +24,8 @@ struct SettingsView: View {
     @State private var isImporting = false
 
     // Delete
-    @State private var showDeleteConfirm = false
+    @State private var showDeleteLibraryConfirm = false
+    @State private var showDeleteEverythingConfirm = false
     @State private var showDeleteTypeConfirm = false
     @State private var deleteConfirmText = ""
     @State private var isDeleting = false
@@ -206,15 +207,15 @@ struct SettingsView: View {
                     .disabled(isImporting)
 
                     Button(role: .destructive) {
-                        showDeleteConfirm = true
+                        showDeleteLibraryConfirm = true
                     } label: {
-                        Label("Delete all data", systemImage: "trash")
+                        Label("Delete Library", systemImage: "trash")
                     }
                     .disabled(isDeleting)
                 } header: {
                     Text("Data")
                 } footer: {
-                    Text("Export saves your whole library as a zipped, readable file you can review and edit. Import restores from such a file by replacing the current library. Delete permanently removes everything — export first to keep a backup.")
+                    Text("Export saves your whole library as a zipped, readable file you can review and edit. Import restores from such a file by replacing the current library. Delete Library removes every book (with notes and lists) but keeps your member profile — export first to keep a backup.")
                 }
 
                 Section {
@@ -390,19 +391,40 @@ struct SettingsView: View {
                     } label: {
                         Label("About & Feedback", systemImage: "info.circle")
                     }
+
+                    Button(role: .destructive) {
+                        showDeleteEverythingConfirm = true
+                    } label: {
+                        Label("Delete everything and start fresh", systemImage: "arrow.counterclockwise")
+                    }
+                    .disabled(isDeleting)
+                } footer: {
+                    Text("Removes every book, note, reading list, connection, and your member profile — the app returns to its first-launch state. Export a backup first if you want to keep anything.")
                 }
             }
             .navigationTitle("Settings")
+            .confirmationDialog(
+                "Delete Library?",
+                isPresented: $showDeleteLibraryConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Library", role: .destructive) {
+                    deleteLibraryData()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes every book, note, reading list, and connection. Your member profile and settings stay." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
+            }
             .alert(
-                "Delete all data?",
-                isPresented: $showDeleteConfirm
+                "Delete everything and start fresh?",
+                isPresented: $showDeleteEverythingConfirm
             ) {
                 Button("Cancel", role: .cancel) {}
                 Button("Continue", role: .destructive) {
                     showDeleteTypeConfirm = true
                 }
             } message: {
-                Text("This permanently deletes every book, note, reading list, connection, and member. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
+                Text("This permanently deletes every book, note, reading list, connection, and member — a full reset, as if the app had never been used. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
             }
             .sheet(isPresented: $showDeleteTypeConfirm) {
                 DeleteLibraryConfirmView(confirmText: $deleteConfirmText) {
@@ -1161,6 +1183,35 @@ struct SettingsView: View {
         }
     }
 
+    /// "Delete Library": removes books/notes/lists/connections, keeps the
+    /// member profile — the user lands on "Your library is empty" without a
+    /// login detour. While sharing, the share ends first (the content being
+    /// deleted is the shared content).
+    private func deleteLibraryData() {
+        isDeleting = true
+        // Clear the LIVE store first: the UI reads from Persistence.shared,
+        // so the empty state appears immediately.
+        LibraryDataService.deleteLibraryContent(context: modelContext)
+        if SharedLibraryMembershipGate.membership != .none {
+            Task { @MainActor in
+                do {
+                    try await SharedLibraryCoordinator.discardSharedContent()
+                    let context = try SharedLibraryCoordinator.privateContextAfterDiscard()
+                    LibraryDataService.deleteLibraryContent(context: context)
+                } catch {
+                    lastError = error.localizedDescription
+                    showError = true
+                }
+                isDeleting = false
+            }
+        } else {
+            isDeleting = false
+        }
+    }
+
+    /// "Delete everything and start fresh": a full factory reset — every
+    /// record including the member identity, so the user is returned to the
+    /// login screen as if the app had never been used.
     private func deleteAllData() {
         isDeleting = true
         // Clear the LIVE store first: the UI and RootView's login switch

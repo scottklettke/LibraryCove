@@ -183,8 +183,9 @@ enum LibraryDataService {
         return ImportSummary(loaded.envelope, deletedBeforeImport: deleted)
     }
 
-    /// Deletes every record so the user starts fresh. Returns how many were
-    /// removed.
+    /// Deletes every record so the user starts fresh — including the member
+    /// identity, so the app returns to the login screen. Returns how many
+    /// were removed.
     @discardableResult
     static func deleteAll(context: ModelContext) -> Int {
         func count<T: PersistentModel>(_ type: T.Type) -> Int {
@@ -207,6 +208,34 @@ enum LibraryDataService {
 
         // Covers live on the filesystem, so clearing the database must purge
         // them too.
+        CoverImageStore.removeAll()
+
+        return total
+    }
+
+    /// Deletes the LIBRARY CONTENT only — books, notes, reading lists, and
+    /// connections — keeping the member identity (the user stays logged in)
+    /// and landing on the "Your library is empty" page. Returns how many
+    /// were removed.
+    @discardableResult
+    static func deleteLibraryContent(context: ModelContext) -> Int {
+        func count<T: PersistentModel>(_ type: T.Type) -> Int {
+            (try? context.fetchCount(FetchDescriptor<T>())) ?? 0
+        }
+        let total = count(Book.self)
+            + count(Note.self)
+            + count(ReadingList.self)
+            + count(ReadingListItem.self)
+            + count(Connection.self)
+
+        try? context.delete(model: Book.self)
+        try? context.delete(model: Note.self)
+        try? context.delete(model: ReadingList.self)
+        try? context.delete(model: ReadingListItem.self)
+        try? context.delete(model: Connection.self)
+        try? context.save()
+
+        // Library content is gone; its covers have no owner anymore.
         CoverImageStore.removeAll()
 
         return total

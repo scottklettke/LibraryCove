@@ -701,10 +701,6 @@ struct SettingsView: View {
                 ReadingListItem.self, Connection.self, User.self,
             ])
             let targetContainer = SyncStoreRegistry.makeContainer(for: new)
-            // Carry the backups along with the library: the Backups folder
-            // moves between the local and iCloud companions so each
-            // provider sees its own backup set.
-            BackupStore.mirrorForProviderSwitch(to: new)
             do {
                 // MERGE, not replace: the target store may be CloudKit-
                 // backed, and deleteAll + re-insert floods it with new
@@ -744,6 +740,10 @@ struct SettingsView: View {
             }
             // 4) Point the app at the new store — hot swap, no restart, no
             // popup: the picker and Status row already reflect the change.
+            // Backups move too, but only now that every fallible step
+            // (snapshot, merge, member carry) succeeded — a merge failure
+            // rolls back with the library's backup sets untouched.
+            BackupStore.mirrorForProviderSwitch(to: new)
             SyncSettings.selectedProvider = new
             Persistence.swapShared(to: targetContainer)
             syncProvider = new

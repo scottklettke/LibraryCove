@@ -302,6 +302,22 @@ enum LibraryDataService {
         return ImportSummary(loaded.envelope)
     }
 
+    /// Copies an archive into the context 1:1 — NO dedupe. Duplicate books
+    /// in the archive stay duplicate books. Used by the provider-switch
+    /// engine, where the snapshot IS the user's authoritative library and
+    /// collapsing same-title copies would silently lose data (a later
+    /// backup of the target store would then be missing them). Existing
+    /// target rows are left alone (the archive's user rows dedupe by id so
+    /// relationships wire; books insert with their own UUIDs).
+    @discardableResult
+    static func copyArchive(data: Data, context: ModelContext) throws -> ImportSummary {
+        var loaded = try loadArchive(data)
+        restoreCovers(from: &loaded.envelope, files: loaded.files)
+        insert(loaded.envelope, into: context)
+        try context.save()
+        return ImportSummary(loaded.envelope)
+    }
+
     private static func knownBookKeys(context: ModelContext) -> (isbns: Set<String>, titleKeys: Set<String>) {
         let books = (try? context.fetch(FetchDescriptor<Book>())) ?? []
         var isbns = Set<String>()

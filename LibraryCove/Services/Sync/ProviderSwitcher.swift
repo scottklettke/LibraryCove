@@ -35,10 +35,14 @@ enum ProviderSwitcher {
         guard let snapshot = await LibraryDataService.export(context: liveContext) else {
             throw LibraryDataError.exportFailed
         }
-        // 2) Open the target store and merge the snapshot into it.
+        // 2) Open the target store and copy the snapshot into it — 1:1,
+        // NO dedupe. mergeArchive collapses same-ISBN/same-title copies,
+        // which would silently drop the user's duplicate books: a backup
+        // taken after the switch (or a later switch back) would be missing
+        // them. The snapshot is the authoritative library; copy it as-is.
         let targetContainer = SyncStoreRegistry.makeContainer(for: new)
-        try LibraryDataService.mergeArchive(data: snapshot,
-                                            context: ModelContext(targetContainer))
+        try LibraryDataService.copyArchive(data: snapshot,
+                                           context: ModelContext(targetContainer))
         // 3) Guarantee an active member in the target store (a CloudKit
         // target may not have mirrored its User rows down yet).
         let targetContext = ModelContext(targetContainer)

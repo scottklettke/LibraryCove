@@ -61,7 +61,12 @@ struct BackupDetailView: View {
                     if books.isEmpty {
                         Text("This backup contains no books.")
                     } else {
-                        ForEach(books, id: \.id) { book in
+                        // Enumerated identity: duplicate books in a backup
+                        // (same title, distinct UUIDs) must each get a row —
+                        // id alone would collapse equal ids, and duplicate
+                        // titles would be fine either way with index-based
+                        // identity as long as the list is static per load.
+                        ForEach(Array(books.enumerated()), id: \.offset) { _, book in
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(book.title)
                                     .font(.body)

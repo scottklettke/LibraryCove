@@ -61,7 +61,6 @@ struct SettingsView: View {
     @State private var aiAvailability: AIAvailability?
     @State private var aiModel: String = AIConfig.openAIModel
     @State private var contextWindow: Int = AIConfig.maxContextTokens
-    @State private var aiLogs: [AILogEntry] = []
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testResultIsError = false
@@ -402,23 +401,13 @@ struct SettingsView: View {
                 } footer: {
                     Text("Used by \"Search the web\" when you fetch a book's description. iOS doesn't reveal Safari's default engine, so LibraryCove keeps its own choice; DuckDuckGo is the default.")
                 }
+
                 Section {
-                    if aiLogs.isEmpty {
-                        Text("No AI activity logged yet. Ask a question or tap Test connection to see request logs here.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(Array(aiLogs.prefix(30))) { entry in
-                            logRow(entry)
-                        }
-                        Button("Clear logs", role: .destructive) {
-                            AILogStore.clear()
-                            reloadLogs()
-                        }
+                    NavigationLink {
+                        AdvancedSettingsView()
+                    } label: {
+                        Label("Advanced", systemImage: "gearshape.2")
                     }
-                } header: {
-                    Text("AI connection logs")
-                } footer: {
-                    Text("Shows the last 30 requests — endpoint, outcome, errors, and timing — so connection issues are visible. Logs stay on this device.")
                 }
 
                 Section {
@@ -521,9 +510,6 @@ struct SettingsView: View {
                 aiAvailability = await AIService.shared.availability()
                 await reloadModels()
             }
-            .onAppear {
-                reloadLogs()
-            }
             .onChange(of: aiEngine) { _, newValue in
                 AIConfig.selectedEngine = newValue
             }
@@ -559,13 +545,6 @@ struct SettingsView: View {
     }
 
     // MARK: - AI connection testing + logs
-
-    @MainActor
-    private func reloadLogs() {
-        // Newest first — the most recent request is what a user checking logs
-        // actually cares about; it goes at the top rather than off-screen.
-        aiLogs = AILogStore.entries().reversed()
-    }
 
     /// Asks the configured endpoint for its model list so the Model picker and
     /// the "Will use …" line reflect what the server actually reports. The
@@ -623,7 +602,6 @@ struct SettingsView: View {
             testResult = error.localizedDescription
             testResultIsError = true
         }
-        reloadLogs()
     }
 
     private static func testFailureMessage(_ error: AIError) -> String {
@@ -634,47 +612,6 @@ struct SettingsView: View {
             return "Could not reach the endpoint — \(underlying.localizedDescription). Check the URL and that the server is running."
         default:
             return error.errorDescription ?? "Connection failed."
-        }
-    }
-
-    private func logRow(_ entry: AILogEntry) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: Self.logIcon(for: entry.kind))
-                .foregroundStyle(Self.logColor(for: entry.kind))
-                .font(.caption)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.detail)
-                    .font(.caption)
-                    .textSelection(.enabled)
-                HStack(spacing: 6) {
-                    Text(entry.date.formatted(date: .omitted, time: .standard))
-                    Text("·")
-                    Text(entry.engine.displayName)
-                    if let latency = entry.latencyText {
-                        Text("·")
-                        Text(latency)
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-    }
-
-    private static func logIcon(for kind: AILogEntry.Kind) -> String {
-        switch kind {
-        case .attempt: return "arrow.up.circle"
-        case .success: return "checkmark.circle"
-        case .error: return "exclamationmark.triangle"
-        }
-    }
-
-    private static func logColor(for kind: AILogEntry.Kind) -> Color {
-        switch kind {
-        case .attempt: return .secondary
-        case .success: return .green
-        case .error: return .red
         }
     }
 
@@ -1320,7 +1257,7 @@ struct SettingsView: View {
 
 /// Second layer of the delete guard: requires typing DELETE to enable the
 /// destructive button.
-private struct DeleteLibraryConfirmView: View {
+struct DeleteLibraryConfirmView: View {
     @Environment(\.dismiss) private var dismiss
     @Binding var confirmText: String
     let onDelete: () -> Void

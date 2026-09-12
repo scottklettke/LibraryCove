@@ -167,7 +167,26 @@ struct SettingsView: View {
                     HStack {
                         TextField("Library name",
                                   text: Binding(get: { user.displayName },
-                                                set: { user.displayName = $0 }))
+                                                set: { newValue in
+                                                    let oldName = user.displayName
+                                                    user.displayName = newValue
+                                                    // Persist immediately so the
+                                                    // empty-page greeting follows
+                                                    // the rename.
+                                                    try? modelContext.save()
+                                                    // Keep the share-title default
+                                                    // in sync when it was derived
+                                                    // from the old name ("Scott's
+                                                    // Library" -> "Bob's Library");
+                                                    // a custom name is left alone.
+                                                    let derived = SharedLibrarySettings
+                                                        .defaultShareTitle(for: oldName)
+                                                    if SharedLibrarySettings.preferredShareTitle == nil
+                                                        || SharedLibrarySettings.preferredShareTitle == derived {
+                                                        SharedLibrarySettings.preferredShareTitle =
+                                                            SharedLibrarySettings.defaultShareTitle(for: newValue)
+                                                    }
+                                                }))
                             .focused($nameFieldFocused)
                         Button {
                             nameFieldFocused = true

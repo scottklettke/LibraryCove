@@ -65,7 +65,6 @@ enum SharedLibrarySettings {
         get { d.url(forKey: Key.shareURL) }
         set { d.set(newValue, forKey: Key.shareURL) }
     }
-
     /// Display name of the shared library shown in UI.
     static var shareTitle: String? {
         get { d.string(forKey: Key.shareTitle) }
@@ -79,6 +78,13 @@ enum SharedLibrarySettings {
     static var preferredShareTitle: String? {
         get { d.string(forKey: Key.preferredShareTitle) }
         set { d.set(newValue, forKey: Key.preferredShareTitle) }
+    }
+
+    /// The standard derived library name for a member: "«Name»'s Library".
+    static func defaultShareTitle(for displayName: String) -> String {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        return "\(trimmed)'s Library"
     }
 
     /// Participant side: zone ID components of the accepted share's zone.

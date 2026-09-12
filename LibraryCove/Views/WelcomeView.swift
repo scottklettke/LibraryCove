@@ -90,7 +90,7 @@ struct WelcomeView: View {
                         // Prefill the library name from the name until the
                         // user edits the library field themselves.
                         if !libraryNameEdited {
-                            libraryName = Self.defaultLibraryName(for: newValue)
+                            libraryName = SharedLibrarySettings.defaultShareTitle(for: newValue)
                         }
                     }
             }
@@ -99,7 +99,7 @@ struct WelcomeView: View {
                     .textInputAutocapitalization(.words)
                     .onChange(of: libraryName) { _, newValue in
                         libraryNameEdited = !newValue.isEmpty &&
-                            newValue != Self.defaultLibraryName(for: name)
+                            newValue != SharedLibrarySettings.defaultShareTitle(for: name)
                     }
             } header: {
                 Text("Your library")
@@ -117,15 +117,10 @@ struct WelcomeView: View {
                         displayName: trimmedName)
         modelContext.insert(user)
         SharedLibrarySettings.preferredShareTitle = trimmedLibrary.isEmpty
-            ? Self.defaultLibraryName(for: trimmedName)
+            ? SharedLibrarySettings.defaultShareTitle(for: trimmedName)
             : trimmedLibrary
         try? modelContext.save()
         onComplete()
     }
 
-    static func defaultLibraryName(for name: String) -> String {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-        return "\(trimmed)'s Library"
-    }
 }

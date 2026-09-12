@@ -60,11 +60,13 @@ struct LibraryCoveApp: App {
         .modelContainer(container)
     }
 }
-
 extension Notification.Name {
     static let sharedLibraryInviteArrived = Notification.Name("sharedLibraryInviteArrived")
     /// A book was deleted outside LibraryView (e.g. a sibling copy from the
     /// edit form's copy picker); LibraryView adds the id to its deletedIDs
     /// stale-snapshot guard.
     static let bookDeletedExternally = Notification.Name("bookDeletedExternally")
+    /// A book was added from a form (manual or catalog); carries the title
+    /// in userInfo["title"] so listeners can confirm it to the user.
+    static let bookAdded = Notification.Name("bookAdded")
 }

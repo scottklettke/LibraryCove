@@ -33,6 +33,8 @@ struct AddBookView: View {
     @State private var isSearching = false
     @State private var errorMessage: String?
     @State private var showScanner = false
+    /// Title of the most recently added book, surfaced as a confirmation.
+    @State private var addedBookTitle: String?
     @State private var descriptionSource: DescriptionSource = .openlibrary
     @State private var selectedIDs = Set<String>()
     @State private var importDispatch: ImportQueueDispatch?
@@ -134,6 +136,20 @@ struct AddBookView: View {
             .onAppear {
                 buildExistingSet()
                 ScanQueueStore.shared.startProcessingIfNeeded()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .bookAdded)) { note in
+                if let title = note.userInfo?["title"] as? String, !title.isEmpty {
+                    addedBookTitle = title
+                }
+            }
+            .alert("Book added",
+                   isPresented: Binding(
+                       get: { addedBookTitle != nil },
+                       set: { if !$0 { addedBookTitle = nil } }
+                   )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("“\(addedBookTitle ?? "")” was added successfully.")
             }
         }
     }

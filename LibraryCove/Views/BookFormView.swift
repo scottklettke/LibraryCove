@@ -1106,12 +1106,21 @@ struct BookFormView: View {
             } else {
                 modelContext.insert(book)
                 try? modelContext.save()
+                notifyBookAdded(trimmedTitle)
                 onSaved()
                 if dismissOnSave {
                     dismiss()
                 }
             }
         }
+    }
+
+    /// Tells listeners (e.g. AddBookView) that a book was added, so they can
+    /// surface a confirmation once this form dismisses.
+    private func notifyBookAdded(_ title: String) {
+        NotificationCenter.default.post(
+            name: .bookAdded, object: nil,
+            userInfo: ["title": title])
     }
 
     private func findDuplicate(key: String) -> Book? {

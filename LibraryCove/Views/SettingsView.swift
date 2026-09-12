@@ -977,7 +977,29 @@ struct SettingsView: View {
                 showError = true
                 return
             }
-            // 3) Point the app at the new store — hot swap, no restart.
+            // 3) Guarantee an active member in the target store. The login
+            // gate shows whenever no active User row exists — and a
+            // CloudKit-backed target may not have mirrored its User rows
+            // down yet at switch time (or a previous local wipe removed
+            // them). Carry the currently-active user over explicitly.
+            let targetContext = ModelContext(targetContainer)
+            let hasActiveUser = ((try? targetContext.fetchCount(
+                FetchDescriptor<User>(predicate: #Predicate { $0.isActive }))) ?? 0) > 0
+            if !hasActiveUser {
+                // SettingsView receives the active user; carry it over.
+                let active = self.user
+                targetContext.insert(User(id: active.id,
+                                          email: active.email,
+                                          displayName: active.displayName,
+                                          avatarURL: active.avatarURL,
+                                          timezone: active.timezone,
+                                          language: active.language,
+                                          isActive: true,
+                                          createdAt: active.createdAt,
+                                          lastLoginAt: active.lastLoginAt))
+                try? targetContext.save()
+            }
+            // 4) Point the app at the new store — hot swap, no restart.
             SyncSettings.selectedProvider = new
             Persistence.swapShared(to: targetContainer)
             syncProvider = new

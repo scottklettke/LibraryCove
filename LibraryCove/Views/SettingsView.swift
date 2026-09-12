@@ -1212,11 +1212,22 @@ struct SettingsView: View {
         }
     }
 
+    /// Removes AI remnants and search history so "the entire library is
+    /// deleted" is literally true: the Ask AI conversation transcript file
+    /// (`ai-conversation.json`), the AI connection request logs, and the
+    /// add-book search history.
+    private func wipeAIRemnantsAndSearchHistory() {
+        AILogStore.clear()
+        LocalTranscriptMemory().clear()
+        UserDefaults.standard.removeObject(forKey: "searchHistory")
+    }
+
     private func deleteLibraryData() {
         isDeleting = true
         // Clear the LIVE store first: the UI reads from Persistence.shared,
         // so the empty state appears immediately.
         LibraryDataService.deleteLibraryContent(context: modelContext)
+        wipeAIRemnantsAndSearchHistory()
         if SharedLibraryMembershipGate.membership != .none {
             Task { @MainActor in
                 do {
@@ -1246,6 +1257,7 @@ struct SettingsView: View {
         // read from Persistence.shared, so the user sees the empty state
         // (login screen) immediately, without a restart.
         LibraryDataService.deleteAll(context: modelContext)
+        wipeAIRemnantsAndSearchHistory()
         // While sharing, delete-all also ENDS the share (owner: zone and
         // share removed, participants lose access; participant: leaves the
         // share). Then clear the destination private store so no copy

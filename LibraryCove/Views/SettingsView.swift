@@ -963,8 +963,14 @@ struct SettingsView: View {
             ])
             let targetContainer = SyncStoreRegistry.makeContainer(for: new)
             do {
-                try LibraryDataService.importArchive(data: snapshot,
-                                                     context: ModelContext(targetContainer))
+                // MERGE, not replace: the target store may be CloudKit-
+                // backed, and deleteAll + re-insert floods it with new
+                // records while the old ones sync back down — duplicating
+                // the library on every switch. Merge keeps existing rows
+                // (matching by normalized ISBN, else title+authors) and
+                // adds only what's missing.
+                try LibraryDataService.mergeArchive(data: snapshot,
+                                                    context: ModelContext(targetContainer))
             } catch {
                 syncProvider = SyncSettings.selectedProvider
                 lastError = "Couldn't move your library to the new store. Nothing changed."

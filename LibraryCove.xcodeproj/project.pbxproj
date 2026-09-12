@@ -79,6 +79,7 @@
 		D793B9297FBCB7F9F2F3B63B /* LibraryDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */; };
 		D86F7752E2772295D9338A70 /* FictionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */; };
 		D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D432F92F737332E449E2D8 /* ReadingList.swift */; };
+		DDEAFB6EC8F5A295BE927AF4 /* BookDuplicateRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C60EF49D4A2E46BBE98C6C1 /* BookDuplicateRepair.swift */; };
 		E0ED3582C37823043D0AA5B5 /* AssignValuesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */; };
 		E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */; };
 		E7814E33AA443721EF1CCFAB /* StopSharingMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5118C5C5776F2484EC0C06 /* StopSharingMigrationTests.swift */; };
@@ -119,6 +120,7 @@
 		407C83ACA28E442EADA6E456 /* SharedLibraryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryCoordinator.swift; sourceTree = "<group>"; };
 		420CC7481F27D37D90912C4A /* BookFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormView.swift; sourceTree = "<group>"; };
 		474C8AAAAA2E23371D030C8D /* CatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogService.swift; sourceTree = "<group>"; };
+		4C60EF49D4A2E46BBE98C6C1 /* BookDuplicateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDuplicateRepair.swift; sourceTree = "<group>"; };
 		4D710F3248A8B830BA85A4AB /* ExportFormatGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFormatGuide.swift; sourceTree = "<group>"; };
 		4FE4618EA580CEA09D2B2145 /* LibraryCoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoveTests.swift; sourceTree = "<group>"; };
 		572B0E293B7CC81FB4F4ED14 /* BookMastering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookMastering.swift; sourceTree = "<group>"; };
@@ -160,7 +162,7 @@
 		BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		C011F248612BA0A3A5916731 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
-		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryRecord.swift; sourceTree = "<group>"; };
 		C29BC837621AF27DC2775241 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		C6E521F99961E68EE93C794F /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
@@ -308,6 +310,7 @@
 			isa = PBXGroup;
 			children = (
 				C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */,
+				4C60EF49D4A2E46BBE98C6C1 /* BookDuplicateRepair.swift */,
 				0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */,
 				572B0E293B7CC81FB4F4ED14 /* BookMastering.swift */,
 				613A860A534A8684B30EA259 /* CoverImageStore.swift */,
@@ -576,6 +579,7 @@
 				77155B1A3685C6D28C37221B /* Book.swift in Sources */,
 				687FA0D8F238AD7269653F59 /* BookDateRepair.swift in Sources */,
 				408232ECE5E9C1F012AAB46E /* BookDetailView.swift in Sources */,
+				DDEAFB6EC8F5A295BE927AF4 /* BookDuplicateRepair.swift in Sources */,
 				69AB41ABD1AF3A18FBE7C5F0 /* BookFormView.swift in Sources */,
 				E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */,
 				8BC3805BEC3442DB8989D8AC /* BookMastering.swift in Sources */,
@@ -762,7 +766,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -782,7 +785,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

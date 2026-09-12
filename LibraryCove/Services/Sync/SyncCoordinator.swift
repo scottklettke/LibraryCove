@@ -14,7 +14,10 @@ enum SyncCoordinator {
         guard SyncSettings.hasPendingSnapshot,
               let data = SyncSettings.readSnapshot() else { return }
         do {
-            let summary = try LibraryDataService.importArchive(data: data, context: context)
+            // MERGE, not replace: the target store may be CloudKit-backed,
+            // where deleteAll + re-insert duplicates the library (old cloud
+            // records sync back down alongside the new rows).
+            let summary = try LibraryDataService.mergeArchive(data: data, context: context)
             // Only drop the snapshot once the target store is in charge, so a
             // failed launch retries safely.
             SyncSettings.clearSnapshot()

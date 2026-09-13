@@ -10,6 +10,7 @@ struct LibraryListView: View {
     @State private var showCreate = false
     @State private var newLibraryName = ""
     @State private var libraryToDelete: Library?
+    @State private var createError: String?
 
     var body: some View {
         Form {
@@ -66,19 +67,56 @@ struct LibraryListView: View {
         .navigationTitle("Libraries")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { reload() }
-        .alert("New library", isPresented: $showCreate) {
-            TextField("Library name", text: $newLibraryName)
-            Button("Create") {
-                let name = newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty {
-                    LibraryScope.create(name: name, makeActive: true, context: modelContext)
-                    newLibraryName = ""
-                    reload()
-                }
-            }
-            Button("Cancel", role: .cancel) { newLibraryName = "" }
+        .alert("Couldn't create library", isPresented: Binding(
+            get: { createError != nil },
+            set: { if !$0 { createError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
         } message: {
-            Text("Name the new library. It starts empty; your current library stays saved and switchable.")
+            Text(createError ?? "")
+        }
+        .sheet(isPresented: $showCreate) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField("Library name", text: $newLibraryName)
+                    } footer: {
+                        Text("It starts empty; your current library stays saved and switchable. Creating it makes it the active library.")
+                    }
+                    Section {
+                        Button {
+                            let name = newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !name.isEmpty else { return }
+                            LibraryScope.create(name: name, makeActive: true, context: modelContext)
+                            newLibraryName = ""
+                            showCreate = false
+                            reload()
+                            // Surface a failed persist (e.g. CloudKit
+                            // rejecting the row) instead of showing an
+                            // empty list.
+                            if libraries.isEmpty {
+                                createError = "The library was created but couldn't be saved. Check your iCloud connection and try again."
+                            }
+                        } label: {
+                            Text("Create library")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .disabled(newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .navigationTitle("New library")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            newLibraryName = ""
+                            showCreate = false
+                        }
+                    }
+                }
+                .interactiveDismissDisabled(false)
+            }
+            .presentationDetents([.medium])
         }
         .alert("Delete this library?", isPresented: Binding(
             get: { libraryToDelete != nil },

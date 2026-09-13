@@ -947,7 +947,7 @@ struct BookFormView: View {
     /// Every copy of the edited title (the book itself + its siblings).
     private var allCopiesOfExisting: [Book] {
         guard let book = existing else { return [] }
-        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
         return [book] + BookMastering.otherCopies(of: book, in: all)
     }
 
@@ -990,7 +990,7 @@ struct BookFormView: View {
 
     /// Copies of the same title (normalized ISBN, else title match).
     private func copyCount(of book: Book) -> Int {
-        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
         return BookMastering.otherCopies(of: book, in: all).count + 1
     }
 
@@ -1128,7 +1128,7 @@ struct BookFormView: View {
         // of the same ISBN still match. SQL predicates can't normalize, so
         // match in Swift over the (small) library.
         guard let normalized = Book.normalizedISBN(key) else { return nil }
-        guard let books = try? modelContext.fetch(FetchDescriptor<Book>()) else { return nil }
+        guard let books = try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext)) else { return nil }
         return books.first { Book.normalizedISBN($0.isbn) == normalized }
     }
 }

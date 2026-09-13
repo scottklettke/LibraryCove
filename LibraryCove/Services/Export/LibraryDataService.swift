@@ -93,12 +93,24 @@ enum LibraryDataService {
     /// is injectable for testing.
     static func export(context: ModelContext,
                        fetchRemoteCover: @escaping (URL) async -> Data? = Self.fetchRemoteCover) async -> Data? {
+        // Exports the ACTIVE library's content (multi-library).
+        let libraryID = LibraryScope.activeID(context: context)
         let users = (try? context.fetch(FetchDescriptor<User>())) ?? []
-        let books = (try? context.fetch(FetchDescriptor<Book>())) ?? []
-        let notes = (try? context.fetch(FetchDescriptor<Note>())) ?? []
-        let lists = (try? context.fetch(FetchDescriptor<ReadingList>())) ?? []
-        let items = (try? context.fetch(FetchDescriptor<ReadingListItem>())) ?? []
-        let connections = (try? context.fetch(FetchDescriptor<Connection>())) ?? []
+        let books = (try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        let notes = (try? context.fetch(FetchDescriptor<Note>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        let lists = (try? context.fetch(FetchDescriptor<ReadingList>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        let items = (try? context.fetch(FetchDescriptor<ReadingListItem>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        let connections = (try? context.fetch(FetchDescriptor<Connection>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
 
         // Fetch each distinct remote cover once.
         let remoteCovers = Set(books.compactMap(\.coverImageURL)
@@ -176,11 +188,55 @@ enum LibraryDataService {
     @discardableResult
     static func importArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
-        let deleted = deleteAll(context: context)
+        // Replace-import targets the ACTIVE library only: its content is
+        // deleted, the archive becomes the active library's content. Other
+        // libraries are untouched.
+        let libraryID = LibraryScope.activeID(context: context)
+        let deleted = deleteLibraryContent(context: context, libraryID: libraryID)
         restoreCovers(from: &loaded.envelope, files: loaded.files)
         insert(loaded.envelope, into: context)
         try context.save()
         return ImportSummary(loaded.envelope, deletedBeforeImport: deleted)
+    }
+
+    /// Deletes one library's content rows (books, notes, lists, items,
+    /// connections) — NOT its Library row, NOT other libraries, NOT members.
+    @discardableResult
+    static func deleteLibraryContent(context: ModelContext, libraryID: String) -> Int {
+        let bookCount = (try? context.fetchCount(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? 0
+        let noteCount = (try? context.fetchCount(FetchDescriptor<Note>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? 0
+        let listCount = (try? context.fetchCount(FetchDescriptor<ReadingList>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? 0
+        let itemCount = (try? context.fetchCount(FetchDescriptor<ReadingListItem>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? 0
+        let connectionCount = (try? context.fetchCount(FetchDescriptor<Connection>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? 0
+        let total = bookCount + noteCount + listCount + itemCount + connectionCount
+
+        for row in (try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? [] { context.delete(row) }
+        for row in (try? context.fetch(FetchDescriptor<Note>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? [] { context.delete(row) }
+        for row in (try? context.fetch(FetchDescriptor<ReadingList>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? [] { context.delete(row) }
+        for row in (try? context.fetch(FetchDescriptor<ReadingListItem>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? [] { context.delete(row) }
+        for row in (try? context.fetch(FetchDescriptor<Connection>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? [] { context.delete(row) }
+        try? context.save()
+        return total
     }
 
     /// Deletes every record so the user starts fresh — including the member
@@ -204,6 +260,7 @@ enum LibraryDataService {
         try? context.delete(model: ReadingList.self)
         try? context.delete(model: ReadingListItem.self)
         try? context.delete(model: Connection.self)
+        try? context.delete(model: Library.self)
         try? context.save()
 
         // Covers live on the filesystem, so clearing the database must purge
@@ -239,6 +296,14 @@ enum LibraryDataService {
         CoverImageStore.removeAll()
 
         return total
+    }
+
+    /// Deletes the ACTIVE library's content (multi-library aware). Used by
+    /// Delete Library, which must not touch other libraries.
+    @discardableResult
+    static func deleteActiveLibraryContent(context: ModelContext) -> Int {
+        deleteLibraryContent(context: context,
+                             libraryID: LibraryScope.activeID(context: context))
     }
 
     // MARK: - Decoding
@@ -319,13 +384,18 @@ enum LibraryDataService {
     @discardableResult
     static func migrateArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
+        let libraryID = LibraryScope.activeID(context: context)
         let archiveBookIDs = Set(loaded.envelope.books.map(\.id))
-        let stale = ((try? context.fetch(FetchDescriptor<Book>())) ?? [])
+        let stale = ((try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? [])
             .filter { !archiveBookIDs.contains($0.id) }
         for row in stale {
             context.delete(row)
         }
-        let existingBookIDs = Set((try? context.fetch(FetchDescriptor<Book>()))?.map(\.id) ?? [])
+        let existingBookIDs = Set(((try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []).map(\.id))
         loaded.envelope.books = loaded.envelope.books.filter { !existingBookIDs.contains($0.id) }
         restoreCovers(from: &loaded.envelope, files: loaded.files)
         insert(loaded.envelope, into: context)
@@ -352,7 +422,10 @@ enum LibraryDataService {
     @discardableResult
     static func copyArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
-        let existingBookIDs = Set((try? context.fetch(FetchDescriptor<Book>()))?.map(\.id) ?? [])
+        let activeLibraryID = LibraryScope.activeID(context: context)
+        let existingBookIDs = Set(((try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == activeLibraryID }
+        ))) ?? []).map(\.id))
         if !existingBookIDs.isEmpty {
             loaded.envelope.books = loaded.envelope.books.filter { !existingBookIDs.contains($0.id) }
         }
@@ -493,6 +566,7 @@ enum LibraryDataService {
                             syncDeviceID: dto.syncDeviceID,
                             shelves: dto.shelves ?? [])
             context.insert(book)
+            book.libraryID = LibraryScope.activeID(context: context)
             books[dto.id] = book
         }
 
@@ -510,6 +584,7 @@ enum LibraryDataService {
                                    syncUpdatedAt: dto.syncUpdatedAt,
                                    syncDeviceID: dto.syncDeviceID)
             context.insert(list)
+            list.libraryID = LibraryScope.activeID(context: context)
             lists[dto.id] = list
         }
 
@@ -530,6 +605,7 @@ enum LibraryDataService {
                             syncUpdatedAt: dto.syncUpdatedAt,
                             syncDeviceID: dto.syncDeviceID)
             note.book = dto.bookID.flatMap { books[$0] }
+            note.libraryID = LibraryScope.activeID(context: context)
             context.insert(note)
         }
 
@@ -547,6 +623,7 @@ enum LibraryDataService {
                                        syncDeviceID: dto.syncDeviceID)
             item.list = dto.listID.flatMap { lists[$0] }
             item.book = dto.bookID.flatMap { books[$0] }
+            item.libraryID = LibraryScope.activeID(context: context)
             context.insert(item)
         }
 
@@ -564,6 +641,7 @@ enum LibraryDataService {
                                         syncDeviceID: dto.syncDeviceID)
             connection.book1 = dto.book1ID.flatMap { books[$0] }
             connection.book2 = dto.book2ID.flatMap { books[$0] }
+            connection.libraryID = LibraryScope.activeID(context: context)
             context.insert(connection)
         }
     }

@@ -480,7 +480,7 @@ struct LibraryView: View {
         if let loanedTo = book.loanedTo, !loanedTo.isEmpty {
             parts.append("loaned to \(loanedTo)")
         }
-        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
         let copyCount = BookMastering.otherCopies(of: book, in: all).count + 1
         let identity: String
         if parts.isEmpty {
@@ -496,7 +496,7 @@ struct LibraryView: View {
     }
     /// Number of OTHER copies of the same title (0 = the only copy).
     private func copyCountExcludingSelf(_ book: Book) -> Int {
-        let all = (try? modelContext.fetch(FetchDescriptor<Book>())) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
         return BookMastering.otherCopies(of: book, in: all).count
     }
 

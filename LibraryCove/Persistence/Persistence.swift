@@ -33,6 +33,7 @@ enum Persistence {
     static var inMemory: ModelContainer = {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
+                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)

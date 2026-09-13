@@ -74,7 +74,7 @@ struct RootView: View {
             }
             // Fix books whose dates were never stamped (sentinel 2001-01-01),
             // which rendered "date added" as 12/31/00.
-            if let all = try? modelContext.fetch(FetchDescriptor<Book>()) {
+            if let all = try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext)) {
                 BookDateRepair.repairSentinelDates(books: all, context: modelContext)
             }
         }

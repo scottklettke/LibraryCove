@@ -5,6 +5,9 @@ import SwiftData
 @Model
 final class Note {
     var id: String = UUID().uuidString
+    /// Owning library (`Library.id`). nil = the pre-multi-library era
+    /// (migrated to the default library at launch).
+    var libraryID: String?
     var book: Book?
     var userID: String = ""
     var title: String?

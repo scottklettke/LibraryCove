@@ -5,15 +5,19 @@ import SwiftData
 
 @Suite @MainActor struct StopSharingMigrationTests {
     /// Builds a mirror store at a temp URL with N books.
-    private func makeMirrorStore(books: [Book], url: URL) throws -> ModelContainer {
+    private func makeMirrorStore(books: [Book], url: URL, libraryID: String? = nil) throws -> ModelContainer {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
             ReadingListItem.self, Connection.self, User.self,
+            Library.self,
         ])
         let container = try ModelContainer(for: schema,
                                            configurations: [ModelConfiguration(schema: nil, url: url, allowsSave: true)])
         let context = ModelContext(container)
-        for book in books { context.insert(book) }
+        for book in books {
+            book.libraryID = libraryID
+            context.insert(book)
+        }
         try context.save()
         return container
     }
@@ -23,10 +27,12 @@ import SwiftData
             .appendingPathComponent("test-mirror-\(UUID().uuidString).store")
         defer { try? FileManager.default.removeItem(at: url) }
 
+        // Mirror books carry the default library id: in production the
+        // mirror syncs the owner's personal books, which are tagged.
         let container = try makeMirrorStore(books: [
             Book(id: "b1", title: "Dune", authors: ["Frank Herbert"], isbn: "9780441172719"),
             Book(id: "b2", title: "Solaris", authors: ["Stanislaw Lem"]),
-        ], url: url)
+        ], url: url, libraryID: LibraryScope.defaultLibraryID)
         let context = ModelContext(container)
         let count = (try? context.fetchCount(FetchDescriptor<Book>())) ?? -1
         #expect(count == 2, "mirror should hold 2 books, got \(count)")
@@ -73,7 +79,7 @@ import SwiftData
         defer { try? FileManager.default.removeItem(at: mirrorURL) }
         let mirrorContainer = try makeMirrorStore(books: [
             Book(id: "mir-1", title: "Shared Book", authors: ["Someone"]),
-        ], url: mirrorURL)
+        ], url: mirrorURL, libraryID: LibraryScope.defaultLibraryID)
         let mirrorContext = ModelContext(mirrorContainer)
 
         guard let data = await LibraryDataService.export(context: mirrorContext) else {

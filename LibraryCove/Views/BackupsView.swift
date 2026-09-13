@@ -137,8 +137,18 @@ struct BackupsView: View {
             }
             .disabled(isExporting)
 
-            Button {
-                showFileImporter = true
+            Menu {
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Label("From a zip file", systemImage: "doc.zipper")
+                }
+                Button {
+                    // The saved-backup list is on this page below; scrolling
+                    // hint lives in the footer.
+                } label: {
+                    Label("From a saved backup (below)", systemImage: "clock.arrow.circlepath")
+                }
             } label: {
                 HStack {
                     Label("Import library", systemImage: "tray.and.arrow.down")
@@ -148,11 +158,10 @@ struct BackupsView: View {
                     }
                 }
             }
-            .disabled(isImporting)
         } header: {
             Text("Export & Import")
         } footer: {
-            Text("Export saves your whole library as a zipped, readable file you can save, share, or edit. Import restores from such a file — you choose to add only its new books or replace the whole library. The same choice is offered when restoring a backup.")
+            Text("Export saves your whole library as a zipped, readable file you can save, share, or edit. Import restores from such a file — you choose to add only its new books or replace the whole library. The same choice is offered when restoring a backup. Restoring from a saved backup: pick one from the list below and tap Restore.")
         }
     }
 
@@ -255,7 +264,7 @@ struct BackupsView: View {
                 showError = true
                 return
             }
-            let count = (try? liveContext.fetchCount(FetchDescriptor<Book>())) ?? 0
+            let count = (try? liveContext.fetchCount(LibraryScope.activeBooksDescriptor(context: liveContext))) ?? 0
             do {
                 let name = try BackupStore.save(data: data, bookCount: count)
                 resultIsBackup = true
@@ -346,6 +355,9 @@ struct ImportPreviewView: View {
     @State private var loadError: String?
     @State private var showReplaceConfirm = false
     @State private var isImporting = false
+    /// Name of the library the import lands in. Defaults to the active
+    /// library's name; changing it creates/uses a library with that name.
+    @State private var targetLibraryName = ""
 
     var body: some View {
         NavigationStack {
@@ -362,6 +374,15 @@ struct ImportPreviewView: View {
                 Text(summary?.formatted ?? "No items.")
                     .font(.callout.bold())
                     .multilineTextAlignment(.center)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Import into library")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    TextField("Library name", text: $targetLibraryName)
+                        .textFieldStyle(.roundedBorder)
+                        .padding(.horizontal, 24)
+                }
 
                 if let loadError {
                     Text(loadError)
@@ -419,6 +440,11 @@ struct ImportPreviewView: View {
             // library — swiping the sheet away mid-run must not be possible.
             .interactiveDismissDisabled(isImporting)
             .task {
+                targetLibraryName = LibraryScope.activeName(
+                    context: Persistence.shared.mainContext,
+                    memberName: ((try? Persistence.shared.mainContext.fetch(FetchDescriptor<User>(
+                        predicate: #Predicate { $0.isActive }
+                    ))) ?? []).first?.displayName ?? "")
                 loadPreview()
             }
         }
@@ -456,9 +482,32 @@ struct ImportPreviewView: View {
         "Imported \(imported.formatted)." + (note ?? "")
     }
 
+    /// Ensures a library named `targetLibraryName` exists and is active, so
+    /// the import stamps its rows into the chosen library.
+    private func prepareTargetLibrary() {
+        let context = Persistence.shared.mainContext
+        let requested = targetLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !requested.isEmpty else { return }
+        let current = LibraryScope.activeName(
+            context: context,
+            memberName: ((try? context.fetch(FetchDescriptor<User>(
+                predicate: #Predicate { $0.isActive }
+            ))) ?? []).first?.displayName ?? "")
+        guard requested != current else { return }
+        // An existing library with this name? Activate it. Otherwise create.
+        if let existing = LibraryScope.all(context: context).first(where: {
+            $0.name.compare(requested, options: .caseInsensitive) == .orderedSame
+        }) {
+            LibraryScope.activate(existing, context: context)
+        } else {
+            LibraryScope.create(name: requested, makeActive: true, context: context)
+        }
+    }
+
     private func performMergeImport() {
         isImporting = true
         Task { @MainActor in
+            prepareTargetLibrary()
             do {
                 // Resolve the live store at execution time: a restore can
                 // switch providers before importing, and the injected
@@ -476,6 +525,7 @@ struct ImportPreviewView: View {
     private func performReplaceImport() {
         isImporting = true
         Task { @MainActor in
+            prepareTargetLibrary()
             do {
                 // A replace import while sharing ends the share: the
                 // imported content is the user's new private library, not a

@@ -5,6 +5,9 @@ import SwiftData
 @Model
 final class Connection {
     var id: String = UUID().uuidString
+    /// Owning library (`Library.id`). nil = the pre-multi-library era
+    /// (migrated to the default library at launch).
+    var libraryID: String?
     var book1: Book?
     var book2: Book?
     var connectionType: String = "similar_to"  // inspired_by | expands_on | contrasts_with | similar_to

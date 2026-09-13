@@ -16,6 +16,7 @@ import SwiftData
     /// A small but complete library exercising every entity type and every
     /// relationship (note->book, list items->list+book, connection book1/book2).
     private func seed(_ context: ModelContext) {
+        LibraryScope.migrateIfNeeded(context: context)
         let user = User(id: "u-1", email: "a@b.c", displayName: "Alex", isActive: true)
         context.insert(user)
 
@@ -26,22 +27,29 @@ import SwiftData
         let b2 = Book(id: "b-2", title: "Solaris", authors: ["Stanislaw Lem"],
                       tags: ["Science Fiction"], status: "to-read", ownerID: "u-1",
                       createdAt: Date(timeIntervalSince1970: 2000))
+        b1.libraryID = LibraryScope.defaultLibraryID
+        b2.libraryID = LibraryScope.defaultLibraryID
         context.insert(b1)
         context.insert(b2)
 
         let note = Note(id: "n-1", book: b1, userID: "u-1", content: "A classic.",
                         noteType: "general", createdAt: Date(timeIntervalSince1970: 1500))
+        note.libraryID = LibraryScope.defaultLibraryID
         context.insert(note)
 
         let list = ReadingList(id: "l-1", name: "Favorites", ownerID: "u-1")
+        list.libraryID = LibraryScope.defaultLibraryID
         context.insert(list)
         let item1 = ReadingListItem(id: "li-1", list: list, book: b1, position: 0)
         let item2 = ReadingListItem(id: "li-2", list: list, book: b2, position: 1)
+        item1.libraryID = LibraryScope.defaultLibraryID
+        item2.libraryID = LibraryScope.defaultLibraryID
         context.insert(item1)
         context.insert(item2)
 
         let conn = Connection(id: "c-1", book1: b1, book2: b2, connectionType: "similar_to",
                               connectionDescription: "Both about planets", createdByID: "u-1")
+        conn.libraryID = LibraryScope.defaultLibraryID
         context.insert(conn)
 
         try? context.save()
@@ -227,13 +235,19 @@ import SwiftData
         let remoteURL = "https://covers.openlibrary.org/b/id/123-L.jpg"
         let dataBytes = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x44, 0x22])
         let dataCover = "data:image/jpeg;base64," + dataBytes.base64EncodedString()
-        context.insert(Book(id: "b-cover-remote", title: "Remote", coverImageURL: remoteURL,
-                            createdAt: Date(timeIntervalSince1970: 1000)))
-        context.insert(Book(id: "b-cover-data", title: "Data", coverImageURL: dataCover,
-                            createdAt: Date(timeIntervalSince1970: 2000)))
+        let remoteBook = Book(id: "b-cover-remote", title: "Remote", coverImageURL: remoteURL,
+                              createdAt: Date(timeIntervalSince1970: 1000))
+        remoteBook.libraryID = LibraryScope.defaultLibraryID
+        context.insert(remoteBook)
+        let dataBook = Book(id: "b-cover-data", title: "Data", coverImageURL: dataCover,
+                            createdAt: Date(timeIntervalSince1970: 2000))
+        dataBook.libraryID = LibraryScope.defaultLibraryID
+        context.insert(dataBook)
         // Two books sharing one remote URL: must fetch it exactly once.
-        context.insert(Book(id: "b-cover-shared", title: "Shared", coverImageURL: remoteURL,
-                            createdAt: Date(timeIntervalSince1970: 3000)))
+        let sharedBook = Book(id: "b-cover-shared", title: "Shared", coverImageURL: remoteURL,
+                              createdAt: Date(timeIntervalSince1970: 3000))
+        sharedBook.libraryID = LibraryScope.defaultLibraryID
+        context.insert(sharedBook)
         try context.save()
 
         let jpeg = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10])
@@ -285,8 +299,10 @@ import SwiftData
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
         let remoteURL = "https://example.com/missing-cover.jpg"
-        context.insert(Book(id: "b-nocover", title: "No cover", coverImageURL: remoteURL,
-                            createdAt: Date(timeIntervalSince1970: 100)))
+        let noCoverBook = Book(id: "b-nocover", title: "No cover", coverImageURL: remoteURL,
+                               createdAt: Date(timeIntervalSince1970: 100))
+        noCoverBook.libraryID = LibraryScope.defaultLibraryID
+        context.insert(noCoverBook)
         try context.save()
 
         let fetch: (URL) async -> Data? = { _ in nil }

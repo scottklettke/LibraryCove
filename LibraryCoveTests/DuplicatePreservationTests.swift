@@ -14,6 +14,9 @@ import SwiftData
     @Test func exportImportExportPreservesDuplicates() async throws {
         let context = baseContext()
 
+        // Mirror the real app: launch migration creates the default
+        // library and tags legacy (libraryID == nil) rows into it.
+        LibraryScope.migrateIfNeeded(context: context)
         let user = User(id: "u-d", email: "d@d.c", displayName: "Dup", isActive: true)
         context.insert(user)
         // Two copies of the SAME book: same title/authors/ISBN, distinct ids.
@@ -23,6 +26,8 @@ import SwiftData
         let b = Book(id: "dup-b", title: "Dune", authors: ["Frank Herbert"],
                      isbn: "9780441172719", ownerID: "u-d",
                      createdAt: Date(timeIntervalSince1970: 2000))
+        a.libraryID = LibraryScope.defaultLibraryID
+        b.libraryID = LibraryScope.defaultLibraryID
         context.insert(a)
         context.insert(b)
         try context.save()
@@ -60,6 +65,7 @@ import SwiftData
         let stale = Book(id: "stale-1", title: "Old Flood Book", authors: ["F. Lood"],
                          isbn: nil, ownerID: "u-d",
                          createdAt: Date(timeIntervalSince1970: 500))
+        stale.libraryID = LibraryScope.defaultLibraryID
         context.insert(stale)
         try context.save()
         let before = try context.fetch(FetchDescriptor<Book>())

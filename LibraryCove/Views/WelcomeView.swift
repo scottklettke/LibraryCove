@@ -37,6 +37,12 @@ struct WelcomeView: View {
                         text: "Share your library with the people you live with over iCloud — everyone can add, edit, and remove books.",
                         tag: 2
                     )
+                    welcomePage(
+                        icon: "books.vertical",
+                        title: "Multiple libraries",
+                        text: "Start with one library — you can create more later in Settings > Libraries and switch between them anytime.",
+                        tag: 21
+                    )
                     setupPage.tag(3)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
@@ -104,7 +110,7 @@ struct WelcomeView: View {
             } header: {
                 Text("Your library")
             } footer: {
-                Text("The library name shows up when you share your library with others.")
+                Text("The library name shows up when you share your library with others. You can create more libraries later in Settings > Libraries.")
             }
         }
         .tag(3)

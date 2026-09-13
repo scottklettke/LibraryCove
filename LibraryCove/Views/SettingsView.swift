@@ -606,38 +606,54 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var profileSection: some View {
                 Section {
                     HStack {
                         TextField("Library name",
-                                  text: Binding(get: { user.displayName },
-                                                set: { newValue in
-                                                    let oldName = user.displayName
-                                                    // A rename applies to EVERY User
-                                                    // row: CloudKit stores may hold
-                                                    // older identity records for the
-                                                    // same person, and mirroring would
-                                                    // otherwise clobber the renamed
-                                                    // row with a stale name.
-                                                    let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
-                                                    for row in allUsers { row.displayName = newValue }
-                                                    // Persist immediately so the
-                                                    // empty-page greeting follows
-                                                    // the rename.
-                                                    try? modelContext.save()
-                                                    // Keep the share-title default
-                                                    // in sync when it was derived
-                                                    // from the old name ("Scott's
-                                                    // Library" -> "Bob's Library");
-                                                    // a custom name is left alone.
-                                                    let derived = SharedLibrarySettings
-                                                        .defaultShareTitle(for: oldName)
-                                                    if SharedLibrarySettings.preferredShareTitle == nil
-                                                        || SharedLibrarySettings.preferredShareTitle == derived {
-                                                        SharedLibrarySettings.preferredShareTitle =
-                                                            SharedLibrarySettings.defaultShareTitle(for: newValue)
-                                                    }
-                                                }))
+                                  text: Binding(get: {
+                                                      LibraryScope.activeName(
+                                                          context: modelContext,
+                                                          memberName: user.displayName)
+                                                  },
+                                                  set: { newValue in
+                                                      // The name names the ACTIVE
+                                                      // library; other libraries keep
+                                                      // theirs. The member display name
+                                                      // (used for "Added by") stays
+                                                      // bound to the library name for
+                                                      // single-library users via
+                                                      // LibraryScope.activeName's
+                                                      // default.
+                                                      if let library = LibraryScope.active(context: modelContext) {
+                                                          library.name = newValue
+                                                      }
+                                                      // A rename also applies to EVERY
+                                                      // User row: CloudKit stores may
+                                                      // hold older identity records for
+                                                      // the same person, and mirroring
+                                                      // would otherwise clobber the
+                                                      // renamed row with a stale name.
+                                                      let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
+                                                      for row in allUsers { row.displayName = newValue }
+                                                      // Persist immediately so the
+                                                      // empty-page greeting follows
+                                                      // the rename.
+                                                      try? modelContext.save()
+                                                      // Keep the share-title default
+                                                      // in sync when it was derived
+                                                      // from the old name ("Scott's
+                                                      // Library" -> "Bob's Library");
+                                                      // a custom name is left alone.
+                                                      let oldName = user.displayName
+                                                      let derived = SharedLibrarySettings
+                                                          .defaultShareTitle(for: oldName)
+                                                      if SharedLibrarySettings.preferredShareTitle == nil
+                                                          || SharedLibrarySettings.preferredShareTitle == derived {
+                                                          SharedLibrarySettings.preferredShareTitle =
+                                                              SharedLibrarySettings.defaultShareTitle(for: newValue)
+                                                      }
+                                                  }))
                             .focused($nameFieldFocused)
                         Button {
                             nameFieldFocused = true
@@ -650,7 +666,17 @@ struct SettingsView: View {
                 } header: {
                     Text("Profile")
                 } footer: {
-                    Text("Tap the pencil to edit the name used for “Added by” on your books.")
+                    Text("Tap the pencil to edit the active library's name. Use Libraries below to switch between libraries.")
+                }
+
+                Section {
+                    NavigationLink {
+                        LibraryListView()
+                    } label: {
+                        Label("Libraries", systemImage: "books.vertical")
+                    }
+                } footer: {
+                    Text("Create and switch between libraries. The active library's books are what you see everywhere in the app.")
                 }
     }
 
@@ -846,6 +872,7 @@ struct SettingsView: View {
     private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool) {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
+                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         let otherProvider: LibrarySync = liveProvider == .iCloud ? .localOnly : .iCloud
@@ -864,7 +891,9 @@ struct SettingsView: View {
         // so the empty state appears immediately.
         // (Backup deletion is governed by the sheet's "Keep saved backups"
         // toggle, which calls BackupStore.deleteAll() itself.)
-        LibraryDataService.deleteLibraryContent(context: modelContext)
+        // Multi-library: Delete Library removes the ACTIVE library's
+        // content only — other libraries are untouched.
+        LibraryDataService.deleteActiveLibraryContent(context: modelContext)
         clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: true)
         wipeAIRemnantsAndSearchHistory()
         if SharedLibraryMembershipGate.membership != .none {

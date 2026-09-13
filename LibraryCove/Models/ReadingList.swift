@@ -5,6 +5,9 @@ import SwiftData
 @Model
 final class ReadingList {
     var id: String = UUID().uuidString
+    /// Owning library (`Library.id`). nil = the pre-multi-library era
+    /// (migrated to the default library at launch).
+    var libraryID: String?
     var name: String = ""
     var listDescription: String?
     var ownerID: String = ""
@@ -54,6 +57,9 @@ final class ReadingList {
 @Model
 final class ReadingListItem {
     var id: String = UUID().uuidString
+    /// Owning library (`Library.id`). nil = the pre-multi-library era
+    /// (migrated to the default library at launch).
+    var libraryID: String?
     var list: ReadingList?
     var book: Book?
     var addedByID: String?

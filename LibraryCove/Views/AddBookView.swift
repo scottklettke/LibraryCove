@@ -1028,7 +1028,7 @@ struct BookImportFlow: View {
 
 extension AddBookView {
     private func buildExistingSet() {
-        let descriptor = FetchDescriptor<Book>()
+        let descriptor = LibraryScope.activeBooksDescriptor(context: modelContext)
         do {
             let books = try modelContext.fetch(descriptor)
             existingIsbns = Set(books.compactMap { Book.normalizedISBN($0.isbn) })

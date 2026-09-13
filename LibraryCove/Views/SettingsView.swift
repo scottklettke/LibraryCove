@@ -625,9 +625,10 @@ struct SettingsView: View {
                                                       // single-library users via
                                                       // LibraryScope.activeName's
                                                       // default.
-                                                      if let library = LibraryScope.active(context: modelContext) {
-                                                          library.name = newValue
-                                                      }
+                                                      LibraryScope.rename(
+                                                          id: LibraryScope.activeID(context: modelContext),
+                                                          to: newValue,
+                                                          context: modelContext)
                                                       // A rename also applies to EVERY
                                                       // User row: CloudKit stores may
                                                       // hold older identity records for
@@ -872,7 +873,6 @@ struct SettingsView: View {
     private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool) {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
-                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         let otherProvider: LibrarySync = liveProvider == .iCloud ? .localOnly : .iCloud

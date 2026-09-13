@@ -6,10 +6,10 @@ import SwiftData
 /// Library.
 struct LibraryListView: View {
     @Environment(\.modelContext) private var modelContext
-    @State private var libraries: [Library] = []
+    @State private var libraries: [LibraryInfo] = []
     @State private var showCreate = false
     @State private var newLibraryName = ""
-    @State private var libraryToDelete: Library?
+    @State private var libraryToDelete: LibraryInfo?
     @State private var createError: String?
 
     var body: some View {
@@ -140,7 +140,7 @@ struct LibraryListView: View {
         libraries = LibraryScope.all(context: modelContext)
     }
 
-    private func bookCount(for library: Library) -> Int {
+    private func bookCount(for library: LibraryInfo) -> Int {
         let id = library.id
         return (try? modelContext.fetchCount(FetchDescriptor<Book>(
             predicate: #Predicate { $0.libraryID == id }

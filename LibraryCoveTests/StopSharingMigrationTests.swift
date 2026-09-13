@@ -9,7 +9,6 @@ import SwiftData
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
             ReadingListItem.self, Connection.self, User.self,
-            Library.self,
         ])
         let container = try ModelContainer(for: schema,
                                            configurations: [ModelConfiguration(schema: nil, url: url, allowsSave: true)])

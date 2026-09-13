@@ -260,7 +260,6 @@ enum LibraryDataService {
         try? context.delete(model: ReadingList.self)
         try? context.delete(model: ReadingListItem.self)
         try? context.delete(model: Connection.self)
-        try? context.delete(model: Library.self)
         try? context.save()
 
         // Covers live on the filesystem, so clearing the database must purge

@@ -40,7 +40,6 @@ enum Persistence {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
             ReadingListItem.self, Connection.self, User.self,
-            Library.self,
         ])
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask).first!
@@ -58,7 +57,6 @@ enum Persistence {
     static var inMemory: ModelContainer = {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
-                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: true)

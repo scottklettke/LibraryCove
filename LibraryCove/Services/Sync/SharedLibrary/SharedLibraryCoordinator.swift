@@ -162,7 +162,6 @@ enum SharedLibraryCoordinator {
     static func privateContextAfterDiscard() throws -> ModelContext {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
-                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         let configuration = try SyncStoreRegistry.provider(
@@ -192,7 +191,6 @@ enum SharedLibraryCoordinator {
     private static func resolveDestination() -> HomeDestination {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
-                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         if let remembered = SharedLibrarySettings.previousProvider {
@@ -346,7 +344,6 @@ extension SwiftDataSharedLibrarySync {
     static func containerForMigration() -> ModelContainer {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
-                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         if let container = try? ModelContainer(for: schema,

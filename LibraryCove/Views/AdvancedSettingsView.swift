@@ -146,7 +146,6 @@ struct AdvancedSettingsView: View {
     private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool) {
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
-                Library.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
         let otherProvider: LibrarySync = liveProvider == .iCloud ? .localOnly : .iCloud

@@ -13,8 +13,9 @@ import SwiftData
 
     private func wipe() {
         // Fresh in-memory container starts empty; clear rows that earlier
-        // tests in this suite may have created (Library, User, Book...).
-        try? Persistence.inMemory.mainContext.delete(model: Library.self)
+        // tests in this suite may have created (User, Book...) plus the
+        // JSON registry (persisted to Application Support).
+        try? FileManager.default.removeItem(at: LibraryScope.registryURLForTesting)
         try? Persistence.inMemory.mainContext.delete(model: User.self)
         try? Persistence.inMemory.mainContext.delete(model: Book.self)
         try? Persistence.inMemory.mainContext.delete(model: Note.self)

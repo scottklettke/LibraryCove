@@ -302,6 +302,37 @@ enum LibraryDataService {
         return ImportSummary(loaded.envelope)
     }
 
+    /// Migrates the context to EXACTLY the archive's content: deletes every
+    /// Book row whose id is absent from the archive, copies the rest 1:1
+    /// (same-id rows keep their local row; new ids insert). NO ISBN/title
+    /// dedupe — duplicate copies with distinct UUIDs survive.
+    ///
+    /// This is the provider-switch semantic. Union-style copying (plain
+    /// copyArchive) made the target store ACCUMULATE: rows left over from an
+    /// earlier era (e.g. CloudKit re-delivered a pre-fresh-start library)
+    /// rode along through every switch round trip, doubling the library.
+    /// The snapshot is authoritative — the target should match it exactly.
+    ///
+    /// Deletes are targeted (specific ids), not deleteAll: CloudKit
+    /// propagates per-record deletions cleanly, and only rows the archive
+    /// genuinely replaced are removed.
+    @discardableResult
+    static func migrateArchive(data: Data, context: ModelContext) throws -> ImportSummary {
+        var loaded = try loadArchive(data)
+        let archiveBookIDs = Set(loaded.envelope.books.map(\.id))
+        let stale = ((try? context.fetch(FetchDescriptor<Book>())) ?? [])
+            .filter { !archiveBookIDs.contains($0.id) }
+        for row in stale {
+            context.delete(row)
+        }
+        let existingBookIDs = Set((try? context.fetch(FetchDescriptor<Book>()))?.map(\.id) ?? [])
+        loaded.envelope.books = loaded.envelope.books.filter { !existingBookIDs.contains($0.id) }
+        restoreCovers(from: &loaded.envelope, files: loaded.files)
+        insert(loaded.envelope, into: context)
+        try context.save()
+        return ImportSummary(loaded.envelope)
+    }
+
     /// Copies an archive into the context 1:1 — NO dedupe by ISBN or
     /// title+authors. Duplicate books in the archive (same title, distinct
     /// UUIDs) stay duplicate books. Used by the provider-switch engine and

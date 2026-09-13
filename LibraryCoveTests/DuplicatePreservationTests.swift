@@ -46,11 +46,29 @@ import SwiftData
         let rows = try context.fetch(FetchDescriptor<Book>())
         #expect(rows.count == 2, "store must hold BOTH copies after restore, got \(rows.count)")
 
-        // 3) copyArchive path (provider switch): pour into a store that
-        // already has one copy — the distinct-id second copy must survive.
+        // 3) copyArchive path (shared-library hand-off): pour into a store
+        // that already has one copy — the distinct-id second copy must
+        // survive, and same-id rows must not double-insert.
         let summary2 = try LibraryDataService.copyArchive(data: zip1, context: context)
         _ = summary2
         let rowsAfterCopy = try context.fetch(FetchDescriptor<Book>())
         #expect(rowsAfterCopy.count == 2, "copyArchive must not double-insert same-id rows, got \(rowsAfterCopy.count)")
+
+        // 4) migrateArchive path (provider switch): a target polluted with
+        // a stale era (extra rows with ids the snapshot lacks) must end up
+        // EXACTLY the snapshot: stale rows deleted, duplicates preserved.
+        let stale = Book(id: "stale-1", title: "Old Flood Book", authors: ["F. Lood"],
+                         isbn: nil, ownerID: "u-d",
+                         createdAt: Date(timeIntervalSince1970: 500))
+        context.insert(stale)
+        try context.save()
+        let before = try context.fetch(FetchDescriptor<Book>())
+        #expect(before.count == 3, "polluted store should hold 3 rows, got \(before.count)")
+        _ = try LibraryDataService.migrateArchive(data: zip1, context: context)
+        let after = try context.fetch(FetchDescriptor<Book>())
+        #expect(after.count == 2, "migration must remove stale rows, got \(after.count)")
+        #expect(!after.contains { $0.id == "stale-1" }, "stale row must be gone")
+        #expect(after.contains { $0.id == "dup-a" } && after.contains { $0.id == "dup-b" },
+                "both duplicate copies must survive migration")
     }
 }

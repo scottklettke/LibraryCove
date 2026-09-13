@@ -1,5 +1,9 @@
 import Foundation
 import SwiftData
+import os.log
+
+/// Diagnostics for multi-library issues (fetch/insert mismatches on device).
+private let libraryLog = Logger(subsystem: "com.librarycove.app", category: "LibraryScope")
 
 /// Central multi-library plumbing: the active library, its id, and the
 /// one-time migration of pre-multi-library rows into the default library.
@@ -12,7 +16,9 @@ enum LibraryScope {
     /// All libraries, oldest first.
     static func all(context: ModelContext) -> [Library] {
         let descriptor = FetchDescriptor<Library>(sortBy: [SortDescriptor(\.createdAt)])
-        return (try? context.fetch(descriptor)) ?? []
+        let result = (try? context.fetch(descriptor)) ?? []
+        libraryLog.debug("LibraryScope.all -> \(result.count) libraries")
+        return result
     }
 
     /// The active library, creating the default one when absent (first
@@ -68,7 +74,9 @@ enum LibraryScope {
         }
         do {
             try context.save()
+            libraryLog.notice("LibraryScope.create saved successfully")
         } catch {
+            libraryLog.error("LibraryScope.create save FAILED: \(error, privacy: .public)")
             context.rollback()
             throw error
         }

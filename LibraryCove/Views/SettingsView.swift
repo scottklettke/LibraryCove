@@ -58,6 +58,9 @@ struct SettingsView: View {
     /// Bumped whenever the library registry changes (switch/rename) so the
     /// name field re-reads the active library.
     @State private var libraryRegistryTick = 0
+    /// Set when the typed name matches another library's — warns instead of
+    /// silently creating a confusing duplicate name.
+    @State private var duplicateNameWarning: String?
 
     /// Changes whenever any AI setting shifts, so the status re-checks
     /// after edits (engine, base URL, or key). Includes only the key's
@@ -209,6 +212,14 @@ struct SettingsView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: LibraryScope.librariesChangedNotification)) { _ in
                 libraryRegistryTick += 1
+            }
+            .alert("Library name already used", isPresented: Binding(
+                get: { duplicateNameWarning != nil },
+                set: { if !$0 { duplicateNameWarning = nil } }
+            )) {
+                Button("Continue anyway", role: .cancel) {}
+            } message: {
+                Text(duplicateNameWarning ?? "")
             }
             .onChange(of: syncProvider) { _, newValue in
                 switchSyncProvider(to: newValue)
@@ -497,6 +508,21 @@ struct SettingsView: View {
             + ((try? modelContext.fetchCount(FetchDescriptor<Connection>())) ?? 0)
     }
 
+    /// Warns when the active library's (typed) name matches ANOTHER
+    /// library's — duplicate names make the Libraries list ambiguous.
+    private func checkDuplicateName() {
+        let typed = LibraryScope.activeName(
+            context: modelContext,
+            memberName: user.displayName)
+        let activeID = LibraryScope.activeID(context: modelContext)
+        if let clash = LibraryScope.all(context: modelContext).first(where: {
+            $0.id != activeID
+                && $0.name.compare(typed, options: .caseInsensitive) == .orderedSame
+        }) {
+            duplicateNameWarning = "Another library is already named “\(clash.name)”. Two libraries with the same name can be confusing in Backups and switching — consider a distinct name."
+        }
+    }
+
     private func refreshMembers() async {
         await SharedLibraryEngine.shared.refreshParticipants()
         sharedMembers = SharedLibraryEngine.shared.members
@@ -663,6 +689,9 @@ struct SettingsView: View {
                                                       }
                                                   }))
                             .focused($nameFieldFocused)
+                            .onSubmit {
+                                checkDuplicateName()
+                            }
                         Button {
                             nameFieldFocused = true
                         } label: {

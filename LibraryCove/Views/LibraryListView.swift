@@ -87,6 +87,14 @@ struct LibraryListView: View {
                         Button {
                             let name = newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !name.isEmpty else { return }
+                            // Duplicate names make the Libraries list and
+                            // backup origins ambiguous — refuse with a hint.
+                            if libraries.contains(where: {
+                                $0.name.compare(name, options: .caseInsensitive) == .orderedSame
+                            }) {
+                                createError = "A library named \"\(name)\" already exists. Pick a different name."
+                                return
+                            }
                             do {
                                 _ = try LibraryScope.create(
                                     name: name, makeActive: true, context: modelContext)

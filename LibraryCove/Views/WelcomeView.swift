@@ -122,9 +122,14 @@ struct WelcomeView: View {
         let user = User(email: "local@librarycove.local",
                         displayName: trimmedName)
         modelContext.insert(user)
-        SharedLibrarySettings.preferredShareTitle = trimmedLibrary.isEmpty
+        // The library name chosen here names the DEFAULT library (created
+        // at launch by LibraryScope.migrateIfNeeded).
+        let chosenName = trimmedLibrary.isEmpty
             ? SharedLibrarySettings.defaultShareTitle(for: trimmedName)
             : trimmedLibrary
+        LibraryScope.rename(id: LibraryScope.defaultLibraryID, to: chosenName,
+                            context: modelContext)
+        SharedLibrarySettings.preferredShareTitle = chosenName
         try? modelContext.save()
         onComplete()
     }

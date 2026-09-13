@@ -220,7 +220,12 @@ enum LibraryScope {
         return (try? decoder.decode([LibraryInfo].self, from: data)) ?? []
     }
 
+    /// Posted after any registry change (create/activate/rename/delete).
+    /// Views observe it to refresh the active-library name.
+    static let librariesChangedNotification = Notification.Name("librariesChanged")
+
     private static func saveRegistry(_ libraries: [LibraryInfo]) {
+        NotificationCenter.default.post(name: librariesChangedNotification, object: nil)
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         do {

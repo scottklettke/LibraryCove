@@ -55,6 +55,9 @@ struct SettingsView: View {
     @State private var lastError: String?
     @State private var showError = false
     @ObservedObject private var cloudSyncMonitor = CloudSyncMonitor.shared
+    /// Bumped whenever the library registry changes (switch/rename) so the
+    /// name field re-reads the active library.
+    @State private var libraryRegistryTick = 0
 
     /// Changes whenever any AI setting shifts, so the status re-checks
     /// after edits (engine, base URL, or key). Includes only the key's
@@ -203,6 +206,9 @@ struct SettingsView: View {
             .task {
                 cloudSyncMonitor.start()
                 await refreshMembers()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: LibraryScope.librariesChangedNotification)) { _ in
+                libraryRegistryTick += 1
             }
             .onChange(of: syncProvider) { _, newValue in
                 switchSyncProvider(to: newValue)
@@ -612,7 +618,8 @@ struct SettingsView: View {
                     HStack {
                         TextField("Library name",
                                   text: Binding(get: {
-                                                      LibraryScope.activeName(
+                                                      _ = libraryRegistryTick
+                                                      return LibraryScope.activeName(
                                                           context: modelContext,
                                                           memberName: user.displayName)
                                                   },
@@ -665,9 +672,9 @@ struct SettingsView: View {
                         .accessibilityLabel("Edit library name")
                     }
                 } header: {
-                    Text("Profile")
+                    Text("Active Library")
                 } footer: {
-                    Text("Tap the pencil to edit the active library's name. Use Libraries below to switch between libraries.")
+                    Text("Tap the pencil to rename the active library. Use Libraries below to switch between libraries.")
                 }
 
                 Section {

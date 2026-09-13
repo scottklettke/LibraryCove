@@ -494,6 +494,12 @@ struct SettingsView: View {
             do {
                 try await ProviderSwitcher.perform(to: new)
                 syncProvider = new
+            } catch let error as LibrarySyncError {
+                // Known, explained conditions (e.g. iCloudStillSyncing):
+                // show their own message instead of the generic one.
+                syncProvider = SyncSettings.selectedProvider
+                lastError = error.errorDescription
+                showError = true
             } catch {
                 // Nothing changed (the switcher rolls back atomically).
                 syncProvider = SyncSettings.selectedProvider

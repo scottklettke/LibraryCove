@@ -34,11 +34,16 @@ enum ProviderSwitcher {
         // propagating, so the device store may briefly hold rows the server
         // has since removed — copying them into the (never re-synced) local
         // store makes the pollution permanent. Wait out the window.
-        if SyncSettings.selectedProvider == .iCloud, SyncSettings.iCloudMayBeConverging {
+        // An EMPTY library is exempt: there is nothing to snapshot, so no
+        // pollution can be frozen — blocking would be pure friction.
+        let liveContext = Persistence.shared.mainContext
+        let bookCount = (try? liveContext.fetchCount(FetchDescriptor<Book>())) ?? 0
+        if bookCount > 0,
+           SyncSettings.selectedProvider == .iCloud,
+           SyncSettings.iCloudMayBeConverging {
             throw LibrarySyncError.iCloudStillSyncing
         }
 
-        let liveContext = Persistence.shared.mainContext
         // 1) Snapshot the live library (zip keeps cover files).
         guard let snapshot = await LibraryDataService.export(context: liveContext) else {
             throw LibraryDataError.exportFailed

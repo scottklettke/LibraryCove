@@ -3,7 +3,7 @@ import Foundation
 import SwiftData
 @testable import LibraryCove
 
-@Suite @MainActor struct LibraryDataServiceTests {
+@Suite(.serialized) @MainActor struct LibraryDataServiceTests {
 
     /// Shared in-memory container. SwiftData fatals if a second in-memory
     /// container with the same model types is created in one process, so tests

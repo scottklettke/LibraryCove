@@ -11,6 +11,9 @@ struct LibraryListView: View {
     @State private var newLibraryName = ""
     @State private var libraryToDelete: LibraryInfo?
     @State private var createError: String?
+    @State private var renameTarget: LibraryInfo?
+    @State private var renameText = ""
+    @State private var renameError: String?
 
     var body: some View {
         Form {
@@ -26,7 +29,7 @@ struct LibraryListView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(library.name.isEmpty ? "Untitled Library" : library.name)
-                                    .font(.body)
+                                    .font(isActive ? .body.bold() : .body)
                                 Text(isActive ? "Active" : "\(bookCount(for: library)) books")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -39,7 +42,14 @@ struct LibraryListView: View {
                         }
                     }
                     .contextMenu {
-                        if !isActive {
+                        if isActive {
+                            Button {
+                                renameTarget = library
+                                renameText = library.name
+                            } label: {
+                                Label("Rename library", systemImage: "pencil")
+                            }
+                        } else {
                             Button(role: .destructive) {
                                 libraryToDelete = library
                             } label: {
@@ -51,7 +61,7 @@ struct LibraryListView: View {
             } header: {
                 Text("Your libraries")
             } footer: {
-                Text("Switching libraries changes which books you see. Each library keeps its own books, notes, and reading lists. Tap and hold a non-active library to delete it.")
+                Text("Switching libraries changes which books you see. Each library keeps its own books, notes, and reading lists. Long-press to rename the active library or delete a non-active one.")
             }
 
             Section {
@@ -124,6 +134,62 @@ struct LibraryListView: View {
                 .interactiveDismissDisabled(false)
             }
             .presentationDetents([.medium])
+        }
+        .sheet(isPresented: Binding(
+            get: { renameTarget != nil },
+            set: { if !$0 { renameTarget = nil } }
+        )) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField("Library name", text: $renameText)
+                    } footer: {
+                        Text("Renaming keeps all of this library's books, notes, and reading lists.")
+                    }
+                    Section {
+                        Button {
+                            let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !name.isEmpty, let target = renameTarget else { return }
+                            // Duplicate names make the Libraries list and
+                            // backup origins ambiguous — refuse.
+                            if libraries.contains(where: {
+                                $0.id != target.id
+                                    && $0.name.compare(name, options: .caseInsensitive) == .orderedSame
+                            }) {
+                                renameError = "A library named \"\(name)\" already exists. Pick a different name."
+                                return
+                            }
+                            LibraryScope.rename(id: target.id, to: name, context: modelContext)
+                            renameTarget = nil
+                            renameText = ""
+                            reload()
+                        } label: {
+                            Text("Rename library")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+                .navigationTitle("Rename library")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            renameTarget = nil
+                            renameText = ""
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
+        .alert("Couldn't rename", isPresented: Binding(
+            get: { renameError != nil },
+            set: { if !$0 { renameError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(renameError ?? "")
         }
         .alert("Delete this library?", isPresented: Binding(
             get: { libraryToDelete != nil },

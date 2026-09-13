@@ -84,6 +84,7 @@
 		CFA5AD6A90EC419506E4C4BB /* ShelfCategorizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70697CD6FB7E08D609131BE5 /* ShelfCategorizerTests.swift */; };
 		D095EA55BEFEB2AA6CEB7DC8 /* SharedLibraryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407C83ACA28E442EADA6E456 /* SharedLibraryCoordinator.swift */; };
 		D24A30A1D37E97E9BF3C8EC5 /* AskSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9D70D16F6CB326CD2BBFE8E /* AskSuggestions.swift */; };
+		D31770FBFD6E3A897AA295DE /* CloudSyncMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18B465AE596AF5E778C09A4 /* CloudSyncMonitor.swift */; };
 		D793B9297FBCB7F9F2F3B63B /* LibraryDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */; };
 		D86F7752E2772295D9338A70 /* FictionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */; };
 		D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D432F92F737332E449E2D8 /* ReadingList.swift */; };
@@ -178,7 +179,7 @@
 		BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		C011F248612BA0A3A5916731 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
-		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryRecord.swift; sourceTree = "<group>"; };
 		C29BC837621AF27DC2775241 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		C44869DF584EC707A877F252 /* BackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupsView.swift; sourceTree = "<group>"; };
@@ -191,6 +192,7 @@
 		C9F42B2AF197F90F7EE95B46 /* DuplicatePreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicatePreservationTests.swift; sourceTree = "<group>"; };
 		CA3814C7AF96A700B1B181B3 /* SharedLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryTests.swift; sourceTree = "<group>"; };
 		CF9D78B1E6B59239F3253BD9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		D18B465AE596AF5E778C09A4 /* CloudSyncMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncMonitor.swift; sourceTree = "<group>"; };
 		D43D6E17D5675CDD7C76A052 /* SharedLibraryMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryMirror.swift; sourceTree = "<group>"; };
 		DA04E88EA8596412A10827BF /* AIAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAskView.swift; sourceTree = "<group>"; };
 		DFAA49DC8B172DAA6B5ECA8D /* DeleteLibrarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteLibrarySheet.swift; sourceTree = "<group>"; };
@@ -281,6 +283,7 @@
 		6A136C6AFAF97BBCFCAC4E6C /* Sync */ = {
 			isa = PBXGroup;
 			children = (
+				D18B465AE596AF5E778C09A4 /* CloudSyncMonitor.swift */,
 				F71D73D6B03EFC6FD3FA58B0 /* LibrarySync.swift */,
 				5B83BE27057A2D7D5510732D /* ProviderSwitcher.swift */,
 				C29BC837621AF27DC2775241 /* SyncCoordinator.swift */,
@@ -620,6 +623,7 @@
 				E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */,
 				8BC3805BEC3442DB8989D8AC /* BookMastering.swift in Sources */,
 				F3083778201C5DA7FC1738A2 /* CatalogService.swift in Sources */,
+				D31770FBFD6E3A897AA295DE /* CloudSyncMonitor.swift in Sources */,
 				9F75747BF40F76516B82ABD5 /* Connection.swift in Sources */,
 				C1CC389D5ACAB142279EA0C4 /* ConversationMemory.swift in Sources */,
 				B4365F596EAFE3AE5487A9EE /* CopyDeletePicker.swift in Sources */,
@@ -806,7 +810,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -826,7 +829,6 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

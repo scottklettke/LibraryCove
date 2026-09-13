@@ -54,6 +54,7 @@ struct SettingsView: View {
     @State private var showResult = false
     @State private var lastError: String?
     @State private var showError = false
+    @ObservedObject private var cloudSyncMonitor = CloudSyncMonitor.shared
 
     /// Changes whenever any AI setting shifts, so the status re-checks
     /// after edits (engine, base URL, or key). Includes only the key's
@@ -200,6 +201,7 @@ struct SettingsView: View {
                 Text("Keeping a copy adds the shared books to your private library (duplicates are skipped).")
             }
             .task {
+                cloudSyncMonitor.start()
                 await refreshMembers()
             }
             .onChange(of: syncProvider) { _, newValue in
@@ -411,6 +413,34 @@ struct SettingsView: View {
         } catch {
             lastError = error.localizedDescription
             showError = true
+        }
+    }
+
+    /// Live iCloud sync status: while an NSPersistentCloudKitContainer
+    /// event runs, show what's happening with a progress bar; when idle,
+    /// show the synced state (or the last error).
+    @ViewBuilder
+    private var iCloudSyncStatusRow: some View {
+        if let activity = cloudSyncMonitor.activity {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(activity.kind.displayName)
+                    .font(.callout)
+                ProgressView()
+                    .progressViewStyle(.linear)
+            }
+            .padding(.vertical, 2)
+        } else if let lastError = cloudSyncMonitor.lastError {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Sync problem")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                Text(lastError)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 2)
+        } else {
+            LabeledContent("Status", value: "Synced with iCloud")
         }
     }
 
@@ -660,6 +690,16 @@ struct SettingsView: View {
                     if SharedLibraryMembershipGate.membership != .none {
                         LabeledContent("Sync provider", value: "Shared Library")
                         LabeledContent("Status", value: syncStatusText(syncProvider))
+                    } else if syncProvider == .iCloud {
+                        Picker("Sync provider", selection: $syncProvider) {
+                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
+                                Text(provider.isAvailableNow
+                                     ? provider.displayName
+                                     : "\(provider.displayName) (coming soon)")
+                                    .tag(provider)
+                            }
+                        }
+                        iCloudSyncStatusRow
                     } else {
                         Picker("Sync provider", selection: $syncProvider) {
                             ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in

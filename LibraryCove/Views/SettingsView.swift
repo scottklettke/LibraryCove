@@ -813,6 +813,7 @@ struct SettingsView: View {
 
     private func deleteLibraryData() {
         isDeleting = true
+        SyncSettings.markBulkChange()
         // Clear the LIVE store first: the UI reads from Persistence.shared,
         // so the empty state appears immediately.
         // (Backup deletion is governed by the sheet's "Keep saved backups"

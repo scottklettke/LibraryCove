@@ -99,11 +99,17 @@ enum SyncStoreRegistry {
 /// Errors surfaced while activating a library store.
 enum LibrarySyncError: LocalizedError, Equatable {
     case notImplementedFor(LibrarySync)
+    /// Raised when leaving iCloud inside the post-bulk-change convergence
+    /// window (SyncSettings.iCloudMayBeConverging) — switching now could
+    /// freeze in-flight server deletions into the local store permanently.
+    case iCloudStillSyncing
 
     var errorDescription: String? {
         switch self {
         case .notImplementedFor(let option):
             return "\(option.displayName) sync isn't implemented yet."
+        case .iCloudStillSyncing:
+            return "iCloud is still syncing a recent change to your library. Wait a couple of minutes, then switch — switching now could freeze incomplete syncing into Local."
         }
     }
 }

@@ -29,6 +29,14 @@ enum ProviderSwitcher {
             throw LibrarySyncError.notImplementedFor(new)
         }
         guard new != SyncSettings.selectedProvider else { return }
+        // Leaving iCloud right after a bulk change can freeze a polluted
+        // snapshot: server-side deletes from that change are still
+        // propagating, so the device store may briefly hold rows the server
+        // has since removed — copying them into the (never re-synced) local
+        // store makes the pollution permanent. Wait out the window.
+        if SyncSettings.selectedProvider == .iCloud, SyncSettings.iCloudMayBeConverging {
+            throw LibrarySyncError.iCloudStillSyncing
+        }
 
         let liveContext = Persistence.shared.mainContext
         // 1) Snapshot the live library (zip keeps cover files).
@@ -69,6 +77,7 @@ enum ProviderSwitcher {
         // app hot-swaps onto the new store (root re-injects via notification).
         BackupStore.mirrorForProviderSwitch(to: new)
         SyncSettings.selectedProvider = new
+        SyncSettings.markBulkChange()
         Persistence.swapShared(to: targetContainer)
     }
 }

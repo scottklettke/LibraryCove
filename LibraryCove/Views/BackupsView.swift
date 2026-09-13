@@ -442,6 +442,7 @@ struct ImportPreviewView: View {
     private func finishImport(_ imported: ImportSummary?, note: String?) {
         isImporting = false
         if let imported {
+            SyncSettings.markBulkChange()
             onImported(importMessage(for: imported, note: note))
             dismiss()
         } else if let note {

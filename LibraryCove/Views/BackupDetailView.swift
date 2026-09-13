@@ -21,6 +21,10 @@ struct BackupDetailView: View {
     @State private var archiveData: Data?
     @State private var isRestoring = false
     @State private var showDeleteConfirm = false
+    /// Set when the pre-restore provider switch was deferred (iCloud still
+    /// converging after a bulk change) — surfaced so the restore doesn't
+    /// silently land on a different provider than the button promised.
+    @State private var switchDeferredMessage: String?
 
     var body: some View {
         Form {
@@ -97,6 +101,14 @@ struct BackupDetailView: View {
                     openLibraryTab()
                 }
             }
+        }
+        .alert("Switch deferred", isPresented: Binding(
+            get: { switchDeferredMessage != nil },
+            set: { if !$0 { switchDeferredMessage = nil } }
+        )) {
+            Button("Continue", role: .cancel) {}
+        } message: {
+            Text(switchDeferredMessage ?? "")
         }
         .confirmationDialog(
             "Delete this backup?",
@@ -180,9 +192,16 @@ struct BackupDetailView: View {
         }
         isRestoring = true
         Task { @MainActor in
-            // Silent, like every provider change not driven from the picker.
-            // On failure the restore still proceeds on the current provider.
-            try? await ProviderSwitcher.perform(to: backup.origin)
+            do {
+                try await ProviderSwitcher.perform(to: backup.origin)
+            } catch let error as LibrarySyncError where error == .iCloudStillSyncing {
+                // The switch was refused (iCloud still converging after a
+                // bulk change). Restore anyway on the current provider, but
+                // SAY so — the button promised a switch.
+                switchDeferredMessage = "iCloud is still syncing a recent change, so your sync method wasn't switched — the restore will land on \(SyncSettings.selectedProvider.displayName). Retry in a couple of minutes, or switch via Settings > Sync afterwards."
+            } catch {
+                switchDeferredMessage = "The switch to \(backup.origin.displayName) failed (\(error.localizedDescription)). The restore will land on \(SyncSettings.selectedProvider.displayName)."
+            }
             isRestoring = false
             showImportPreview = true
         }

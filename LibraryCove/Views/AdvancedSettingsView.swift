@@ -159,6 +159,7 @@ struct AdvancedSettingsView: View {
 
     private func deleteAllData() {
         isDeleting = true
+        SyncSettings.markBulkChange()
         // Clear the LIVE store first: the UI and RootView's login switch
         // read from Persistence.shared, so the user sees the empty state
         // (login screen) immediately, without a restart.

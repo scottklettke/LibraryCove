@@ -87,15 +87,14 @@ struct LibraryListView: View {
                         Button {
                             let name = newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !name.isEmpty else { return }
-                            LibraryScope.create(name: name, makeActive: true, context: modelContext)
-                            newLibraryName = ""
-                            showCreate = false
-                            reload()
-                            // Surface a failed persist (e.g. CloudKit
-                            // rejecting the row) instead of showing an
-                            // empty list.
-                            if libraries.isEmpty {
-                                createError = "The library was created but couldn't be saved. Check your iCloud connection and try again."
+                            do {
+                                _ = try LibraryScope.create(
+                                    name: name, makeActive: true, context: modelContext)
+                                newLibraryName = ""
+                                showCreate = false
+                                reload()
+                            } catch {
+                                createError = error.localizedDescription
                             }
                         } label: {
                             Text("Create library")

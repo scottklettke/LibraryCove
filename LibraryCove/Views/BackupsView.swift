@@ -500,7 +500,7 @@ struct ImportPreviewView: View {
         }) {
             LibraryScope.activate(existing, context: context)
         } else {
-            LibraryScope.create(name: requested, makeActive: true, context: context)
+            _ = try? LibraryScope.create(name: requested, makeActive: true, context: context)
         }
     }
 

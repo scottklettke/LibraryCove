@@ -57,14 +57,20 @@ enum LibraryScope {
     }
 
     /// Creates a library (and makes it active when requested).
+    /// - Throws: the underlying save error, so UI can surface it (a silent
+    ///   failure looked like "nothing was created").
     @discardableResult
-    static func create(name: String, makeActive: Bool, context: ModelContext) -> Library {
+    static func create(name: String, makeActive: Bool, context: ModelContext) throws -> Library {
         let library = Library(name: name, isActive: false)
         context.insert(library)
         if makeActive {
             activate(library, context: context)
-        } else {
-            try? context.save()
+        }
+        do {
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
         }
         return library
     }

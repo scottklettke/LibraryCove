@@ -53,7 +53,7 @@ import SwiftData
         let first = LibraryScope.active(context: context)!
 
         // Second library, active (the switch).
-        let second = LibraryScope.create(name: "Second", makeActive: true, context: context)
+        let second = try LibraryScope.create(name: "Second", makeActive: true, context: context)
         #expect(LibraryScope.activeID(context: context) == second.id)
 
         // A book in the FIRST library (created before the switch).
@@ -80,7 +80,7 @@ import SwiftData
         let context = baseContext()
         LibraryScope.migrateIfNeeded(context: context)
         let first = LibraryScope.active(context: context)!
-        let second = LibraryScope.create(name: "Second", makeActive: false, context: context)
+        let second = try LibraryScope.create(name: "Second", makeActive: false, context: context)
 
         let firstBook = Book(id: "first-book", title: "First", authors: [],
                              isbn: nil, ownerID: nil, createdAt: Date())
@@ -108,7 +108,7 @@ import SwiftData
         let context = baseContext()
         LibraryScope.migrateIfNeeded(context: context)
         let active = LibraryScope.active(context: context)!
-        let other = LibraryScope.create(name: "Other", makeActive: false, context: context)
+        let other = try LibraryScope.create(name: "Other", makeActive: false, context: context)
 
         let otherBook = Book(id: "other-book", title: "Other's Book", authors: [],
                              isbn: nil, ownerID: nil, createdAt: Date())

@@ -692,7 +692,7 @@ struct SettingsView: View {
                         LabeledContent("Status", value: syncStatusText(syncProvider))
                     } else if syncProvider == .iCloud {
                         Picker("Sync provider", selection: $syncProvider) {
-                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
+                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary && $0 != .localOnly }) { provider in
                                 Text(provider.isAvailableNow
                                      ? provider.displayName
                                      : "\(provider.displayName) (coming soon)")
@@ -702,7 +702,7 @@ struct SettingsView: View {
                         iCloudSyncStatusRow
                     } else {
                         Picker("Sync provider", selection: $syncProvider) {
-                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary }) { provider in
+                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary && $0 != .localOnly }) { provider in
                                 Text(provider.isAvailableNow
                                      ? provider.displayName
                                      : "\(provider.displayName) (coming soon)")

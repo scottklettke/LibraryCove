@@ -21,6 +21,14 @@ enum ProviderSwitcher {
         guard new.isAvailableNow else {
             throw LibrarySyncError.notImplementedFor(new)
         }
+        // Local Only is retired as a user-selectable mode: its store shares
+        // the CloudKit zone's history, so switching back to iCloud re-pulls
+        // server rows and duplicates the library. Keep iCloud as the only
+        // switch target (the localOnly case remains for the internal
+        // fallback container and legacy data).
+        guard new != .localOnly else {
+            throw LibrarySyncError.notImplementedFor(new)
+        }
         // Switching INTO the shared mirror is never a picker/restore action:
         // shares are entered and left through the sharing flows only (which
         // manage zone + membership state). A stale list entry tagged

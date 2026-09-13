@@ -14,7 +14,11 @@ enum SyncSettings {
         get {
             guard let raw = UserDefaults.standard.string(forKey: providerKey),
                   let kind = LibrarySync(rawValue: raw) else { return .iCloud }
-            return kind
+            // Local Only is retired as a user-selectable mode (its store
+            // diverges from the CloudKit zone and duplicates books on
+            // switch-back). Any stored localOnly preference normalizes to
+            // the iCloud default.
+            return kind == .localOnly ? .iCloud : kind
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: providerKey)

@@ -126,10 +126,12 @@ struct BackupDetailView: View {
         }
     }
 
-    /// True when this backup belongs to the OTHER provider's set and the
-    /// app isn't sharing — restoring it should switch the sync method back.
+    /// True when this backup belongs to the other switchable provider
+    /// (iCloud only — Local Only is retired) and the app isn't sharing —
+    /// restoring it should switch the sync method back.
     private var shouldSwitchOnRestore: Bool {
-        backup.origin != SyncSettings.selectedProvider
+        backup.origin == .iCloud
+            && backup.origin != SyncSettings.selectedProvider
             && backup.origin.isAvailableNow
             && SharedLibraryMembershipGate.membership == .none
     }

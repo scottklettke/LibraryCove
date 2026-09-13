@@ -53,6 +53,22 @@ struct LibraryCoveApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .task {
+                    // A brand-new install on a device without a signed-in
+                    // iCloud session opens the CloudKit-backed store by
+                    // default (the provider default), and its mirroring
+                    // setup throws uncaught exceptions that abort saves —
+                    // observed as "library was created but couldn't be
+                    // saved" immediately after onboarding. Degrade to the
+                    // local store until an iCloud account is actually
+                    // available; the provider switch path moves data into
+                    // the cloud store once the user signs in.
+                    if SyncSettings.selectedProvider == .iCloud,
+                       !(await SharedLibraryEngine.shared.hasICloudAccount()) {
+                        Persistence.degradeToLocal()
+                        container = Persistence.shared
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: Persistence.storeSwappedNotification)) { _ in
                     container = Persistence.shared
                 }

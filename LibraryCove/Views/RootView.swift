@@ -28,6 +28,9 @@ struct RootView: View {
         .task {
             resetDataIfNeeded()
             seedLibraryBooksIfNeeded(context: modelContext)
+            // Multi-library: ensure the default library exists and legacy
+            // rows (libraryID == nil) are tagged into it. Idempotent.
+            LibraryScope.migrateIfNeeded(context: modelContext)
             // Older merge imports could leave two Book rows sharing one id,
             // which breaks copy discrimination on delete and id-based stale
             // snapshot guards. Repair before anything reads books.

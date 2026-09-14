@@ -25,12 +25,7 @@ struct SettingsView: View {
     @State private var pendingProviderChange: LibrarySync?
 
     // Shared library
-    @State private var isPreparingShare = false
     @State private var sharedMembers: [SharedLibraryMember] = []
-    @State private var showSharingSheet = false
-    @State private var shareSheetShare: CKShare?
-    @State private var showStopSharingConfirm = false
-    @State private var showLeaveConfirm = false
     @State private var keepCopyOnLeave = true
 
     // AI
@@ -50,8 +45,6 @@ struct SettingsView: View {
     @State private var searchEngine: WebSearchEngine = WebSearchEngine.selected
 
     // Feedback
-    @State private var lastResult: String?
-    @State private var showResult = false
     @State private var lastError: String?
     @State private var showError = false
     @ObservedObject private var cloudSyncMonitor = CloudSyncMonitor.shared
@@ -152,10 +145,6 @@ struct SettingsView: View {
 
                 syncSection
 
-                if syncProvider == .iCloud || SharedLibraryMembershipGate.membership != .none {
-                    sharedLibrarySection
-                }
-
                 aiEngineSection
 
                 trailingSections
@@ -174,37 +163,6 @@ struct SettingsView: View {
                 ) {
                     deleteLibraryData()
                 }
-            }
-            .sheet(isPresented: $showSharingSheet) {
-                if let share = shareSheetShare {
-                    CloudSharingSheet(share: share)
-                        .onDisappear {
-                            Task { await refreshMembers() }
-                        }
-                }
-            }
-            .confirmationDialog("Stop sharing this library?",
-                                isPresented: $showStopSharingConfirm,
-                                titleVisibility: .visible) {
-                Button("Stop Sharing", role: .destructive) {
-                    Task { await stopSharingNow() }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Everyone with access loses the shared library. Your books return to your private library.")
-            }
-            .confirmationDialog("Leave this shared library?",
-                                isPresented: $showLeaveConfirm,
-                                titleVisibility: .visible) {
-                Button("Keep a Copy & Leave") {
-                    Task { await leaveSharedNow(keepCopy: true) }
-                }
-                Button("Leave without a Copy", role: .destructive) {
-                    Task { await leaveSharedNow(keepCopy: false) }
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Keeping a copy adds the shared books to your private library (duplicates are skipped).")
             }
             .task {
                 cloudSyncMonitor.start()
@@ -245,11 +203,6 @@ struct SettingsView: View {
             }
             .onChange(of: searchEngine) { _, newValue in
                 WebSearchEngine.selected = newValue
-            }
-            .alert("Done", isPresented: $showResult) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(lastResult ?? "")
             }
             .alert("Error", isPresented: $showError) {
                 Button("OK", role: .cancel) {}
@@ -332,110 +285,6 @@ struct SettingsView: View {
 
     // MARK: - Shared library (Notes-style sharing)
 
-    private var sharedLibrarySection: some View {
-        Section {
-            switch SharedLibraryMembershipGate.membership {
-            case .none:
-                Button {
-                    Task { await beginSharing() }
-                } label: {
-                    Label("Share Library", systemImage: "person.2")
-                }
-                .disabled(isPreparingShare || isSwitchingSync)
-                if isPreparingShare {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Preparing your shared library…")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            case .owner:
-                Button {
-                    Task { await presentSharingSheet() }
-                } label: {
-                    Label("Manage Shared Library", systemImage: "person.2")
-                }
-                Button(role: .destructive) {
-                    showStopSharingConfirm = true
-                } label: {
-                    Label("Stop Sharing", systemImage: "person.2.slash")
-                }
-            case .participant:
-                LabeledContent("Shared Library",
-                               value: SharedLibrarySettings.shareTitle ?? "Active")
-                Button(role: .destructive) {
-                    showLeaveConfirm = true
-                } label: {
-                    Label("Leave Shared Library", systemImage: "person.2.slash")
-                }
-            }
-
-            if !sharedMembers.isEmpty {
-                ForEach(sharedMembers) { member in
-                    HStack {
-                        Image(systemName: member.isOwner ? "crown" : "person")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading) {
-                            Text(member.isCurrentUser ? "\(member.name) (you)" : member.name)
-                            Text("\(member.acceptanceStatusDescription) · \(member.permissionDescription)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-            if let syncError = SharedLibraryEngine.shared.lastError {
-                Text(syncError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-        } header: {
-            Text("Shared Library")
-        } footer: {
-            Text(SharedLibraryMembershipGate.membership == .none
-                 ? "Share your library with other people via iCloud. Everyone with access can add, edit, and remove books — changes sync to all members."
-                 : "This library is shared via iCloud. Changes made by any member sync to everyone with access.")
-        }
-    }
-
-    // MARK: - Shared library actions
-
-    private func beginSharing() async {
-        isPreparingShare = true
-        defer { isPreparingShare = false }
-        do {
-            // The user's chosen library name (welcome flow) wins; fall back
-            // to the classic "<Name>'s Library".
-            let title = SharedLibrarySettings.preferredShareTitle
-                ?? "\(user.displayName)'s Library"
-            let share = try await SharedLibraryCoordinator.beginShare(
-                currentTitle: title)
-            shareSheetShare = share
-            showSharingSheet = true
-        } catch {
-            lastError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    private func presentSharingSheet() async {
-        do {
-            guard let share = try await SharedLibraryEngine.shared.currentShare() else {
-                lastError = SharedLibraryError.notShared.errorDescription
-                showError = true
-                return
-            }
-            shareSheetShare = share
-            showSharingSheet = true
-        } catch {
-            lastError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    /// Live iCloud sync status: while an NSPersistentCloudKitContainer
-    /// event runs, show what's happening with a progress bar; when idle,
-    /// show the synced state (or the last error).
     @ViewBuilder
     private var iCloudSyncStatusRow: some View {
         if let activity = cloudSyncMonitor.activity {
@@ -470,36 +319,6 @@ struct SettingsView: View {
         }
     }
 
-    private func stopSharingNow() async {
-        isPreparingShare = true
-        defer { isPreparingShare = false }
-        do {
-            try await SharedLibraryCoordinator.stopSharing()
-            lastResult = "Sharing stopped. Your books are back in your private library."
-            showResult = true
-        } catch {
-            lastError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    private func leaveSharedNow(keepCopy: Bool) async {
-        isPreparingShare = true
-        defer { isPreparingShare = false }
-        do {
-            try await SharedLibraryCoordinator.leave(keepCopy: keepCopy)
-            lastResult = keepCopy
-                ? "You left the shared library. A copy of the shared books was added to your library."
-                : "You left the shared library."
-            showResult = true
-        } catch {
-            lastError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    /// Books + notes + reading lists + list items + connections — the exact
-    /// scope of "Delete Library".
     private var libraryContentCount: Int {
         ((try? modelContext.fetchCount(FetchDescriptor<Book>())) ?? 0)
             + ((try? modelContext.fetchCount(FetchDescriptor<Note>())) ?? 0)

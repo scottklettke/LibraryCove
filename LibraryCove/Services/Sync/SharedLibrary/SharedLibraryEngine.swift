@@ -101,6 +101,18 @@ enum SharedLibrarySettings {
     }
 
     /// All library ids with a live share (owner or participant).
+    /// The current user's participant record name in the active share, when
+    /// discoverable (owner: CKCurrentUserDefaultName equivalent via share).
+    static var currentUserRecordName: String? {
+        d.string(forKey: "sharedLibrary.currentUserRecordName")
+    }
+    static func setCurrentUserRecordName(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).currentUserRecordName")
+    }
+    static func currentUserRecordName(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).currentUserRecordName")
+    }
+
     static var sharedLibraryIDs: [String] {
         let prefix = "sharedLibrary."
         let suffixes: Set<String> = [".membership"]
@@ -236,6 +248,18 @@ enum SharedLibrarySettings {
         return CKRecordZone.ID(zoneName: name, ownerName: ownerZoneOwnerName ?? CKCurrentUserDefaultName)
     }
 
+    static func ownerZoneID(libraryID: String) -> CKRecordZone.ID? {
+        guard let name = ownerZoneName(libraryID: libraryID) else { return nil }
+        return CKRecordZone.ID(zoneName: name,
+                               ownerName: ownerZoneOwnerName(libraryID: libraryID) ?? CKCurrentUserDefaultName)
+    }
+
+    static func acceptedZoneID(libraryID: String) -> CKRecordZone.ID? {
+        guard let name = acceptedZoneName(libraryID: libraryID),
+              let owner = acceptedZoneOwnerName(libraryID: libraryID) else { return nil }
+        return CKRecordZone.ID(zoneName: name, ownerName: owner)
+    }
+
     static var acceptedZoneID: CKRecordZone.ID? {
         guard let name = acceptedZoneName, let owner = acceptedZoneOwnerName else { return nil }
         return CKRecordZone.ID(zoneName: name, ownerName: owner)
@@ -266,6 +290,9 @@ enum SharedLibraryError: LocalizedError {
     case notShared
     case metadataUnavailable
     case zoneNotFound
+    /// The current user's role does not permit this action (e.g. a guest
+    /// attempting to stop sharing).
+    case notPermitted
 
     var errorDescription: String? {
         switch self {
@@ -273,6 +300,7 @@ enum SharedLibraryError: LocalizedError {
         case .notShared: return "This library isn't shared yet."
         case .metadataUnavailable: return "Couldn't read the share invitation details."
         case .zoneNotFound: return "The shared library is no longer available."
+        case .notPermitted: return "Your role doesn't allow this action."
         }
     }
 }
@@ -315,6 +343,14 @@ final class SharedLibraryEngine: ObservableObject {
     /// The database this role talks to for the shared zone.
     private var db: CKDatabase {
         SharedLibrarySettings.membership == .owner
+            ? container.privateCloudDatabase
+            : container.sharedCloudDatabase
+    }
+
+    /// Per-library database: owner talks to the private DB, participant to
+    /// the shared DB.
+    private func db(libraryID: String) -> CKDatabase {
+        SharedLibrarySettings.membership(libraryID: libraryID) == .owner
             ? container.privateCloudDatabase
             : container.sharedCloudDatabase
     }
@@ -413,6 +449,72 @@ final class SharedLibraryEngine: ObservableObject {
         }
     }
 
+    /// The accepted zone for a specific joined library.
+    private func participantZone(libraryID: String) async throws -> CKRecordZone? {
+        guard let zoneID = SharedLibrarySettings.acceptedZoneID(libraryID: libraryID) else { return nil }
+        let zones = try await container.sharedCloudDatabase.allRecordZones()
+        return zones.first { $0.zoneID == zoneID }
+    }
+
+    /// The stored share for a specific library, refetched on demand.
+    func currentShare(libraryID: String) async throws -> CKShare? {
+        switch SharedLibrarySettings.membership(libraryID: libraryID) {
+        case .owner:
+            guard let recordName = SharedLibrarySettings.ownerShareRecordName(libraryID: libraryID),
+                  let zoneID = SharedLibrarySettings.ownerZoneID(libraryID: libraryID) else { return nil }
+            let id = CKRecord.ID(recordName: recordName, zoneID: zoneID)
+            let results = try await db(libraryID: libraryID).records(for: [id])
+            guard case .success(let record) = results[id] else { return nil }
+            return record as? CKShare
+        case .participant:
+            guard let zone = try await participantZone(libraryID: libraryID) else { return nil }
+            guard let ref = zone.share else { return nil }
+            let results = try await db(libraryID: libraryID).records(for: [ref.recordID])
+            guard case .success(let record) = results[ref.recordID] else { return nil }
+            return record as? CKShare
+        case .none:
+            return nil
+        }
+    }
+
+    // MARK: - Role management (admins only)
+
+    /// The current user's role in a library. Owner => admin.
+    func myRole(libraryID: String) -> ShareParticipantRole {
+        if SharedLibrarySettings.membership(libraryID: libraryID) == .owner { return .admin }
+        guard let recordName = SharedLibrarySettings.currentUserRecordName(libraryID: libraryID) else { return .editor }
+        return ShareRoleStore.role(libraryID: libraryID,
+                                   participantRecordName: recordName)
+    }
+
+    /// Admin-only: changes a participant's role. Updates the CloudKit share
+    /// permission (guest → read-only, admin/editor → read-write) and the
+    /// local role store. The other device picks the role up via the
+    /// modified share.
+    func setRole(_ role: ShareParticipantRole,
+                 participantRecordName: String,
+                 libraryID: String) async throws {
+        guard myRole(libraryID: libraryID) == .admin else {
+            throw SharedLibraryError.notPermitted
+        }
+        guard let share = try await currentShare(libraryID: libraryID) else {
+            throw SharedLibraryError.notShared
+        }
+        if let participant = share.participants.first(where: {
+            $0.userIdentity.userRecordID?.recordName == participantRecordName
+        }) {
+            participant.permission = role.ckPermission
+            let results = try await db(libraryID: libraryID).modifyRecords(
+                saving: [share], deleting: [], savePolicy: .ifServerRecordUnchanged)
+            for (_, outcome) in results.saveResults {
+                if case .failure(let error) = outcome { throw error }
+            }
+        }
+        ShareRoleStore.setRole(role, libraryID: libraryID,
+                               participantRecordName: participantRecordName)
+        refreshParticipants(from: share)
+    }
+
     // MARK: - Participants
 
     /// Rebuilds `members` from the share's participant list. Works for both
@@ -428,7 +530,34 @@ final class SharedLibraryEngine: ObservableObject {
         }
     }
 
+    /// Per-library variant: refreshes members from that library's share.
+    func refreshParticipants(libraryID: String) async {
+        do {
+            if let share = try await currentShare(libraryID: libraryID) {
+                refreshParticipants(from: share)
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     private func refreshParticipants(from share: CKShare) {
+        // Remember the current user's participant record name for role
+        // lookups (myRole).
+        if let recordName = share.currentUserParticipant?.userIdentity.userRecordID?.recordName {
+            // The share doesn't carry our libraryID; store under every
+            // library whose share record matches this share.
+            for id in SharedLibrarySettings.sharedLibraryIDs {
+                if let shareName = SharedLibrarySettings.ownerShareRecordName(libraryID: id),
+                   shareName == share.recordID.recordName {
+                    SharedLibrarySettings.setCurrentUserRecordName(recordName, libraryID: id)
+                }
+                if let zone = SharedLibrarySettings.acceptedZoneName(libraryID: id),
+                   share.recordID.zoneID.zoneName == zone {
+                    SharedLibrarySettings.setCurrentUserRecordName(recordName, libraryID: id)
+                }
+            }
+        }
         var result: [SharedLibraryMember] = []
         let owner = share.owner
         result.append(SharedLibraryMember(

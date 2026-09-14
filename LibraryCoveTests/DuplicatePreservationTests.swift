@@ -15,8 +15,17 @@ import SwiftData
         let context = baseContext()
 
         // Mirror the real app: launch migration creates the default
-        // library and tags legacy (libraryID == nil) rows into it.
+        // library and tags legacy (libraryID == nil) rows into it. Other
+        // suites may have left other libraries in the shared registry, so
+        // make the DEFAULT library the active one explicitly.
         LibraryScope.migrateIfNeeded(context: context)
+        if let defaultLibrary = LibraryScope.all(context: context)
+            .first(where: { $0.id == LibraryScope.defaultLibraryID }) {
+            LibraryScope.activate(defaultLibrary, context: context)
+        } else {
+            _ = try LibraryScope.create(name: "Default", makeActive: true, context: context)
+        }
+        let activeLibraryID = LibraryScope.activeID(context: context)
         let user = User(id: "u-d", email: "d@d.c", displayName: "Dup", isActive: true)
         context.insert(user)
         // Two copies of the SAME book: same title/authors/ISBN, distinct ids.
@@ -26,8 +35,8 @@ import SwiftData
         let b = Book(id: "dup-b", title: "Dune", authors: ["Frank Herbert"],
                      isbn: "9780441172719", ownerID: "u-d",
                      createdAt: Date(timeIntervalSince1970: 2000))
-        a.libraryID = LibraryScope.defaultLibraryID
-        b.libraryID = LibraryScope.defaultLibraryID
+        a.libraryID = activeLibraryID
+        b.libraryID = activeLibraryID
         context.insert(a)
         context.insert(b)
         try context.save()
@@ -65,7 +74,7 @@ import SwiftData
         let stale = Book(id: "stale-1", title: "Old Flood Book", authors: ["F. Lood"],
                          isbn: nil, ownerID: "u-d",
                          createdAt: Date(timeIntervalSince1970: 500))
-        stale.libraryID = LibraryScope.defaultLibraryID
+        stale.libraryID = activeLibraryID
         context.insert(stale)
         try context.save()
         let before = try context.fetch(FetchDescriptor<Book>())

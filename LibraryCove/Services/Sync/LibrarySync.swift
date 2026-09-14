@@ -161,6 +161,18 @@ struct SwiftDataiCloudSync: SyncStoreProvider {
 struct SwiftDataSharedLibrarySync: SyncStoreProvider {
     let librarySync: LibrarySync = .sharedLibrary
 
+    /// Per-library mirror store: each shared library gets its own file, so
+    /// multiple shares can coexist (state-wise) without clobbering each
+    /// other. The legacy single-share URL is kept for the default library.
+    static func storeURL(libraryID: String) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first!
+        guard libraryID != LibraryScope.defaultLibraryID else {
+            return base.appendingPathComponent("default-shared.store")
+        }
+        return base.appendingPathComponent("default-shared-\(libraryID).store")
+    }
+
     static var storeURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask).first!

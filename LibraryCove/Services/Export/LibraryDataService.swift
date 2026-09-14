@@ -262,6 +262,10 @@ enum LibraryDataService {
         try? context.delete(model: Connection.self)
         try? context.save()
 
+        // Delete-everything also clears the library registry; LibraryScope
+        // recreates a default on next access.
+        LibraryScope.deleteAllLibraries()
+
         // Covers live on the filesystem, so clearing the database must purge
         // them too.
         CoverImageStore.removeAll()

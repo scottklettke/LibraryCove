@@ -26,12 +26,16 @@ import SwiftData
             .appendingPathComponent("test-mirror-\(UUID().uuidString).store")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        // Mirror books carry the default library id: in production the
-        // mirror syncs the owner's personal books, which are tagged.
+        // Mirror books carry the ACTIVE library id: in production the
+        // mirror syncs the owner's personal books, which are tagged with
+        // the active library. The JSON registry is global, so compute the
+        // active id at test time.
+        LibraryScope.migrateIfNeeded(context: Persistence.inMemory.mainContext)
+        let activeID = LibraryScope.activeID(context: Persistence.inMemory.mainContext)
         let container = try makeMirrorStore(books: [
             Book(id: "b1", title: "Dune", authors: ["Frank Herbert"], isbn: "9780441172719"),
             Book(id: "b2", title: "Solaris", authors: ["Stanislaw Lem"]),
-        ], url: url, libraryID: LibraryScope.defaultLibraryID)
+        ], url: url, libraryID: activeID)
         let context = ModelContext(container)
         let count = (try? context.fetchCount(FetchDescriptor<Book>())) ?? -1
         #expect(count == 2, "mirror should hold 2 books, got \(count)")
@@ -76,9 +80,11 @@ import SwiftData
         let mirrorURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("test-mirror-merge-\(UUID().uuidString).store")
         defer { try? FileManager.default.removeItem(at: mirrorURL) }
+        LibraryScope.migrateIfNeeded(context: Persistence.inMemory.mainContext)
+        let mirrorActiveID = LibraryScope.activeID(context: Persistence.inMemory.mainContext)
         let mirrorContainer = try makeMirrorStore(books: [
             Book(id: "mir-1", title: "Shared Book", authors: ["Someone"]),
-        ], url: mirrorURL, libraryID: LibraryScope.defaultLibraryID)
+        ], url: mirrorURL, libraryID: mirrorActiveID)
         let mirrorContext = ModelContext(mirrorContainer)
 
         guard let data = await LibraryDataService.export(context: mirrorContext) else {

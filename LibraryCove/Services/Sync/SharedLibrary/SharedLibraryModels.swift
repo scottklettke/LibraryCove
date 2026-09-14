@@ -1,4 +1,68 @@
+import CloudKit
 import Foundation
+
+/// Role of a participant in a shared library. Maps to CloudKit share
+/// permissions:
+/// - admin: full control — edit anything, share links, stop sharing, and
+///   change other participants' roles.
+/// - editor: edit anything and share links, but cannot stop sharing or
+///   manage roles.
+/// - guest: view only — no edits, no sharing.
+enum ShareParticipantRole: String, Codable, CaseIterable {
+    case admin
+    case editor
+    case guest
+
+    var displayName: String {
+        switch self {
+        case .admin: return "Admin"
+        case .editor: return "Editor"
+        case .guest: return "Guest"
+        }
+    }
+
+    /// CloudKit participation permission for this role (admin maps to
+    /// read-write too — CloudKit has no "manage participants" bit; admin
+    /// powers are enforced by the app over a role record).
+    var ckPermission: CKShare.ParticipantPermission {
+        switch self {
+        case .admin, .editor: return .readWrite
+        case .guest: return .readOnly
+        }
+    }
+
+    static func from(_ permission: CKShare.ParticipantPermission) -> ShareParticipantRole {
+        permission == .readOnly ? .guest : .editor
+    }
+}
+
+/// Roles are stored per library + participant record name in UserDefaults
+/// (the CKShare itself cannot carry arbitrary role metadata that non-owner
+/// devices can read before joining).
+enum ShareRoleStore {
+    private static let d = UserDefaults.standard
+
+    static func role(libraryID: String, participantRecordName: String) -> ShareParticipantRole {
+        ShareParticipantRole(rawValue: d.string(
+            forKey: "sharedLibrary.\(libraryID).role.\(participantRecordName)") ?? "") ?? .editor
+    }
+
+    static func setRole(_ role: ShareParticipantRole, libraryID: String,
+                        participantRecordName: String) {
+        d.set(role.rawValue, forKey: "sharedLibrary.\(libraryID).role.\(participantRecordName)")
+    }
+
+    static func allRoles(libraryID: String) -> [String: ShareParticipantRole] {
+        let prefix = "sharedLibrary.\(libraryID).role."
+        var result: [String: ShareParticipantRole] = [:]
+        for key in d.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            if let role = ShareParticipantRole(rawValue: d.string(forKey: key) ?? "") {
+                result[String(key.dropFirst(prefix.count))] = role
+            }
+        }
+        return result
+    }
+}
 
 /// Wire-format structs for the shared library. These travel inside CKRecords
 /// (`SharedLibraryRecord` codec) and are the neutral form between the cloud

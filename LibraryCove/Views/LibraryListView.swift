@@ -29,7 +29,7 @@ struct LibraryListView: View {
                     let isActive = library.isActive
                     Button {
                         if !isActive {
-                            LibraryScope.activate(library, context: modelContext)
+                            LibraryScope.shared.activate(library, context: modelContext)
                             reload()
                         }
                     } label: {
@@ -55,17 +55,10 @@ struct LibraryListView: View {
                         } label: {
                             Label("Rename library", systemImage: "pencil")
                         }
-                        if isActive {
-                            Button {
-                                Task { await shareOrMembers(library) }
-                            } label: {
-                                Label("Share library", systemImage: "person.crop.square.badge.plus")
-                            }
-                            Button {
-                                membersSheetLibrary = library
-                            } label: {
-                                Label("Members", systemImage: "person.2")
-                            }
+                        Button {
+                            Task { await shareOrMembers(library) }
+                        } label: {
+                            Label("Share library", systemImage: "person.crop.square.badge.plus")
                         }
                         if !isActive {
                             Button(role: .destructive) {
@@ -127,7 +120,7 @@ struct LibraryListView: View {
             Button("Leave", role: .destructive) {
                 if let library = leaveConfirmLibrary {
                     Task {
-                        LibraryScope.activate(libraryInfoForLeaving(library), context: modelContext)
+                        LibraryScope.shared.activate(libraryInfoForLeaving(library), context: modelContext)
                         try? await SharedLibraryCoordinator.leave(keepCopy: true)
                         reload()
                     }
@@ -144,7 +137,7 @@ struct LibraryListView: View {
             Button("Stop Sharing", role: .destructive) {
                 if let library = stopConfirmLibrary {
                     Task {
-                        LibraryScope.activate(libraryInfoForLeaving(library), context: modelContext)
+                        LibraryScope.shared.activate(libraryInfoForLeaving(library), context: modelContext)
                         try? await SharedLibraryCoordinator.stopSharing()
                         reload()
                     }
@@ -183,7 +176,7 @@ struct LibraryListView: View {
                                 return
                             }
                             do {
-                                _ = try LibraryScope.create(
+                                _ = try LibraryScope.shared.create(
                                     name: name, makeActive: true, context: modelContext)
                                 newLibraryName = ""
                                 showCreate = false
@@ -236,7 +229,7 @@ struct LibraryListView: View {
                                 renameError = "A library named \"\(name)\" already exists. Pick a different name."
                                 return
                             }
-                            LibraryScope.rename(id: target.id, to: name, context: modelContext)
+                            LibraryScope.shared.rename(id: target.id, to: name, context: modelContext)
                             renameTarget = nil
                             renameText = ""
                             reload()
@@ -274,7 +267,7 @@ struct LibraryListView: View {
         )) {
             Button("Delete", role: .destructive) {
                 if let library = libraryToDelete {
-                    LibraryScope.delete(library, context: modelContext)
+                    LibraryScope.shared.delete(library, context: modelContext)
                     reload()
                 }
                 libraryToDelete = nil
@@ -288,14 +281,14 @@ struct LibraryListView: View {
     }
 
     private func reload() {
-        libraries = LibraryScope.all(context: modelContext)
+        libraries = LibraryScope.shared.all(context: modelContext)
     }
 
     /// Sharing a library: fetch its share (creating it on first share for
     /// admins/editors) and present the sharing sheet. The library becomes
     /// active first — the active library's share is the one that syncs.
     private func shareOrMembers(_ library: LibraryInfo) async {
-        LibraryScope.activate(library, context: modelContext)
+        LibraryScope.shared.activate(library, context: modelContext)
         reload()
         do {
             if let share = try await SharedLibraryEngine.shared.currentShare(libraryID: library.id) {
@@ -315,7 +308,7 @@ struct LibraryListView: View {
     /// Leave/stop target the ACTIVE library's share: activate the chosen
     /// library first so the coordinator operates on the right one.
     private func libraryInfoForLeaving(_ library: LibraryInfo) -> LibraryInfo {
-        LibraryScope.activate(library, context: modelContext)
+        LibraryScope.shared.activate(library, context: modelContext)
         reload()
         return library
     }

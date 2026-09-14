@@ -10,9 +10,9 @@ import SwiftData
 
     @Test func shareStateIsIndependentPerLibrary() throws {
         let context = Persistence.inMemory.mainContext
-        LibraryScope.migrateIfNeeded(context: context)
-        let first = try LibraryScope.create(name: "ShareTest-First", makeActive: true, context: context)
-        let second = try LibraryScope.create(name: "ShareTest-Second", makeActive: false, context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let first = try LibraryScope.shared.create(name: "ShareTest-First", makeActive: true, context: context)
+        let second = try LibraryScope.shared.create(name: "ShareTest-Second", makeActive: false, context: context)
 
         // First is owned-shared; second is not shared.
         SharedLibrarySettings.setMembership(.owner, libraryID: first.id)
@@ -39,7 +39,7 @@ import SwiftData
         d.set("legacy-share-record", forKey: "sharedLibrary.ownerShareRecordName")
 
         let context = Persistence.inMemory.mainContext
-        LibraryScope.migrateIfNeeded(context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
         SharedLibrarySettings.migrateLegacyShare(libraryID: LibraryScope.defaultLibraryID)
 
         // The share now lives under the default library's namespace.
@@ -52,8 +52,8 @@ import SwiftData
 
     @Test func guestRoleCannotStopSharing() throws {
         let context = Persistence.inMemory.mainContext
-        LibraryScope.migrateIfNeeded(context: context)
-        let shared = try LibraryScope.create(name: "ShareTest-Shared", makeActive: true, context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let shared = try LibraryScope.shared.create(name: "ShareTest-Shared", makeActive: true, context: context)
         SharedLibrarySettings.setMembership(.participant, libraryID: shared.id)
         SharedLibrarySettings.setAcceptedZoneName("z", libraryID: shared.id)
         SharedLibrarySettings.setAcceptedZoneOwnerName("o", libraryID: shared.id)

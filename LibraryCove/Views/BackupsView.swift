@@ -264,7 +264,7 @@ struct BackupsView: View {
                 showError = true
                 return
             }
-            let count = (try? liveContext.fetchCount(LibraryScope.activeBooksDescriptor(context: liveContext))) ?? 0
+            let count = (try? liveContext.fetchCount(LibraryScope.shared.activeBooksDescriptor(context: liveContext))) ?? 0
             do {
                 let name = try BackupStore.save(data: data, bookCount: count)
                 resultIsBackup = true
@@ -440,7 +440,7 @@ struct ImportPreviewView: View {
             // library — swiping the sheet away mid-run must not be possible.
             .interactiveDismissDisabled(isImporting)
             .task {
-                targetLibraryName = LibraryScope.activeName(
+                targetLibraryName = LibraryScope.shared.activeName(
                     context: Persistence.shared.mainContext,
                     memberName: ((try? Persistence.shared.mainContext.fetch(FetchDescriptor<User>(
                         predicate: #Predicate { $0.isActive }
@@ -488,19 +488,19 @@ struct ImportPreviewView: View {
         let context = Persistence.shared.mainContext
         let requested = targetLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !requested.isEmpty else { return }
-        let current = LibraryScope.activeName(
+        let current = LibraryScope.shared.activeName(
             context: context,
             memberName: ((try? context.fetch(FetchDescriptor<User>(
                 predicate: #Predicate { $0.isActive }
             ))) ?? []).first?.displayName ?? "")
         guard requested != current else { return }
         // An existing library with this name? Activate it. Otherwise create.
-        if let existing = LibraryScope.all(context: context).first(where: {
+        if let existing = LibraryScope.shared.all(context: context).first(where: {
             $0.name.compare(requested, options: .caseInsensitive) == .orderedSame
         }) {
-            LibraryScope.activate(existing, context: context)
+            LibraryScope.shared.activate(existing, context: context)
         } else {
-            _ = try? LibraryScope.create(name: requested, makeActive: true, context: context)
+            _ = try? LibraryScope.shared.create(name: requested, makeActive: true, context: context)
         }
     }
 

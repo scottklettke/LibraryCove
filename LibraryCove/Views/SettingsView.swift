@@ -330,11 +330,11 @@ struct SettingsView: View {
     /// Warns when the active library's (typed) name matches ANOTHER
     /// library's — duplicate names make the Libraries list ambiguous.
     private func checkDuplicateName() {
-        let typed = LibraryScope.activeName(
+        let typed = LibraryScope.shared.activeName(
             context: modelContext,
             memberName: user.displayName)
-        let activeID = LibraryScope.activeID(context: modelContext)
-        if let clash = LibraryScope.all(context: modelContext).first(where: {
+        let activeID = LibraryScope.shared.activeID(context: modelContext)
+        if let clash = LibraryScope.shared.all(context: modelContext).first(where: {
             $0.id != activeID
                 && $0.name.compare(typed, options: .caseInsensitive) == .orderedSame
         }) {
@@ -495,7 +495,7 @@ struct SettingsView: View {
                         TextField("Library name",
                                   text: Binding(get: {
                                                       _ = libraryRegistryTick
-                                                      return LibraryScope.active(context: modelContext)?.name ?? ""
+                                                      return LibraryScope.shared.active(context: modelContext)?.name ?? ""
                                                   },
                                                   set: { newValue in
                                                       // The name names the ACTIVE
@@ -506,8 +506,8 @@ struct SettingsView: View {
                                                       // single-library users via
                                                       // LibraryScope.activeName's
                                                       // default.
-                                                      LibraryScope.rename(
-                                                          id: LibraryScope.activeID(context: modelContext),
+                                                      LibraryScope.shared.rename(
+                                                          id: LibraryScope.shared.activeID(context: modelContext),
                                                           to: newValue,
                                                           context: modelContext)
                                                   }))

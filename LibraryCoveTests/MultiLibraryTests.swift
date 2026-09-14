@@ -15,7 +15,7 @@ import SwiftData
         // Fresh in-memory container starts empty; clear rows that earlier
         // tests in this suite may have created (User, Book...) plus the
         // JSON registry (persisted to Application Support).
-        try? FileManager.default.removeItem(at: LibraryScope.registryURLForTesting)
+        try? FileManager.default.removeItem(at: LibraryScope.shared.registryURLForTesting)
         try? Persistence.inMemory.mainContext.delete(model: User.self)
         try? Persistence.inMemory.mainContext.delete(model: Book.self)
         try? Persistence.inMemory.mainContext.delete(model: Note.self)
@@ -35,9 +35,9 @@ import SwiftData
         context.insert(legacy)
         try context.save()
 
-        LibraryScope.migrateIfNeeded(context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
 
-        let libraries = LibraryScope.all(context: context)
+        let libraries = LibraryScope.shared.all(context: context)
         #expect(libraries.count == 1, "migration creates exactly one default library, got \(libraries.count)")
         #expect(libraries.first?.id == LibraryScope.defaultLibraryID)
         #expect(libraries.first?.isActive == true)
@@ -50,12 +50,12 @@ import SwiftData
     @Test func contentIsInvisibleAcrossLibraries() throws {
         wipe()
         let context = baseContext()
-        LibraryScope.migrateIfNeeded(context: context)
-        let first = LibraryScope.active(context: context)!
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let first = LibraryScope.shared.active(context: context)!
 
         // Second library, active (the switch).
-        let second = try LibraryScope.create(name: "Second", makeActive: true, context: context)
-        #expect(LibraryScope.activeID(context: context) == second.id)
+        let second = try LibraryScope.shared.create(name: "Second", makeActive: true, context: context)
+        #expect(LibraryScope.shared.activeID(context: context) == second.id)
 
         // A book in the FIRST library (created before the switch).
         let firstBook = Book(id: "first-book", title: "First Library Book",
@@ -66,12 +66,12 @@ import SwiftData
         try context.save()
 
         // Active-library descriptor must NOT return the first library's book.
-        let visible = try context.fetch(LibraryScope.activeBooksDescriptor(context: context))
+        let visible = try context.fetch(LibraryScope.shared.activeBooksDescriptor(context: context))
         #expect(visible.isEmpty, "other libraries' books must be invisible, got \(visible.count)")
 
         // Switch back: the first library's book becomes visible again.
-        LibraryScope.activate(first, context: context)
-        let visibleAfterSwitch = try context.fetch(LibraryScope.activeBooksDescriptor(context: context))
+        LibraryScope.shared.activate(first, context: context)
+        let visibleAfterSwitch = try context.fetch(LibraryScope.shared.activeBooksDescriptor(context: context))
         #expect(visibleAfterSwitch.count == 1)
         #expect(visibleAfterSwitch.first?.id == "first-book")
     }
@@ -79,9 +79,9 @@ import SwiftData
     @Test func deletingLibraryRemovesOnlyItsContent() throws {
         wipe()
         let context = baseContext()
-        LibraryScope.migrateIfNeeded(context: context)
-        let first = LibraryScope.active(context: context)!
-        let second = try LibraryScope.create(name: "Second", makeActive: false, context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let first = LibraryScope.shared.active(context: context)!
+        let second = try LibraryScope.shared.create(name: "Second", makeActive: false, context: context)
 
         let firstBook = Book(id: "first-book", title: "First", authors: [],
                              isbn: nil, ownerID: nil, createdAt: Date())
@@ -94,22 +94,22 @@ import SwiftData
         try context.save()
 
         // Delete the NON-active second library.
-        LibraryScope.delete(second, context: context)
+        LibraryScope.shared.delete(second, context: context)
 
         let rows = try context.fetch(FetchDescriptor<Book>())
         #expect(rows.count == 1 && rows.first?.id == "first-book",
                 "only the deleted library's content is removed")
-        #expect(LibraryScope.all(context: context).count == 1)
-        #expect(LibraryScope.activeID(context: context) == first.id,
+        #expect(LibraryScope.shared.all(context: context).count == 1)
+        #expect(LibraryScope.shared.activeID(context: context) == first.id,
                 "active library is untouched by another library's deletion")
     }
 
     @Test func replaceImportTargetsActiveLibraryOnly() async throws {
         wipe()
         let context = baseContext()
-        LibraryScope.migrateIfNeeded(context: context)
-        let active = LibraryScope.active(context: context)!
-        let other = try LibraryScope.create(name: "Other", makeActive: false, context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let active = LibraryScope.shared.active(context: context)!
+        let other = try LibraryScope.shared.create(name: "Other", makeActive: false, context: context)
 
         let otherBook = Book(id: "other-book", title: "Other's Book", authors: [],
                              isbn: nil, ownerID: nil, createdAt: Date())

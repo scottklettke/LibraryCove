@@ -118,6 +118,8 @@ struct LibraryView: View {
     /// a different row when duplicate active members exist.
     let user: User
     @Query(sort: \Book.title) private var books: [Book]
+    /// Observes the active library so switching libraries re-filters the grid.
+    @ObservedObject private var libraryScope = LibraryScope.shared
     /// Members — resolve "Added by" names for search.
     @Query private var users: [User]
 
@@ -153,7 +155,11 @@ struct LibraryView: View {
     @State private var exportOptions = PDFExportOptions()
 
     private var filteredBooks: [Book] {
-        let visible = books.filter { !deletedIDs.contains($0.id) && !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
+        let visible = books.filter {
+            !deletedIDs.contains($0.id) && !$0.isDeleted
+                && $0.status != BookStatus.donated.rawValue
+                && $0.libraryID == libraryScope.activeID
+        }
         let searched: [Book]
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
@@ -480,7 +486,7 @@ struct LibraryView: View {
         if let loanedTo = book.loanedTo, !loanedTo.isEmpty {
             parts.append("loaned to \(loanedTo)")
         }
-        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.shared.activeBooksDescriptor(context: modelContext))) ?? []
         let copyCount = BookMastering.otherCopies(of: book, in: all).count + 1
         let identity: String
         if parts.isEmpty {
@@ -496,7 +502,7 @@ struct LibraryView: View {
     }
     /// Number of OTHER copies of the same title (0 = the only copy).
     private func copyCountExcludingSelf(_ book: Book) -> Int {
-        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.shared.activeBooksDescriptor(context: modelContext))) ?? []
         return BookMastering.otherCopies(of: book, in: all).count
     }
 
@@ -761,7 +767,11 @@ struct LibraryView: View {
     }
 
     private var visibleBooks: [Book] {
-        books.filter { !deletedIDs.contains($0.id) && !$0.isDeleted && $0.status != BookStatus.donated.rawValue }
+        books.filter {
+            !deletedIDs.contains($0.id) && !$0.isDeleted
+                && $0.status != BookStatus.donated.rawValue
+                && $0.libraryID == libraryScope.activeID
+        }
     }
 
     private var allAuthors: [String] {
@@ -1147,7 +1157,10 @@ struct LibraryView: View {
     // MARK: - Dashboard
 
     private var dashboardView: some View {
-        let libraryBooks = books.filter { !deletedIDs.contains($0.id) && $0.status != BookStatus.donated.rawValue }
+        let libraryBooks = books.filter {
+            !deletedIDs.contains($0.id) && $0.status != BookStatus.donated.rawValue
+                && $0.libraryID == libraryScope.activeID
+        }
         return List {
             Section {
                 LabeledContent("Total books", value: "\(libraryBooks.count)")

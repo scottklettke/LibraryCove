@@ -461,12 +461,41 @@ struct SettingsView: View {
     private var profileSection: some View {
                 Section {
                     HStack {
+                        TextField("Your name",
+                                  text: Binding(get: { user.displayName },
+                                                set: { newValue in
+                                                    // The member display name is used
+                                                    // for "Hi, <name>" and "Added by"
+                                                    // attribution. Applies to EVERY
+                                                    // User row: CloudKit stores may hold
+                                                    // older identity records for the same
+                                                    // person, and mirroring would otherwise
+                                                    // clobber the renamed row.
+                                                    let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
+                                                    for row in allUsers { row.displayName = newValue }
+                                                    try? modelContext.save()
+                                                }))
+                            .focused($nameFieldFocused)
+                        Button {
+                            nameFieldFocused = true
+                        } label: {
+                            Image(systemName: "pencil")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel("Edit your name")
+                    }
+                } header: {
+                    Text("Your Name")
+                } footer: {
+                    Text("Shown in the greeting on your library's home page and used for “Added by” on your books.")
+                }
+
+                Section {
+                    HStack {
                         TextField("Library name",
                                   text: Binding(get: {
                                                       _ = libraryRegistryTick
-                                                      return LibraryScope.activeName(
-                                                          context: modelContext,
-                                                          memberName: user.displayName)
+                                                      return LibraryScope.active(context: modelContext)?.name ?? ""
                                                   },
                                                   set: { newValue in
                                                       // The name names the ACTIVE
@@ -481,31 +510,6 @@ struct SettingsView: View {
                                                           id: LibraryScope.activeID(context: modelContext),
                                                           to: newValue,
                                                           context: modelContext)
-                                                      // A rename also applies to EVERY
-                                                      // User row: CloudKit stores may
-                                                      // hold older identity records for
-                                                      // the same person, and mirroring
-                                                      // would otherwise clobber the
-                                                      // renamed row with a stale name.
-                                                      let allUsers = (try? modelContext.fetch(FetchDescriptor<User>())) ?? []
-                                                      for row in allUsers { row.displayName = newValue }
-                                                      // Persist immediately so the
-                                                      // empty-page greeting follows
-                                                      // the rename.
-                                                      try? modelContext.save()
-                                                      // Keep the share-title default
-                                                      // in sync when it was derived
-                                                      // from the old name ("Scott's
-                                                      // Library" -> "Bob's Library");
-                                                      // a custom name is left alone.
-                                                      let oldName = user.displayName
-                                                      let derived = SharedLibrarySettings
-                                                          .defaultShareTitle(for: oldName)
-                                                      if SharedLibrarySettings.preferredShareTitle == nil
-                                                          || SharedLibrarySettings.preferredShareTitle == derived {
-                                                          SharedLibrarySettings.preferredShareTitle =
-                                                              SharedLibrarySettings.defaultShareTitle(for: newValue)
-                                                      }
                                                   }))
                             .focused($nameFieldFocused)
                             .onSubmit {

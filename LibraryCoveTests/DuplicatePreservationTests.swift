@@ -18,14 +18,14 @@ import SwiftData
         // library and tags legacy (libraryID == nil) rows into it. Other
         // suites may have left other libraries in the shared registry, so
         // make the DEFAULT library the active one explicitly.
-        LibraryScope.migrateIfNeeded(context: context)
-        if let defaultLibrary = LibraryScope.all(context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        if let defaultLibrary = LibraryScope.shared.all(context: context)
             .first(where: { $0.id == LibraryScope.defaultLibraryID }) {
-            LibraryScope.activate(defaultLibrary, context: context)
+            LibraryScope.shared.activate(defaultLibrary, context: context)
         } else {
-            _ = try LibraryScope.create(name: "Default", makeActive: true, context: context)
+            _ = try LibraryScope.shared.create(name: "Default", makeActive: true, context: context)
         }
-        let activeLibraryID = LibraryScope.activeID(context: context)
+        let activeLibraryID = LibraryScope.shared.activeID(context: context)
         let user = User(id: "u-d", email: "d@d.c", displayName: "Dup", isActive: true)
         context.insert(user)
         // Two copies of the SAME book: same title/authors/ISBN, distinct ids.

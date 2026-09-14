@@ -122,7 +122,7 @@ struct BookDetailView: View {
     /// Every copy of the current book's title: normalized-ISBN siblings, or
     /// title-matched when there's no ISBN, plus the current copy itself.
     private var allCopiesIncludingCurrent: [Book] {
-        let all = (try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext))) ?? []
+        let all = (try? modelContext.fetch(LibraryScope.shared.activeBooksDescriptor(context: modelContext))) ?? []
         var copies = BookMastering.otherCopies(of: book, in: all)
         copies.append(book)
         return copies.sorted { $0.createdAt < $1.createdAt }

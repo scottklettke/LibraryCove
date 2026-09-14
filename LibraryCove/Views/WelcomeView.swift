@@ -127,7 +127,7 @@ struct WelcomeView: View {
         let chosenName = trimmedLibrary.isEmpty
             ? SharedLibrarySettings.defaultShareTitle(for: trimmedName)
             : trimmedLibrary
-        LibraryScope.rename(id: LibraryScope.defaultLibraryID, to: chosenName,
+        LibraryScope.shared.rename(id: LibraryScope.defaultLibraryID, to: chosenName,
                             context: modelContext)
         SharedLibrarySettings.preferredShareTitle = chosenName
         try? modelContext.save()

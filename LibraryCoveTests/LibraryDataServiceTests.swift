@@ -16,7 +16,7 @@ import SwiftData
     /// A small but complete library exercising every entity type and every
     /// relationship (note->book, list items->list+book, connection book1/book2).
     private func seed(_ context: ModelContext) {
-        LibraryScope.migrateIfNeeded(context: context)
+        LibraryScope.shared.migrateIfNeeded(context: context)
         let user = User(id: "u-1", email: "a@b.c", displayName: "Alex", isActive: true)
         context.insert(user)
 

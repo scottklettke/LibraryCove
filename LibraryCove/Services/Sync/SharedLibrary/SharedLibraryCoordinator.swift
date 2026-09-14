@@ -37,7 +37,7 @@ enum SharedLibraryCoordinator {
     /// Returns the share for the sharing sheet.
     static func beginShare(currentTitle: String) async throws -> CKShare {
         try await beginShare(currentTitle: currentTitle,
-                             libraryID: LibraryScope.activeID(context: Persistence.shared.mainContext))
+                             libraryID: LibraryScope.shared.activeID(context: Persistence.shared.mainContext))
     }
 
     /// Per-library variant: creates the share for a SPECIFIC library under
@@ -121,7 +121,7 @@ enum SharedLibraryCoordinator {
     /// destination container is hot-swapped into the running app — no
     /// restart needed.
     static func leave(keepCopy: Bool) async throws {
-        let libraryID = LibraryScope.activeID(context: Persistence.shared.mainContext)
+        let libraryID = LibraryScope.shared.activeID(context: Persistence.shared.mainContext)
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: keepCopy)
         try await SharedLibraryEngine.shared.leaveAsParticipant()
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL(libraryID: libraryID))
@@ -137,7 +137,7 @@ enum SharedLibraryCoordinator {
     /// store), the destination container is hot-swapped into the running
     /// app, then the zone and share are removed.
     static func stopSharing() async throws {
-        let libraryID = LibraryScope.activeID(context: Persistence.shared.mainContext)
+        let libraryID = LibraryScope.shared.activeID(context: Persistence.shared.mainContext)
         // Only admins may stop sharing (owner or promoted admin).
         guard ShareRoleStore.role(libraryID: libraryID,
                                   participantRecordName: SharedLibrarySettings.currentUserRecordName ?? "owner") != .guest else {

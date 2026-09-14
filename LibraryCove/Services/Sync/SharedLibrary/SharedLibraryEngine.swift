@@ -639,12 +639,12 @@ final class SharedLibraryEngine: ObservableObject {
         SharedLibrarySettings.setChangeTokenData(nil, libraryID: joinerLibraryID)
         // Create the joiner's library entry (inactive — switching to it is
         // the user's choice).
-        if !LibraryScope.all(context: Persistence.shared.mainContext).contains(where: { $0.id == joinerLibraryID }) {
-            _ = try? LibraryScope.create(name: title, makeActive: false,
+        if !LibraryScope.shared.all(context: Persistence.shared.mainContext).contains(where: { $0.id == joinerLibraryID }) {
+            _ = try? LibraryScope.shared.create(name: title, makeActive: false,
                                          context: Persistence.shared.mainContext)
             // create() generates its own id; align the registry entry to the
             // derived share id so mirror-store lookups work.
-            LibraryScope.renameIDForSharing(from: LibraryScope.all(context: Persistence.shared.mainContext).last?.id ?? joinerLibraryID,
+            LibraryScope.shared.renameIDForSharing(from: LibraryScope.shared.all(context: Persistence.shared.mainContext).last?.id ?? joinerLibraryID,
                                             to: joinerLibraryID, context: Persistence.shared.mainContext)
         }
         refreshParticipants(from: share)

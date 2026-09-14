@@ -30,7 +30,7 @@ struct RootView: View {
             seedLibraryBooksIfNeeded(context: modelContext)
             // Multi-library: ensure the default library exists and legacy
             // rows (libraryID == nil) are tagged into it. Idempotent.
-            LibraryScope.migrateIfNeeded(context: modelContext)
+            LibraryScope.shared.migrateIfNeeded(context: modelContext)
             // Legacy single-share migration: the old global share state
             // becomes a share of the default library.
             SharedLibrarySettings.migrateLegacyShare(libraryID: LibraryScope.defaultLibraryID)
@@ -80,7 +80,7 @@ struct RootView: View {
             }
             // Fix books whose dates were never stamped (sentinel 2001-01-01),
             // which rendered "date added" as 12/31/00.
-            if let all = try? modelContext.fetch(LibraryScope.activeBooksDescriptor(context: modelContext)) {
+            if let all = try? modelContext.fetch(LibraryScope.shared.activeBooksDescriptor(context: modelContext)) {
                 BookDateRepair.repairSentinelDates(books: all, context: modelContext)
             }
         }

@@ -94,7 +94,7 @@ enum LibraryDataService {
     static func export(context: ModelContext,
                        fetchRemoteCover: @escaping (URL) async -> Data? = Self.fetchRemoteCover) async -> Data? {
         // Exports the ACTIVE library's content (multi-library).
-        let libraryID = LibraryScope.activeID(context: context)
+        let libraryID = LibraryScope.shared.activeID(context: context)
         let users = (try? context.fetch(FetchDescriptor<User>())) ?? []
         let books = (try? context.fetch(FetchDescriptor<Book>(
             predicate: #Predicate { $0.libraryID == libraryID }
@@ -191,7 +191,7 @@ enum LibraryDataService {
         // Replace-import targets the ACTIVE library only: its content is
         // deleted, the archive becomes the active library's content. Other
         // libraries are untouched.
-        let libraryID = LibraryScope.activeID(context: context)
+        let libraryID = LibraryScope.shared.activeID(context: context)
         let deleted = deleteLibraryContent(context: context, libraryID: libraryID)
         restoreCovers(from: &loaded.envelope, files: loaded.files)
         insert(loaded.envelope, into: context)
@@ -264,7 +264,7 @@ enum LibraryDataService {
 
         // Delete-everything also clears the library registry; LibraryScope
         // recreates a default on next access.
-        LibraryScope.deleteAllLibraries()
+        LibraryScope.shared.deleteAllLibraries()
 
         // Covers live on the filesystem, so clearing the database must purge
         // them too.
@@ -306,7 +306,7 @@ enum LibraryDataService {
     @discardableResult
     static func deleteActiveLibraryContent(context: ModelContext) -> Int {
         deleteLibraryContent(context: context,
-                             libraryID: LibraryScope.activeID(context: context))
+                             libraryID: LibraryScope.shared.activeID(context: context))
     }
 
     // MARK: - Decoding
@@ -387,7 +387,7 @@ enum LibraryDataService {
     @discardableResult
     static func migrateArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
-        let libraryID = LibraryScope.activeID(context: context)
+        let libraryID = LibraryScope.shared.activeID(context: context)
         let archiveBookIDs = Set(loaded.envelope.books.map(\.id))
         let stale = ((try? context.fetch(FetchDescriptor<Book>(
             predicate: #Predicate { $0.libraryID == libraryID }
@@ -425,7 +425,7 @@ enum LibraryDataService {
     @discardableResult
     static func copyArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
-        let activeLibraryID = LibraryScope.activeID(context: context)
+        let activeLibraryID = LibraryScope.shared.activeID(context: context)
         let existingBookIDs = Set(((try? context.fetch(FetchDescriptor<Book>(
             predicate: #Predicate { $0.libraryID == activeLibraryID }
         ))) ?? []).map(\.id))
@@ -569,7 +569,7 @@ enum LibraryDataService {
                             syncDeviceID: dto.syncDeviceID,
                             shelves: dto.shelves ?? [])
             context.insert(book)
-            book.libraryID = LibraryScope.activeID(context: context)
+            book.libraryID = LibraryScope.shared.activeID(context: context)
             books[dto.id] = book
         }
 
@@ -587,7 +587,7 @@ enum LibraryDataService {
                                    syncUpdatedAt: dto.syncUpdatedAt,
                                    syncDeviceID: dto.syncDeviceID)
             context.insert(list)
-            list.libraryID = LibraryScope.activeID(context: context)
+            list.libraryID = LibraryScope.shared.activeID(context: context)
             lists[dto.id] = list
         }
 
@@ -608,7 +608,7 @@ enum LibraryDataService {
                             syncUpdatedAt: dto.syncUpdatedAt,
                             syncDeviceID: dto.syncDeviceID)
             note.book = dto.bookID.flatMap { books[$0] }
-            note.libraryID = LibraryScope.activeID(context: context)
+            note.libraryID = LibraryScope.shared.activeID(context: context)
             context.insert(note)
         }
 
@@ -626,7 +626,7 @@ enum LibraryDataService {
                                        syncDeviceID: dto.syncDeviceID)
             item.list = dto.listID.flatMap { lists[$0] }
             item.book = dto.bookID.flatMap { books[$0] }
-            item.libraryID = LibraryScope.activeID(context: context)
+            item.libraryID = LibraryScope.shared.activeID(context: context)
             context.insert(item)
         }
 
@@ -644,7 +644,7 @@ enum LibraryDataService {
                                         syncDeviceID: dto.syncDeviceID)
             connection.book1 = dto.book1ID.flatMap { books[$0] }
             connection.book2 = dto.book2ID.flatMap { books[$0] }
-            connection.libraryID = LibraryScope.activeID(context: context)
+            connection.libraryID = LibraryScope.shared.activeID(context: context)
             context.insert(connection)
         }
     }

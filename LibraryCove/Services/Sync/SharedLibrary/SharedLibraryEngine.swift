@@ -40,6 +40,107 @@ enum SharedLibrarySettings {
         set { d.set(newValue.rawValue, forKey: Key.membership) }
     }
 
+    // MARK: - Per-library share state (multi-library sharing)
+
+    /// Namespaced keys: every library carries its own share facts, so
+    /// multiple libraries can be shared with different people
+    /// simultaneously. `libraryID` is the LibraryScope id.
+    static func membership(libraryID: String) -> SharedLibraryMembership {
+        SharedLibraryMembership(rawValue: d.string(forKey: "sharedLibrary.\(libraryID).membership") ?? "") ?? .none
+    }
+    static func setMembership(_ value: SharedLibraryMembership, libraryID: String) {
+        d.set(value.rawValue, forKey: "sharedLibrary.\(libraryID).membership")
+    }
+    static func ownerZoneName(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).ownerZoneName")
+    }
+    static func setOwnerZoneName(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).ownerZoneName")
+    }
+    static func ownerZoneOwnerName(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).ownerZoneOwnerName")
+    }
+    static func setOwnerZoneOwnerName(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).ownerZoneOwnerName")
+    }
+    static func ownerShareRecordName(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).ownerShareRecordName")
+    }
+    static func setOwnerShareRecordName(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).ownerShareRecordName")
+    }
+    static func shareURLString(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).shareURL")
+    }
+    static func setShareURLString(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).shareURL")
+    }
+    static func changeTokenData(libraryID: String) -> Data? {
+        d.data(forKey: "sharedLibrary.\(libraryID).changeToken")
+    }
+    static func setChangeTokenData(_ value: Data?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).changeToken")
+    }
+    static func lastSyncAt(libraryID: String) -> Date? {
+        d.object(forKey: "sharedLibrary.\(libraryID).lastSyncAt") as? Date
+    }
+    static func setLastSyncAt(_ value: Date?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).lastSyncAt")
+    }
+    static func acceptedZoneName(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).acceptedZoneName")
+    }
+    static func setAcceptedZoneName(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).acceptedZoneName")
+    }
+    static func acceptedZoneOwnerName(libraryID: String) -> String? {
+        d.string(forKey: "sharedLibrary.\(libraryID).acceptedZoneOwnerName")
+    }
+    static func setAcceptedZoneOwnerName(_ value: String?, libraryID: String) {
+        d.set(value, forKey: "sharedLibrary.\(libraryID).acceptedZoneOwnerName")
+    }
+
+    /// All library ids with a live share (owner or participant).
+    static var sharedLibraryIDs: [String] {
+        let prefix = "sharedLibrary."
+        let suffixes: Set<String> = [".membership"]
+        return Array(Set(d.dictionaryRepresentation().keys.compactMap { key in
+            guard key.hasPrefix(prefix) else { return nil }
+            let rest = key.dropFirst(prefix.count)
+            guard suffixes.contains(where: { rest.hasSuffix($0) }) else { return nil }
+            let id = rest.dropLast(".membership".count)
+            let membership = SharedLibraryMembership(
+                rawValue: d.string(forKey: key) ?? "") ?? .none
+            return membership == .none ? nil : String(id)
+        }))
+    }
+
+    /// One-time migration: lifts the legacy single-share state into the
+    /// per-library namespace under `libraryID`. Called from the launch
+    /// migration for the library the old share is attributed to.
+    static func migrateLegacyShare(libraryID: String) {
+        guard membership(libraryID: libraryID) == .none else { return }
+        if membership != .none {
+            setMembership(membership, libraryID: libraryID)
+            setOwnerZoneName(ownerZoneName, libraryID: libraryID)
+            setOwnerZoneOwnerName(ownerZoneOwnerName, libraryID: libraryID)
+            setOwnerShareRecordName(ownerShareRecordName, libraryID: libraryID)
+            setShareURLString(d.string(forKey: Key.shareURL), libraryID: libraryID)
+            setChangeTokenData(d.data(forKey: Key.changeToken), libraryID: libraryID)
+            setLastSyncAt(d.object(forKey: Key.lastSyncAt) as? Date, libraryID: libraryID)
+            // Clear the legacy keys so the old single-share UI state is gone.
+            d.removeObject(forKey: Key.membership)
+            d.removeObject(forKey: Key.ownerZoneName)
+            d.removeObject(forKey: Key.ownerZoneOwnerName)
+            d.removeObject(forKey: Key.ownerShareRecordName)
+            d.removeObject(forKey: Key.shareURL)
+            d.removeObject(forKey: Key.acceptedZoneName)
+            d.removeObject(forKey: Key.acceptedZoneOwnerName)
+            d.removeObject(forKey: Key.changeToken)
+            d.removeObject(forKey: Key.lastSyncAt)
+        }
+    }
+
     /// Owner side: the custom zone the whole shared library lives in.
     static var ownerZoneName: String? {
         get { d.string(forKey: Key.ownerZoneName) }
@@ -236,9 +337,17 @@ final class SharedLibraryEngine: ObservableObject {
     /// caller then pushes the initial library into the zone and presents the
     /// standard sharing UI). Zone and share live in the owner's private DB.
     func makeShare(title: String) async throws -> CKShare {
+        try await makeShare(title: title, libraryID: LibraryScope.defaultLibraryID)
+    }
+
+    /// Per-library variant: each library gets its OWN zone + share, so
+    /// different libraries can be shared with different people
+    /// independently. Zone name is derived from the library id.
+    func makeShare(title: String, libraryID: String) async throws -> CKShare {
         guard await hasICloudAccount() else { throw SharedLibraryError.noICloudAccount }
 
-        let zoneID = CKRecordZone.ID(zoneName: Self.zoneName, ownerName: CKCurrentUserDefaultName)
+        let zoneName = Self.zoneName + "-" + String(abs(libraryID.hashValue))
+        let zoneID = CKRecordZone.ID(zoneName: zoneName, ownerName: CKCurrentUserDefaultName)
         // Always the PRIVATE database: zone-wide shares are created in the
         // owner's private DB. The role-based `db` helper would pick the
         // shared DB here, because membership is still `.none` until after
@@ -258,12 +367,12 @@ final class SharedLibraryEngine: ObservableObject {
             if case .failure(let error) = outcome { throw error }
         }
 
-        SharedLibrarySettings.ownerZoneName = zoneID.zoneName
-        SharedLibrarySettings.ownerZoneOwnerName = zoneID.ownerName
-        SharedLibrarySettings.ownerShareRecordName = share.recordID.recordName
-        SharedLibrarySettings.shareURL = share.url
+        SharedLibrarySettings.setOwnerZoneName(zoneID.zoneName, libraryID: libraryID)
+        SharedLibrarySettings.setOwnerZoneOwnerName(zoneID.ownerName, libraryID: libraryID)
+        SharedLibrarySettings.setOwnerShareRecordName(share.recordID.recordName, libraryID: libraryID)
+        SharedLibrarySettings.setShareURLString(share.url?.absoluteString, libraryID: libraryID)
         SharedLibrarySettings.shareTitle = title
-        SharedLibrarySettings.membership = .owner
+        SharedLibrarySettings.setMembership(.owner, libraryID: libraryID)
         refreshParticipants(from: share)
         return share
     }
@@ -384,17 +493,31 @@ final class SharedLibraryEngine: ObservableObject {
         try await finishJoin(share: share)
     }
 
-    /// Stores the accepted share's zone (looked up by our fixed zone name in
-    /// the shared database) and flips membership to participant.
+    /// Stores the accepted share's zone and flips membership to participant
+    /// — for a PER-LIBRARY share. The joiner gets their own LibraryInfo
+    /// (named from the share title) whose id is derived from the share's
+    /// zone name, so every share maps to its own library independently.
     private func finishJoin(share: CKShare) async throws {
         guard let zone = try await zoneLookup() else {
             throw SharedLibraryError.zoneNotFound
         }
-        SharedLibrarySettings.acceptedZoneName = zone.zoneID.zoneName
-        SharedLibrarySettings.acceptedZoneOwnerName = zone.zoneID.ownerName
-        SharedLibrarySettings.shareTitle = (share[CKShare.SystemFieldKey.title] as? String) ?? "Shared Library"
-        SharedLibrarySettings.membership = .participant
-        SharedLibrarySettings.changeTokenData = nil
+        let joinerLibraryID = "shared-" + zone.zoneID.zoneName
+        SharedLibrarySettings.setAcceptedZoneName(zone.zoneID.zoneName, libraryID: joinerLibraryID)
+        SharedLibrarySettings.setAcceptedZoneOwnerName(zone.zoneID.ownerName, libraryID: joinerLibraryID)
+        let title = (share[CKShare.SystemFieldKey.title] as? String) ?? "Shared Library"
+        SharedLibrarySettings.shareTitle = title
+        SharedLibrarySettings.setMembership(.participant, libraryID: joinerLibraryID)
+        SharedLibrarySettings.setChangeTokenData(nil, libraryID: joinerLibraryID)
+        // Create the joiner's library entry (inactive — switching to it is
+        // the user's choice).
+        if !LibraryScope.all(context: Persistence.shared.mainContext).contains(where: { $0.id == joinerLibraryID }) {
+            _ = try? LibraryScope.create(name: title, makeActive: false,
+                                         context: Persistence.shared.mainContext)
+            // create() generates its own id; align the registry entry to the
+            // derived share id so mirror-store lookups work.
+            LibraryScope.renameIDForSharing(from: LibraryScope.all(context: Persistence.shared.mainContext).last?.id ?? joinerLibraryID,
+                                            to: joinerLibraryID, context: Persistence.shared.mainContext)
+        }
         refreshParticipants(from: share)
     }
 

@@ -71,6 +71,32 @@ enum LibraryScope {
         return FetchDescriptor<Book>(predicate: #Predicate { $0.libraryID == id })
     }
 
+    /// Re-ids a library entry (used when a joined share maps to a derived
+    /// share-scoped id). Content rows must be re-tagged by the caller.
+    static func renameIDForSharing(from oldID: String, to newID: String, context: ModelContext) {
+        var registry = loadRegistry()
+        guard let idx = registry.firstIndex(where: { $0.id == oldID }) else { return }
+        registry[idx].id = newID
+        saveRegistry(registry)
+        // Re-tag content rows created for the placeholder id.
+        for row in (try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == oldID }
+        ))) ?? [] { row.libraryID = newID }
+        for row in (try? context.fetch(FetchDescriptor<Note>(
+            predicate: #Predicate { $0.libraryID == oldID }
+        ))) ?? [] { row.libraryID = newID }
+        for row in (try? context.fetch(FetchDescriptor<ReadingList>(
+            predicate: #Predicate { $0.libraryID == oldID }
+        ))) ?? [] { row.libraryID = newID }
+        for row in (try? context.fetch(FetchDescriptor<ReadingListItem>(
+            predicate: #Predicate { $0.libraryID == oldID }
+        ))) ?? [] { row.libraryID = newID }
+        for row in (try? context.fetch(FetchDescriptor<Connection>(
+            predicate: #Predicate { $0.libraryID == oldID }
+        ))) ?? [] { row.libraryID = newID }
+        try? context.save()
+    }
+
     /// Renames a library (by id). No-op when absent.
     static func rename(id: String, to name: String, context: ModelContext) {
         var registry = loadRegistry()

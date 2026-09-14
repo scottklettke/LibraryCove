@@ -42,14 +42,13 @@ struct LibraryListView: View {
                         }
                     }
                     .contextMenu {
-                        if isActive {
-                            Button {
-                                renameTarget = library
-                                renameText = library.name
-                            } label: {
-                                Label("Rename library", systemImage: "pencil")
-                            }
-                        } else {
+                        Button {
+                            renameTarget = library
+                            renameText = library.name
+                        } label: {
+                            Label("Rename library", systemImage: "pencil")
+                        }
+                        if !isActive {
                             Button(role: .destructive) {
                                 libraryToDelete = library
                             } label: {

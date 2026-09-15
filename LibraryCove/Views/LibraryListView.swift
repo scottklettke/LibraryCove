@@ -37,7 +37,7 @@ struct LibraryListView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(library.name.isEmpty ? "Untitled Library" : library.name)
                                     .font(isActive ? .body.bold() : .body)
-                                Text(isActive ? "Active" : "\(bookCount(for: library)) books")
+                                Text("\(bookCount(for: library)) books")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }

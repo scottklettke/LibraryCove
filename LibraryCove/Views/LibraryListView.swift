@@ -100,8 +100,9 @@ struct LibraryListView: View {
             get: { shareSheetShare != nil },
             set: { if !$0 { shareSheetShare = nil; shareSheetLibrary = nil } }
         )) {
-            if let share = shareSheetShare {
-                CloudSharingSheet(share: share)
+            if let share = shareSheetShare,
+               let library = shareSheetLibrary, !library.id.isEmpty {
+                CloudSharingSheet(share: share, libraryID: library.id)
             }
         }
         .sheet(isPresented: Binding(

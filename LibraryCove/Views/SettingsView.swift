@@ -26,7 +26,9 @@ struct SettingsView: View {
 
     // Shared library
     @State private var sharedMembers: [SharedLibraryMember] = []
-    @State private var keepCopyOnLeave = true
+    @State private var isPreparingShare = false
+    @State private var showSharingSheet = false
+    @State private var shareSheetShare: CKShare?
 
     // AI
     @State private var aiEngine: AIEngine = AIConfig.selectedEngine
@@ -140,7 +142,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 profileSection
-
+                sharedLibrarySection
                 dataSection
 
                 syncSection
@@ -156,6 +158,15 @@ struct SettingsView: View {
             } message: {
                 Text("Your library is already empty — there are no books, notes, reading lists, or connections to delete.")
             }
+            .sheet(isPresented: $showSharingSheet) {
+                if let share = shareSheetShare {
+                    CloudSharingSheet(share: share,
+                                      libraryID: LibraryScope.shared.activeID(context: modelContext))
+                        .onDisappear {
+                            Task { await refreshMembers() }
+                        }
+                }
+            }
             .sheet(isPresented: $showDeleteLibraryConfirm) {
                 DeleteLibrarySheet(
                     sharingActive: SharedLibraryMembershipGate.membership != .none,
@@ -170,6 +181,8 @@ struct SettingsView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: LibraryScope.librariesChangedNotification)) { _ in
                 libraryRegistryTick += 1
+                // The active library may have switched — its members differ.
+                Task { await refreshMembers() }
             }
             .alert("Library name already used", isPresented: Binding(
                 get: { duplicateNameWarning != nil },
@@ -342,13 +355,36 @@ struct SettingsView: View {
         }
     }
 
-    private func refreshMembers() async {
-        await SharedLibraryEngine.shared.refreshParticipants()
-        sharedMembers = SharedLibraryEngine.shared.members
+
+    /// Share (first time) or manage (existing share) the ACTIVE library —
+    /// the same flow as the Libraries-list long-press: fetch the share,
+    /// creating it when absent, and present the sharing sheet.
+    private func shareOrManageActive() async {
+        guard let active = LibraryScope.shared.active(context: modelContext) else { return }
+        isPreparingShare = true
+        defer { isPreparingShare = false }
+        do {
+            if let share = try await SharedLibraryEngine.shared.currentShare(libraryID: active.id) {
+                shareSheetShare = share
+            } else {
+                shareSheetShare = try await SharedLibraryCoordinator.beginShare(
+                    currentTitle: active.name, libraryID: active.id)
+            }
+            showSharingSheet = true
+        } catch {
+            lastError = error.localizedDescription
+            showError = true
+        }
     }
 
-    // MARK: - Actions
-
+    private func refreshMembers() async {
+        // Clear first: while the fetch runs, showing the PREVIOUS active
+        // library's members would be wrong.
+        sharedMembers = []
+        await SharedLibraryEngine.shared.refreshParticipants(
+            libraryID: LibraryScope.shared.activeID(context: modelContext))
+        sharedMembers = SharedLibraryEngine.shared.members
+    }
     private func switchSyncProvider(to new: LibrarySync) {
         guard new != SyncSettings.selectedProvider else { return }
         // A share is active: switching to another provider stops sharing it
@@ -540,6 +576,87 @@ struct SettingsView: View {
                 }
     }
 
+
+    /// Share entry for the ACTIVE library, on the per-library sharing model:
+    /// membership keyed by the active library's id, same
+    /// currentShare(libraryID:)/beginShare(currentTitle:libraryID:) flow as
+    /// the Libraries-list long-press. Stop/Leave stay in the Libraries list
+    /// until the coordinator gains libraryID-scoped destructive flows.
+    private var sharedLibrarySection: some View {
+        Section {
+            let active = LibraryScope.shared.active(context: modelContext)
+            let membership = active.map {
+                SharedLibrarySettings.membership(libraryID: $0.id)
+            } ?? .none
+            let role = active.map {
+                SharedLibraryEngine.shared.myRole(libraryID: $0.id)
+            } ?? .guest
+            switch membership {
+            case .none:
+                Button {
+                    Task { await shareOrManageActive() }
+                } label: {
+                    Label("Share Library", systemImage: "person.2")
+                }
+                .disabled(isPreparingShare || isSwitchingSync || active == nil)
+                if isPreparingShare {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Preparing your shared library…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            case .owner:
+                Button {
+                    Task { await shareOrManageActive() }
+                } label: {
+                    Label("Manage Shared Library", systemImage: "person.2")
+                }
+            case .participant:
+                LabeledContent("Shared Library",
+                               value: active?.name.isEmpty == false
+                                      ? (active?.name ?? "Active")
+                                      : "Active")
+                // Admins and editors can share links (guests can't — the
+                // sheet's permission is read-only for them anyway).
+                if role != .guest {
+                    Button {
+                        Task { await shareOrManageActive() }
+                    } label: {
+                        Label("Share Link", systemImage: "link")
+                    }
+                }
+            }
+
+            if membership != .none && !sharedMembers.isEmpty {
+                ForEach(sharedMembers) { member in
+                    HStack {
+                        Image(systemName: member.isOwner ? "crown" : "person")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading) {
+                            Text(member.isCurrentUser ? "\(member.name) (you)" : member.name)
+                            Text("\(member.acceptanceStatusDescription) · \(member.permissionDescription)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            if let syncError = SharedLibraryEngine.shared.lastError {
+                Text(syncError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        } header: {
+            Text("Shared Library")
+        } footer: {
+            Text(SharedLibrarySettings.membership(
+                     libraryID: LibraryScope.shared.activeID(context: modelContext)) == .none
+                 ? "Share this library with other people via iCloud. Everyone with access can add, edit, and remove books — changes sync to all members."
+                 : "This library is shared via iCloud. Changes made by any member sync to everyone with access.")
+        }
+    }
+
     private var dataSection: some View {
                 Section {
                     Button(role: .destructive) {
@@ -573,7 +690,8 @@ struct SettingsView: View {
                     // mirror; the picker (which excludes .sharedLibrary)
                     // would render blank. Show read-only status and route
                     // any change through the Stop Sharing confirmation.
-                    if SharedLibraryMembershipGate.membership != .none {
+                    if SharedLibrarySettings.membership(
+                           libraryID: LibraryScope.shared.activeID(context: modelContext)) != .none {
                         LabeledContent("Sync provider", value: "Shared Library")
                         LabeledContent("Status", value: syncStatusText(syncProvider))
                     } else if syncProvider == .iCloud {
@@ -778,10 +896,14 @@ struct SettingsView: View {
 
 struct CloudSharingSheet: UIViewControllerRepresentable {
     let share: CKShare
+    /// The active library at presentation time — its share this sheet
+    /// manages; delegates refresh that library's participants.
+    let libraryID: String
     let container: CKContainer
 
-    init(share: CKShare, container: CKContainer = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)) {
+    init(share: CKShare, libraryID: String, container: CKContainer = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)) {
         self.share = share
+        self.libraryID = libraryID
         self.container = container
     }
 
@@ -794,9 +916,12 @@ struct CloudSharingSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: UICloudSharingController, context: Context) {}
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator { Coordinator(libraryID: libraryID) }
 
     final class Coordinator: NSObject, UICloudSharingControllerDelegate {
+        let libraryID: String
+        init(libraryID: String) { self.libraryID = libraryID }
+
         func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
             SharedLibraryEngine.shared.reportError(error.localizedDescription)
         }
@@ -806,7 +931,7 @@ struct CloudSharingSheet: UIViewControllerRepresentable {
         }
 
         func cloudSharingControllerDidSaveShare(_ csc: UICloudSharingController) {
-            Task { await SharedLibraryEngine.shared.refreshParticipants() }
+            Task { await SharedLibraryEngine.shared.refreshParticipants(libraryID: libraryID) }
         }
 
         func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {

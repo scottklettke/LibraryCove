@@ -68,18 +68,23 @@ final class LibraryCoveUITests: XCTestCase {
             enter.tap()
             return
         }
-        let create = app.buttons["Create My Library"]
-        if create.waitForExistence(timeout: 5) {
-            // Advance through the welcome pages to the setup form.
-            let cont = app.buttons["Continue"]
-            for _ in 0..<3 where cont.waitForExistence(timeout: 2) {
+        // Paged welcome flow (since 5c2f0df): pages 0–2 show "Continue";
+        // page 3 (setup form) shows "Create My Library". Page 0 also waits
+        // ~1s before accepting taps, so the first Continue needs a retry.
+        if app.buttons["Continue"].waitForExistence(timeout: 5) {
+            for _ in 0..<4 {
+                let cont = app.buttons["Continue"]
+                guard cont.waitForExistence(timeout: 3) else { break }
                 cont.tap()
+                // Stop early once the setup form is reached.
+                if app.textFields["Your name"].waitForExistence(timeout: 2) { break }
             }
             let nameField = app.textFields["Your name"]
-            if nameField.waitForExistence(timeout: 3) {
-                nameField.tap()
-                nameField.typeText("Tester")
-            }
+            XCTAssertTrue(nameField.waitForExistence(timeout: 5), "welcome setup form missing")
+            nameField.tap()
+            nameField.typeText("Tester")
+            let create = app.buttons["Create My Library"]
+            XCTAssertTrue(create.waitForExistence(timeout: 5), "Create My Library missing")
             create.tap()
         }
     }

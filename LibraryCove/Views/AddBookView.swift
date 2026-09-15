@@ -119,6 +119,12 @@ struct AddBookView: View {
                 })
                 .onAppear { buildExistingSet() }
             }
+            .sheet(isPresented: $showScanReview, onDismiss: { buildExistingSet() }) {
+                ScanQueueReviewListView(onAllImported: {
+                    showScanReview = false
+                    dismiss()
+                })
+            }
             .sheet(item: $importDispatch) { dispatch in
                 BookImportFlow(queue: dispatch.books,
                                onEachSaved: { id in scanQueue.remove(id: id) },
@@ -317,6 +323,7 @@ struct AddBookView: View {
 /// run through a whole stack of books and review them afterward.
 private struct ScannerFlow: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var queue = ScanQueueStore.shared
     @State private var rescanKey = 0
     @State private var selectedScanItemID: String?
@@ -558,9 +565,18 @@ private struct ScannerFlow: View {
 
     private func handleCode(_ code: String) {
         // Reject a scan whose ISBN is already in the library before it's queued.
-        if let normalized = Book.normalizedISBN(code),
-           existingIsbns.contains(normalized) {
-            duplicateScan = DuplicateScan(isbn: normalized, name: existingBookNames[normalized])
+        // Resolved LIVE against the store: the existingIsbns snapshot passed
+        // through the fullScreenCover content closure is captured when the
+        // cover is built and can be stale (missed books added moments earlier
+        // — the duplicate alert silently became a quiet enqueue).
+        let normalized = Book.normalizedISBN(code)
+        let existing: Book? = normalized.flatMap { key in
+            let descriptor = LibraryScope.shared.activeBooksDescriptor(context: modelContext)
+            let books = (try? modelContext.fetch(descriptor)) ?? []
+            return books.first { Book.normalizedISBN($0.isbn) == key }
+        }
+        if let normalized, let hit = existing {
+            duplicateScan = DuplicateScan(isbn: normalized, name: hit.title.isEmpty ? nil : hit.title)
         } else {
             // Cache the ISBN immediately; the background processor looks it up.
             queue.enqueue(isbn: code)

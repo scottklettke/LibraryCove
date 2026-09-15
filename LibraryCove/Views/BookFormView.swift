@@ -368,6 +368,7 @@ struct BookFormView: View {
             Button("Add another copy") {
                 if let pending = pendingInsertBook {
                     modelContext.insert(pending)
+                    pending.libraryID = LibraryScope.shared.activeID(context: modelContext)
                     try? modelContext.save()
                     pendingInsertBook = nil
                     onAdded(pending.title)
@@ -384,6 +385,7 @@ struct BookFormView: View {
                 }
                 if let pending = pendingInsertBook {
                     modelContext.insert(pending)
+                    pending.libraryID = LibraryScope.shared.activeID(context: modelContext)
                     try? modelContext.save()
                     pendingInsertBook = nil
                     onAdded(pending.title)
@@ -1116,6 +1118,7 @@ struct BookFormView: View {
                 showDuplicateAlert = true
             } else {
                 modelContext.insert(book)
+                book.libraryID = LibraryScope.shared.activeID(context: modelContext)
                 try? modelContext.save()
                 onAdded(trimmedTitle)
                 onSaved()

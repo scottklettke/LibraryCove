@@ -7,19 +7,22 @@ final class GreetingRenameTests: XCTestCase {
         app.launchEnvironment["UI_TEST_RESET_DATA"] = "1"
         app.launch()
 
-        // Fresh-install path (no members): run the welcome flow. When the
-        // store already has a member, skip to the rename step.
-        let create = app.buttons["Create My Library"]
-        if create.waitForExistence(timeout: 4) {
-            let nameField = app.textFields["Your name"]
-            for _ in 0..<3 {
-                app.swipeLeft()
-                if nameField.waitForExistence(timeout: 1.5) { break }
+        // Fresh-install path (no members): run the welcome flow. The welcome
+        // is a 5-page TabView — pages 0–2 show "Continue", page 3 is the
+        // setup form where "Create My Library" appears. When the store
+        // already has a member, skip to the rename step.
+        if app.buttons["Continue"].waitForExistence(timeout: 4) {
+            for _ in 0..<4 {
+                let cont = app.buttons["Continue"]
+                guard cont.waitForExistence(timeout: 3) else { break }
+                cont.tap()
+                if app.textFields["Your name"].waitForExistence(timeout: 2) { break }
             }
+            let nameField = app.textFields["Your name"]
             XCTAssertTrue(nameField.waitForExistence(timeout: 4), "setup form never appeared")
             nameField.tap()
             nameField.typeText("Scott")
-            create.tap()
+            app.buttons["Create My Library"].tap()
         }
 
         let currentGreeting = app.staticTexts.matching(

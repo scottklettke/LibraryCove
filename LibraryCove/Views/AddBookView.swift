@@ -35,6 +35,10 @@ struct AddBookView: View {
     @State private var showScanner = false
     /// Title of the most recently added book, surfaced as a confirmation.
     @State private var addedBookTitle: String?
+    /// Staged by the manual-entry form's onAdded callback; promoted to
+    /// addedBookTitle only after the sheet has fully dismissed, so the alert
+    /// never presents while a dismissal transition is still running.
+    @State private var pendingAddedTitle: String?
     @State private var descriptionSource: DescriptionSource = .openlibrary
     @State private var selectedIDs = Set<String>()
     @State private var importDispatch: ImportQueueDispatch?
@@ -124,11 +128,15 @@ struct AddBookView: View {
                     dismiss()
                 })
             }
-            .sheet(item: $manualEntry, onDismiss: { buildExistingSet() }) { stub in
+            .sheet(item: $manualEntry, onDismiss: {
+                buildExistingSet()
+                addedBookTitle = pendingAddedTitle
+                pendingAddedTitle = nil
+            }) { stub in
                 NavigationStack {
-                    BookFormView(catalog: stub, existing: nil, onSaved: {
-                        buildExistingSet()
-                    }, dismissOnSave: true)
+                    BookFormView(catalog: stub, existing: nil,
+                                 onAdded: { pendingAddedTitle = $0 },
+                                 dismissOnSave: true)
                     .navigationTitle("Add a book")
                     .navigationBarTitleDisplayMode(.inline)
                 }
@@ -136,11 +144,6 @@ struct AddBookView: View {
             .onAppear {
                 buildExistingSet()
                 ScanQueueStore.shared.startProcessingIfNeeded()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .bookAdded)) { note in
-                if let title = note.userInfo?["title"] as? String, !title.isEmpty {
-                    addedBookTitle = title
-                }
             }
             .alert("Book added",
                    isPresented: Binding(

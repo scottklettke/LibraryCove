@@ -884,7 +884,7 @@ struct LibraryView: View {
             // The empty-state overlay applies to the book-browsing modes
             // only — the Dashboard renders stats (zeros when empty) and
             // must not have text stacked on top of its rows.
-            if books.isEmpty && viewMode != .dashboard {
+            if visibleBooks.isEmpty && viewMode != .dashboard {
                 ContentUnavailableView {
                     VStack(spacing: 12) {
                         Image("BrandMark")
@@ -905,7 +905,7 @@ struct LibraryView: View {
             }
         }
         .overlay(alignment: .center) {
-            if books.isEmpty && viewMode != .dashboard {
+            if visibleBooks.isEmpty && viewMode != .dashboard {
                 Button {
                     showAdd = true
                 } label: {

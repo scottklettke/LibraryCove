@@ -83,6 +83,14 @@ struct BookFormView: View {
     let catalog: CatalogBook?
     var existing: Book?
     var onSaved: () -> Void = {}
+    /// Called after a Book row is inserted and saved (including the
+    /// duplicate-alert "add another copy" branch) with the saved title, so the
+    /// presenter can confirm to the user. Deliberately NOT set for scan/import
+    /// flows: those immediately dismiss or tear down the presenting screen,
+    /// and presenting a confirmation alert during that dismissal crashes
+    /// (NSInternalInconsistencyException in
+    /// _alertControllerContainedInViewController).
+    var onAdded: (String) -> Void = { _ in }
     var onDeleted: () -> Void = {}
     var dismissOnSave: Bool = true
     /// Hides the form's own toolbar trash. Used inside the swipeable import
@@ -155,10 +163,11 @@ struct BookFormView: View {
     /// Bumped to scroll the title field into view on a failed save.
     @State private var scrollTrigger = 0
 
-    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true, showsToolbarDelete: Bool = true) {
+    init(catalog: CatalogBook? = nil, existing: Book? = nil, onSaved: @escaping () -> Void = {}, onAdded: @escaping (String) -> Void = { _ in }, onDeleted: @escaping () -> Void = {}, dismissOnSave: Bool = true, showsToolbarDelete: Bool = true) {
         self.catalog = catalog
         self.existing = existing
         self.onSaved = onSaved
+        self.onAdded = onAdded
         self.onDeleted = onDeleted
         self.dismissOnSave = dismissOnSave
         self.showsToolbarDelete = showsToolbarDelete
@@ -360,6 +369,8 @@ struct BookFormView: View {
                 if let pending = pendingInsertBook {
                     modelContext.insert(pending)
                     try? modelContext.save()
+                    pendingInsertBook = nil
+                    onAdded(pending.title)
                     onSaved()
                     if dismissOnSave {
                         dismiss()
@@ -373,11 +384,12 @@ struct BookFormView: View {
                 }
                 if let pending = pendingInsertBook {
                     modelContext.insert(pending)
+                    try? modelContext.save()
+                    pendingInsertBook = nil
+                    onAdded(pending.title)
+                    onSaved()
                 }
-                try? modelContext.save()
-                pendingInsertBook = nil
                 pendingDuplicate = nil
-                onSaved()
                 if dismissOnSave {
                     dismiss()
                 }
@@ -964,7 +976,6 @@ struct BookFormView: View {
         NotificationCenter.default.post(
             name: .bookDeletedExternally, object: nil, userInfo: ["id": id])
     }
-
     private var deleteMessage: String {
         if existing != nil {
             var parts: [String] = []
@@ -1106,21 +1117,13 @@ struct BookFormView: View {
             } else {
                 modelContext.insert(book)
                 try? modelContext.save()
-                notifyBookAdded(trimmedTitle)
+                onAdded(trimmedTitle)
                 onSaved()
                 if dismissOnSave {
                     dismiss()
                 }
             }
         }
-    }
-
-    /// Tells listeners (e.g. AddBookView) that a book was added, so they can
-    /// surface a confirmation once this form dismisses.
-    private func notifyBookAdded(_ title: String) {
-        NotificationCenter.default.post(
-            name: .bookAdded, object: nil,
-            userInfo: ["title": title])
     }
 
     private func findDuplicate(key: String) -> Book? {

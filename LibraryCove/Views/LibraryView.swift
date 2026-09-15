@@ -941,10 +941,13 @@ struct LibraryView: View {
     private var greetingText: String {
         let name = user.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else {
-            return "Your library is empty"
+            // The "Your library is empty" line renders right below; avoid
+            // printing it twice when no name is resolvable.
+            return "Hi"
         }
         return "Hi, \(name)"
     }
+
 
     // MARK: - Grid
 

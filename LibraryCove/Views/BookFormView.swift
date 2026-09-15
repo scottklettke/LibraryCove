@@ -83,13 +83,8 @@ struct BookFormView: View {
     let catalog: CatalogBook?
     var existing: Book?
     var onSaved: () -> Void = {}
-    /// Called after a Book row is inserted and saved (including the
-    /// duplicate-alert "add another copy" branch) with the saved title, so the
-    /// presenter can confirm to the user. Deliberately NOT set for scan/import
-    /// flows: those immediately dismiss or tear down the presenting screen,
-    /// and presenting a confirmation alert during that dismissal crashes
-    /// (NSInternalInconsistencyException in
-    /// _alertControllerContainedInViewController).
+    /// Called after a successful insert+save with the saved title; presenters
+    /// decide whether/how to confirm (scan/import callers leave it a no-op).
     var onAdded: (String) -> Void = { _ in }
     var onDeleted: () -> Void = {}
     var dismissOnSave: Bool = true
@@ -371,6 +366,7 @@ struct BookFormView: View {
                     pending.libraryID = LibraryScope.shared.activeID(context: modelContext)
                     try? modelContext.save()
                     pendingInsertBook = nil
+                    pendingDuplicate = nil
                     onAdded(pending.title)
                     onSaved()
                     if dismissOnSave {
@@ -383,15 +379,18 @@ struct BookFormView: View {
                     CoverImageStore.delete(forBookID: duplicate.id)
                     modelContext.delete(duplicate)
                 }
+                let savedTitle = pendingInsertBook?.title
                 if let pending = pendingInsertBook {
                     modelContext.insert(pending)
                     pending.libraryID = LibraryScope.shared.activeID(context: modelContext)
                     try? modelContext.save()
-                    pendingInsertBook = nil
-                    onAdded(pending.title)
-                    onSaved()
                 }
+                pendingInsertBook = nil
                 pendingDuplicate = nil
+                if let savedTitle {
+                    onAdded(savedTitle)
+                }
+                onSaved()
                 if dismissOnSave {
                     dismiss()
                 }

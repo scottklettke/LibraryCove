@@ -186,9 +186,6 @@ struct BookDetailView: View {
             if !book.tags.isEmpty {
                 LabeledContent("Tags", value: book.tags.joined(separator: ", "))
             }
-            if !book.shelves.isEmpty {
-                LabeledContent("Shelves", value: book.shelves.joined(separator: ", "))
-            }
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)

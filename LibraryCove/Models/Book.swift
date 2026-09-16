@@ -15,18 +15,20 @@ final class Book {
     var authors: [String] = []
     var isbn: String?
     var publicationYear: Int?
-    /// Arbitrary user/AI-assigned labels (the shelf-organization input; a tag
-    /// is not a controlled vocabulary). Stored under `genres` because SwiftData
+    /// Arbitrary user/AI-assigned labels (a tag is not a controlled
+    /// vocabulary). Stored under `genres` because SwiftData
     /// cannot rename stored properties in CloudKit-backed stores — so the
     /// Swift API is `tags` (below) while the persistent field keeps its legacy
     /// name. No migration is needed.
     var genres: [String] = []
     /// Fiction / non-fiction classification. Values: `""` (not set),
-    /// `fiction`, `non-fiction`. Set by the user or proposed by the AI shelf
-    /// pass; it is the top-level partition of the two-tier shelf grouping.
+    /// `fiction`, `non-fiction`. Set by the user in the form or proposed by
+    /// the AI fiction/non-fiction pass.
     var kind: String = ""
-    /// Manual shelf assignments — a user-curated shelf name, not an AI
-    /// taxonomy. Multi-select; managed without AI.
+    /// Legacy shelf assignments. The shelf feature was removed (redundant
+    /// with tags); the property stays so the CloudKit schema needs no
+    /// migration. No UI touches it — export, import, sync, and
+    /// duplicate-repair still round-trip the legacy data by design.
     var shelves: [String] = []
     var coverImageURL: String?
     var publisher: String?
@@ -311,9 +313,9 @@ enum BookGenre: String, CaseIterable, Identifiable {
     }
 }
 
-/// Fiction / non-fiction classification of a book. Stored on the Book; set by
-/// the user when adding/editing or proposed by the AI shelf pass. `""` means
-/// not yet set and routes the book to the "Uncategorized" top group.
+/// Fiction / non-fiction classification of a book. Stored on the Book; set
+/// by the user in the form or proposed by the AI fiction/non-fiction pass.
+/// `""` means not yet set.
 enum BookKind: String, CaseIterable, Identifiable {
     case fiction = "fiction"
     case nonFiction = "non-fiction"

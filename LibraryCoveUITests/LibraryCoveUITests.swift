@@ -941,11 +941,11 @@ final class LibraryCoveUITests: XCTestCase {
         XCTAssertTrue(book.waitForExistence(timeout: 10), "book cell missing")
         book.press(forDuration: 1.2)
 
-        // Long-press opens the action dialog (assign shelf / edit tags / delete).
-        let assign = app.buttons.matching(
-            NSPredicate(format: "label CONTAINS 'Assign to shelf'")
+        // Long-press opens the action dialog (edit tags / delete copy).
+        let editTags = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS 'Edit tags'")
         ).firstMatch
-        XCTAssertTrue(assign.waitForExistence(timeout: 5), "assign-to-shelf menu missing")
+        XCTAssertTrue(editTags.waitForExistence(timeout: 5), "edit-tags menu missing")
         // Dismiss the dialog — the grouping assertions below don't need the
         // assignment itself, only that the long-press menu works.
         app.buttons["Cancel"].firstMatch.tap()

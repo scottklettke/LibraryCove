@@ -20,7 +20,7 @@ import PDFKit
                       tags: ["Science Fiction"],
                       bookDescription: "A classic summary of Dune.",
                       physicalLocation: "Living room shelf", rating: 5,
-                      ownerID: "u-1", shelves: ["Favorites"])
+                      ownerID: "u-1")
         let b2 = Book(id: "b-2", title: "Solaris", authors: ["Stanisław Lem"],
                       status: "completed")
         let b3 = Book(id: "b-3", title: "", authors: [])
@@ -63,7 +63,7 @@ import PDFKit
         }
         let entry = BookCatalogEntry(
             id: "c", title: "Cover Book", authors: ["A"], isbn: nil,
-            publicationYear: nil, tags: [], shelves: [], statusDisplay: "To read",
+            publicationYear: nil, tags: [], statusDisplay: "To read",
             publisher: nil, pageCount: nil, bookDescription: nil, language: nil,
             physicalLocation: nil, rating: nil, loanedTo: nil, ownerName: nil,
             acquiredDate: nil, coverData: cover.jpegData(compressionQuality: 0.9)
@@ -120,7 +120,7 @@ import PDFKit
         func entry(_ title: String) -> BookCatalogEntry {
             BookCatalogEntry(
                 id: title, title: title, authors: ["An Author"], isbn: nil,
-                publicationYear: 2020, tags: [], shelves: [],
+                publicationYear: 2020, tags: [],
                 statusDisplay: "To read", publisher: "Press", pageCount: 300,
                 bookDescription: String(repeating: "A long description paragraph. ", count: 8),
                 language: "English", physicalLocation: nil, rating: nil,
@@ -148,7 +148,7 @@ import PDFKit
             id: title, title: String(repeating: title + " ", count: 6),
             authors: ["Author One", "Author Two", "Author Three"], isbn: nil,
             publicationYear: 2020, tags: ["tag-one", "tag-two", "tag-three"],
-            shelves: ["Shelf One", "Shelf Two"], statusDisplay: "To read",
+            statusDisplay: "To read",
             publisher: "Press", pageCount: 300,
             bookDescription: String(repeating: "A long description paragraph. ", count: 30),
             language: "English", physicalLocation: nil, rating: nil,
@@ -161,7 +161,7 @@ import PDFKit
     private func minimalEntry(_ title: String) -> BookCatalogEntry {
         BookCatalogEntry(
             id: title, title: title, authors: ["A"], isbn: "9780000000002",
-            publicationYear: nil, tags: [], shelves: [], statusDisplay: "To read",
+            publicationYear: nil, tags: [], statusDisplay: "To read",
             publisher: nil, pageCount: nil, bookDescription: nil, language: nil,
             physicalLocation: nil, rating: nil, loanedTo: nil, ownerName: nil,
             acquiredDate: nil, coverData: nil
@@ -183,7 +183,7 @@ import PDFKit
         func extractedText(_ options: PDFExportOptions) -> String {
             let entry = BookCatalogEntry(
                 id: "d", title: "Description Book", authors: ["A"], isbn: nil,
-                publicationYear: nil, tags: [], shelves: [], statusDisplay: "To read",
+                publicationYear: nil, tags: [], statusDisplay: "To read",
                 publisher: nil, pageCount: nil,
                 bookDescription: "Zebraquillmark sentence for the ink scan.",
                 language: nil, physicalLocation: nil, rating: nil,
@@ -232,7 +232,7 @@ import PDFKit
     @Test func locationAndRatingTogglesOmitFacts() throws {
         let entry = BookCatalogEntry(
             id: "f", title: "Facts Book", authors: ["A"], isbn: nil,
-            publicationYear: nil, tags: [], shelves: [], statusDisplay: "To read",
+            publicationYear: nil, tags: [], statusDisplay: "To read",
             publisher: nil, pageCount: nil, bookDescription: nil, language: nil,
             physicalLocation: "Attic crate seven", rating: 4, loanedTo: nil,
             ownerName: nil, acquiredDate: nil, coverData: nil
@@ -281,7 +281,7 @@ import PDFKit
         func named(_ title: String, _ authors: [String]) -> BookCatalogEntry {
             BookCatalogEntry(
                 id: title, title: title, authors: authors, isbn: nil,
-                publicationYear: nil, tags: [], shelves: [], statusDisplay: "To read",
+                publicationYear: nil, tags: [], statusDisplay: "To read",
                 publisher: nil, pageCount: nil, bookDescription: nil, language: nil,
                 physicalLocation: nil, rating: nil, loanedTo: nil, ownerName: nil,
                 acquiredDate: nil, coverData: nil
@@ -328,7 +328,6 @@ import PDFKit
         #expect(dune.isbn == "9780441172719")
         #expect(dune.publicationYear == 1965)
         #expect(dune.tags == ["Science Fiction"])
-        #expect(dune.shelves == ["Favorites"])
         #expect(dune.statusDisplay == BookStatus.toRead.displayName)
         #expect(dune.physicalLocation == "Living room shelf")
         #expect(dune.rating == 5)

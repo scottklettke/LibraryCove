@@ -28,7 +28,7 @@ struct WelcomeView: View {
                     welcomePage(
                         icon: "sparkles",
                         title: "Get help from AI",
-                        text: "Ask questions about your collection, get reading suggestions, and let AI suggest shelves and categories.",
+                        text: "Ask questions about your collection, get reading suggestions, and let AI suggest genres and categories.",
                         tag: 1
                     )
                     welcomePage(

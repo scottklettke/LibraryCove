@@ -17,7 +17,6 @@ struct BookCatalogEntry: Identifiable {
     var isbn: String?
     var publicationYear: Int?
     var tags: [String]
-    var shelves: [String]
     var statusDisplay: String
     var publisher: String?
     var pageCount: Int?
@@ -71,10 +70,9 @@ struct PDFExportOptions: Equatable {
     var includeSeries: Bool = true
     var includeLocation: Bool = true
     var includeRating: Bool = true
-    var includeShelves: Bool = true
     var includeTags: Bool = true
-    /// Shorthand: both tag toggles off hides the labels line entirely.
-    var includeLabels: Bool { includeShelves || includeTags }
+    /// Shorthand: tags toggle off hides the labels line entirely.
+    var includeLabels: Bool { includeTags }
 
     /// Reproduces the original catalog design exactly.
     static let `default` = PDFExportOptions()
@@ -131,7 +129,6 @@ enum LibraryPDFExport {
                 isbn: book.isbn,
                 publicationYear: book.publicationYear,
                 tags: book.tags,
-                shelves: book.shelves,
                 statusDisplay: book.statusEnum.displayName,
                 publisher: book.publisher,
                 pageCount: book.pageCount,
@@ -704,9 +701,6 @@ enum LibraryPDFExport {
 
     private static func labelsText(_ entry: BookCatalogEntry, options: PDFExportOptions) -> String? {
         var labels: [String] = []
-        if options.includeShelves {
-            labels += entry.shelves.map { "shelf: \($0)" }
-        }
         if options.includeTags {
             labels += entry.tags
         }

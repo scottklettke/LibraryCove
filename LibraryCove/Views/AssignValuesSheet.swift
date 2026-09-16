@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Manual multi-select editor for tags or shelves on one or more books.
-/// Searchable, with a "New value…" field so users can create a shelf or tag
+/// Manual multi-select editor for tags on one or more books.
+/// Searchable, with a "New value…" field so users can create a tag
 /// inline (no AI involved). The checked set becomes the assigned set for every
 /// target book when Done is pressed; Cancel discards.
 struct AssignValuesSheet: View {

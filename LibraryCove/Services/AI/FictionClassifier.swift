@@ -15,10 +15,9 @@ struct BookKindProposal: Codable, Equatable {
 /// book-level snapshot, asks the model for per-book proposals, validates the
 /// model's JSON, and applies the approved subset to `Book.kind`.
 ///
-/// This is separate from `ShelfCategorizer`: shelves derive a kind from tags;
-/// here the model classifies from each book's title/authors, so books with no
-/// (or ambiguous) tags can still be labeled, and the user sees every proposal
-/// before it lands on a book.
+/// The model classifies from each book's title/authors (tags are often
+/// ambiguous or missing), so books with no tags can still be labeled, and
+/// the user sees every proposal before it lands on a book.
 enum FictionClassifier {
 
     static let maxLines = 200

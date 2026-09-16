@@ -52,7 +52,8 @@ struct BookDTO: Codable {
     /// Fiction / non-fiction classification (`nil` when unset). New field; old
     /// archives won't have it.
     var kind: String?
-    /// Manual shelf assignments (`nil` when the book has none).
+    /// Legacy shelf assignments (feature removed; kept so old archives
+    /// round-trip. `nil` when the book has none).
     var shelves: [String]?
     var coverImageURL: String?
     /// Relative `covers/<bookID>.jpg` zip entry carrying the cover's JPEG

@@ -48,7 +48,7 @@ struct AboutView: View {
                     Text("LibraryCove is a personal book library manager for iPhone and iPad. It helps you catalog what you own, organize it the way you think, and make the most of your collection with AI assistance — all while keeping your data under your control.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
-                    Text("Features include barcode and catalog lookup, a crash-safe background scan queue with duplicate handling, free-form tags and AI-suggested shelves, fiction/non-fiction classification, loan tracking, export/import backups, optional iCloud sync, and an Ask AI assistant grounded in your library.")
+                    Text("Features include barcode and catalog lookup, a crash-safe background scan queue with duplicate handling, free-form tags and curated genres, fiction/non-fiction classification, loan tracking, export/import backups, optional iCloud sync, and an Ask AI assistant grounded in your library.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } header: {

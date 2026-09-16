@@ -140,7 +140,6 @@ struct LibraryView: View {
     @State private var registryEpoch = 0
     @State private var filteredSheet: FilteredSheet?
     @State private var genreStore = GenreStore()
-    @State private var shelfStore = ShelfStore()
     @State private var isSelecting = false
     @State private var selection = Set<String>()
     /// Books deleted this session whose backing data has detached. SwiftData's
@@ -390,12 +389,12 @@ struct LibraryView: View {
     }
 
 
-    // MARK: - Manual tag/shelf assignment + bulk select
+    // MARK: - Manual tag assignment + bulk select
 
-    /// A pending assignment: which kind of value (tags or shelves) applied to
-    /// which books. Presented as a searchable multi-select sheet.
+    /// A pending tag assignment: which books to retag. Presented as a
+    /// searchable multi-select sheet.
     private struct AssignmentTarget: Identifiable {
-        enum Kind { case tags, shelves }
+        enum Kind { case tags }
         let id = UUID()
         let kind: Kind
         let books: [Book]
@@ -466,15 +465,11 @@ struct LibraryView: View {
     }
 
     private func assignmentSheet(_ target: AssignmentTarget) -> some View {
-        let known = target.kind == .shelves ? shelfStore.shelves : genreStore.tags
-        let initial = Set(target.books.flatMap { book in
-            target.kind == .shelves ? book.shelves : book.tags
-        })
-        return AssignValuesSheet(
-            title: target.kind == .shelves ? "Assign to shelf" : "Edit tags",
-            valueLabel: target.kind == .shelves ? "shelf" : "tag",
-            knownValues: known,
-            initialValues: initial,
+        AssignValuesSheet(
+            title: "Edit tags",
+            valueLabel: "tag",
+            knownValues: genreStore.tags,
+            initialValues: Set(target.books.flatMap { $0.tags }),
             onDone: { values in applyAssignment(values, to: target) }
         )
     }
@@ -482,19 +477,11 @@ struct LibraryView: View {
     private func applyAssignment(_ values: Set<String>, to target: AssignmentTarget) {
         let list = values.sorted()
         for book in target.books {
-            if target.kind == .shelves {
-                book.shelves = list
-            } else {
-                book.tags = list
-            }
+            book.tags = list
         }
         // Register any new custom values so they become suggested later.
         for value in list {
-            if target.kind == .shelves {
-                _ = shelfStore.add(value)
-            } else {
-                _ = genreStore.add(value)
-            }
+            _ = genreStore.add(value)
         }
         try? modelContext.save()
     }
@@ -654,7 +641,6 @@ struct LibraryView: View {
                     Toggle("Series", isOn: $exportOptions.includeSeries)
                     Toggle("Location", isOn: $exportOptions.includeLocation)
                     Toggle("Rating", isOn: $exportOptions.includeRating)
-                    Toggle("Shelves", isOn: $exportOptions.includeShelves)
                     Toggle("Tags", isOn: $exportOptions.includeTags)
                     Toggle("ISBN", isOn: $exportOptions.includeISBN)
                 }
@@ -782,10 +768,6 @@ struct LibraryView: View {
                 presentAssignment(.tags, selectedBooks)
             }
             .disabled(selection.isEmpty)
-            Button("Shelf") {
-                presentAssignment(.shelves, selectedBooks)
-            }
-            .disabled(selection.isEmpty)
             Button("Delete", role: .destructive) {
                 delete(selectedBooks)
                 isSelecting = false
@@ -868,10 +850,6 @@ struct LibraryView: View {
             ),
             titleVisibility: .visible
         ) {
-            Button("Assign to shelf…") {
-                if let book = longPressBook { presentAssignment(.shelves, [book]) }
-                longPressBook = nil
-            }
             Button("Edit tags…") {
                 if let book = longPressBook { presentAssignment(.tags, [book]) }
                 longPressBook = nil

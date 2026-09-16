@@ -330,7 +330,7 @@ final class SharedLibraryEngine: ObservableObject {
     @Published private(set) var lastError: String?
 
     /// Fired after remote changes were applied to the mirror store, so UI can
-    /// refresh derived state (counts, shelves, etc.).
+    /// refresh derived state (counts, tags, etc.).
     var onRemoteChange: (() -> Void)?
 
     let container: CKContainer

@@ -159,7 +159,12 @@ final class LibraryCoveUITests: XCTestCase {
         XCTAssertTrue(dashboardOption.waitForExistence(timeout: 5), "dashboard option missing")
         dashboardOption.tap()
 
-        XCTAssertTrue(app.staticTexts["Summary"].waitForExistence(timeout: 10),
+        // Plain-list section headers render uppercase on iOS 17 but keep
+        // case on newer runtimes — match either.
+        let summaryHeader = app.staticTexts.matching(
+            NSPredicate(format: "label ==[c] 'Summary'")
+        ).firstMatch
+        XCTAssertTrue(summaryHeader.waitForExistence(timeout: 10),
                       "dashboard summary section missing")
         XCTAssertTrue(app.descendants(matching: .any)["brandMarkHeader"].exists,
                       "brand mark missing from the dashboard header")
@@ -203,6 +208,70 @@ final class LibraryCoveUITests: XCTestCase {
                       "toolbar did not restore after cancelling selection")
         XCTAssertFalse(app.buttons["cancelSelection"].exists,
                        "Cancel survived exiting selection mode")
+    }
+
+    /// List-mode selection: the trailing status icon (bookmark etc.) is the
+    /// selection toggle — it fills when selected — while tapping anywhere
+    /// else on the row still opens the book's details.
+    func testListModeBookmarkTapSelectsBook() throws {
+        let app = pendingScansApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        addSeededBooks(app)
+
+        // Switch to list mode via the toolbar mode picker (same fallback
+        // pattern as the dashboard test).
+        let modePicker = app.descendants(matching: .any)["modePicker"].firstMatch
+        if !modePicker.waitForExistence(timeout: 10) {
+            let more = app.buttons["More"]
+            XCTAssertTrue(more.waitForExistence(timeout: 3), "mode picker missing from toolbar")
+            more.tap()
+        }
+        XCTAssertTrue(modePicker.waitForExistence(timeout: 3), "mode picker missing")
+        modePicker.tap()
+        let listOption = app.buttons["list"].exists ? app.buttons["list"] : app.staticTexts["list"]
+        XCTAssertTrue(listOption.waitForExistence(timeout: 5), "list option missing")
+        listOption.tap()
+
+        // Enter selection mode (Select may sit in the overflow menu).
+        let select = app.buttons["Select"]
+        if !select.waitForExistence(timeout: 10) {
+            let more = app.buttons["More"]
+            XCTAssertTrue(more.waitForExistence(timeout: 3), "Select missing from toolbar")
+            more.tap()
+        }
+        app.buttons["Select"].firstMatch.tap()
+
+        // Tap the status icon on the row → selects that book.
+        let toggle = app.buttons.matching(
+            NSPredicate(format: "identifier == 'listSelectToggle' AND label CONTAINS 'Designing Data-Intensive Applications'")
+        ).firstMatch
+        XCTAssertTrue(toggle.waitForExistence(timeout: 10), "list selection toggle missing")
+        toggle.tap()
+
+        // The icon filled in (label flipped to Deselect) and the count bar
+        // shows the selection.
+        let deselect = app.buttons.matching(
+            NSPredicate(format: "identifier == 'listSelectToggle' AND label CONTAINS 'Deselect'")
+        ).firstMatch
+        XCTAssertTrue(deselect.waitForExistence(timeout: 5), "bookmark did not fill on selection")
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 5),
+                      "selection count missing after bookmark tap")
+
+        // Tapping anywhere else on the row opens the book's details.
+        app.staticTexts["Designing Data-Intensive Applications"].firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Designing Data-Intensive Applications"].waitForExistence(timeout: 10),
+                      "row tap outside the icon did not open details")
+
+        // Back → selection is preserved.
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["1 selected"].waitForExistence(timeout: 10),
+                      "selection lost after returning from details")
+
+        // Exiting selection mode removes the toggles and the bar.
+        app.buttons["cancelSelection"].tap()
+        XCTAssertTrue(app.buttons["listSelectToggle"].firstMatch.waitForNonExistence(timeout: 5),
+                      "selection toggles survived exiting selection mode")
     }
 
     /// When "Fetch description" finds nothing, the detail page must
@@ -379,8 +448,9 @@ final class LibraryCoveUITests: XCTestCase {
                       "seeded books not imported")
     }
 
-    /// Sorting by "date added" must show the add date in the grid just like
-    /// the list view does (regression guard for the grid-cell subtitle).
+    /// Sorting by "date added" (field picker) + "Descending" (order picker)
+    /// must show the add date in the grid just like the list view does
+    /// (regression guard for the grid-cell subtitle).
     func testGridShowsAddedDateWhenSortingByDate() throws {
         let app = pendingScansApp()
         app.launch()
@@ -392,11 +462,18 @@ final class LibraryCoveUITests: XCTestCase {
         let sortMenu = app.buttons["Title (A–Z)"]
         XCTAssertTrue(sortMenu.waitForExistence(timeout: 10), "sort menu missing in toolbar")
         sortMenu.tap()
-        // When not currently date-sorted the option reads "Date added (oldest)"
-        // (it toggles toward newest-first).
-        let dateSort = app.buttons["Date added (oldest)"]
+        let dateSort = app.buttons["Date added"]
         XCTAssertTrue(dateSort.waitForExistence(timeout: 5), "date-added sort option missing")
         dateSort.tap()
+        // Choosing a field closes the menu (inline picker rows commit
+        // immediately), so reopen via the toolbar label — now "Date added
+        // (newest first)" — and pick the direction.
+        let sortMenuAfter = app.buttons["Date added (newest first)"]
+        XCTAssertTrue(sortMenuAfter.waitForExistence(timeout: 5), "sort menu label did not update to date-added ascending")
+        sortMenuAfter.tap()
+        let descending = app.buttons["Descending"]
+        XCTAssertTrue(descending.waitForExistence(timeout: 5), "Descending option missing")
+        descending.tap()
 
         // Each grid cell (still the active view) now shows a short-form date.
         let dateText = app.staticTexts.matching(
@@ -757,23 +834,23 @@ final class LibraryCoveUITests: XCTestCase {
         XCTAssertTrue(row.exists, "token-rate toggle missing in AI settings")
     }
 
-    /// The Author filter is a searchable multi-select sheet: search, tap a
-    /// result, and the selection filters the library with a removable chip.
+    /// The Filter sheet is a searchable multi-select over authors and tags:
+    /// search, tap a result, and the selection filters the library with a
+    /// removable chip.
     func testAuthorFilterSearchAndMultiSelect() throws {
         let app = pendingScansApp()
         app.launch()
         enterLibraryIfNeeded(app)
         addSeededBooks(app) // imports "Apple Inc." + "Martin Kleppmann"
-
-        let author = app.buttons["Author"]
-        XCTAssertTrue(author.waitForExistence(timeout: 10), "Author filter button missing")
-        author.tap()
+        let filter = app.buttons["Filter"]
+        XCTAssertTrue(filter.waitForExistence(timeout: 10), "Filter button missing")
+        filter.tap()
         // A first-run tap can be swallowed while the toolbar settles — retry once.
-        if !app.navigationBars["Authors"].waitForExistence(timeout: 3) {
-            author.tap()
+        if !app.navigationBars["Filter"].waitForExistence(timeout: 3) {
+            filter.tap()
         }
-        XCTAssertTrue(app.navigationBars["Authors"].waitForExistence(timeout: 10),
-                      "author filter sheet did not open")
+        XCTAssertTrue(app.navigationBars["Filter"].waitForExistence(timeout: 10),
+                      "filter sheet did not open")
         let search = app.textFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5), "search field missing in filter")
         search.tap()
@@ -849,10 +926,11 @@ final class LibraryCoveUITests: XCTestCase {
         ).firstMatch.waitForExistence(timeout: 5), "changelog did not render")
     }
 
-    /// Long-pressing a grid book opens a manual assignment menu: create a new
-    /// shelf for that book, then Group by Shelf must show it under that shelf
-    /// (the manual shelf workflow that replaced the AI tools entry).
-    func testLongPressAssignsShelfAndGroupsByIt() throws {
+    /// Long-pressing a grid book opens the manual assignment menu (dismissed
+    /// after asserting it appears — the assignment flow has its own coverage),
+    /// then Group by Location must section the grid by each book's physical
+    /// location ("Unplaced" for the unassigned).
+    func testLongPressAssignAndGroupByLocation() throws {
         let app = pendingScansApp()
         app.launch()
         enterLibraryIfNeeded(app)
@@ -868,29 +946,21 @@ final class LibraryCoveUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS 'Assign to shelf'")
         ).firstMatch
         XCTAssertTrue(assign.waitForExistence(timeout: 5), "assign-to-shelf menu missing")
-        assign.tap()
+        // Dismiss the dialog — the grouping assertions below don't need the
+        // assignment itself, only that the long-press menu works.
+        app.buttons["Cancel"].firstMatch.tap()
 
-        XCTAssertTrue(app.navigationBars["Assign to shelf"].waitForExistence(timeout: 10),
-                      "assign sheet did not open")
-        // Create a brand-new shelf inline.
-        let newField = app.textFields["New shelf…"]
-        XCTAssertTrue(newField.waitForExistence(timeout: 5), "new-shelf field missing")
-        newField.tap()
-        newField.typeText("Home")
-        app.buttons["Add"].tap()
-        app.buttons["Done"].tap()
-
-        // Group by Shelf to confirm the assignment took effect.
+        // Group by Location sections the grid by physicalLocation.
         let group = app.buttons["Group"]
         XCTAssertTrue(group.waitForExistence(timeout: 10), "Group menu missing")
         group.tap()
-        let shelfGroup = app.buttons["Shelf"]
-        XCTAssertTrue(shelfGroup.waitForExistence(timeout: 5), "Shelf grouping missing")
-        shelfGroup.tap()
+        let locationGroup = app.buttons["Location"]
+        XCTAssertTrue(locationGroup.waitForExistence(timeout: 5), "Location grouping missing")
+        locationGroup.tap()
 
-        XCTAssertTrue(app.staticTexts["Home"].waitForExistence(timeout: 10),
-                      "assigned shelf section missing after grouping by shelf")
-        XCTAssertTrue(book.exists, "book must appear under its assigned shelf")
+        XCTAssertTrue(app.staticTexts["Unplaced"].waitForExistence(timeout: 10),
+                      "Unplaced section missing after grouping by location")
+        XCTAssertTrue(book.exists, "book must appear under its location group")
     }
 
     /// Ask AI suggestion chips must be context-aware: static starters on an

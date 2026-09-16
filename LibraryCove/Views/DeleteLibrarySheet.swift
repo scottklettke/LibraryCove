@@ -107,9 +107,13 @@ struct DeleteLibrarySheet: View {
                 exportFailed = true
                 return
             }
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            let filename = "LibraryCove-Library-\(formatter.string(from: Date())).zip"
+            let member = LibraryDataService.activeMemberName(Persistence.shared.mainContext)
+            let filename = LibraryDataService.exportFileName(
+                kind: "Library",
+                libraryName: LibraryScope.shared.activeName(context: Persistence.shared.mainContext, memberName: member),
+                memberName: member,
+                ext: "zip"
+            )
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
             do {
                 try data.write(to: url)

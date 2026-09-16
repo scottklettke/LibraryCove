@@ -14,18 +14,44 @@ enum Persistence {
     /// listens and re-injects the container into the view tree.
     static let storeSwappedNotification = Notification.Name("syncStoreSwapped")
 
-    private static var _shared: ModelContainer =
-        SyncStoreRegistry.makeContainer(for: SyncSettings.selectedProvider)
+    private static var _shared: ModelContainer?
+    /// Recursive: a guard match in `SyncStoreRegistry.makeContainer`
+    /// returns `shared` while `shared` itself is on the stack (same
+    /// thread) — a plain NSLock would deadlock.
+    private static let _sharedLock = NSRecursiveLock()
 
     /// The shared on-device ModelContainer (local or CloudKit-backed).
+    /// Backed lazily so the registry's reuse guard can ask whether a live
+    /// container exists without forcing one open. First-touch init is
+    /// lock-serialized: two threads racing here would each open a container
+    /// on the SAME store file — the exact double-open this module forbids.
     static var shared: ModelContainer {
-        _shared
+        _sharedLock.lock()
+        defer { _sharedLock.unlock() }
+        if let _shared { return _shared }
+        let container = SyncStoreRegistry.makeContainer(for: SyncSettings.selectedProvider)
+        _shared = container
+        return container
+    }
+
+    /// Store URL of the live container, if one is open. Derived from the
+    /// container itself (no tracked state), so it stays correct across every
+    /// swap/degrade site. `nil` while no container is open (or when the
+    /// live store is in-memory, e.g. tests/previews).
+    static var liveStoreURL: URL? {
+        _sharedLock.lock()
+        defer { _sharedLock.unlock() }
+        return _shared?.configurations.first { !$0.isStoredInMemoryOnly }?.url
     }
 
     /// Replaces the live container. Call after the new store's content is
     /// fully in place; SwiftUI re-injects via `.syncStoreSwapped`.
     static func swapShared(to container: ModelContainer) {
+        _sharedLock.lock()
         _shared = container
+        _sharedLock.unlock()
+        // Posted OUTSIDE the lock: synchronous observers read
+        // Persistence.shared, which re-enters this lock.
         NotificationCenter.default.post(name: storeSwappedNotification, object: nil)
     }
 
@@ -48,7 +74,10 @@ enum Persistence {
             for: schema,
             configurations: [ModelConfiguration(schema: nil, url: url, allowsSave: true)]
         ) {
+            _sharedLock.lock()
             _shared = container
+            _sharedLock.unlock()
+            // Posted OUTSIDE the lock — same re-entry reason as swapShared.
             NotificationCenter.default.post(name: storeSwappedNotification, object: nil)
         }
     }

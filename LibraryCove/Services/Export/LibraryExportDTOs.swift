@@ -64,6 +64,9 @@ struct BookDTO: Codable {
     var descriptionSource: String?
     /// Open Library work key, captured when the book was catalog-looked-up.
     var olKey: String?
+    var series: String?
+    /// Curated genre (BookGenre rawValue or a custom string).
+    var genre: String?
     var language: String?
     var physicalLocation: String?
     var status: String
@@ -97,6 +100,8 @@ struct BookDTO: Codable {
         bookDescription = model.bookDescription
         descriptionSource = model.descriptionSource
         olKey = model.olKey
+        series = model.series
+        genre = model.genre
         language = model.language
         physicalLocation = model.physicalLocation
         status = model.status
@@ -121,7 +126,7 @@ struct BookDTO: Codable {
     private enum CodingKeys: String, CodingKey {
         case id, title, authors, isbn, publicationYear, tags, kind, coverImageURL
         case coverImageFile, publisher, pageCount, bookDescription, descriptionSource
-        case olKey
+        case olKey, series, genre
         case language, physicalLocation, status, acquiredDate, purchasePrice, rating
         case loanedTo, loanedDate, ownerID, sharedLibraryID, isPersonal, createdAt
         case updatedAt, syncState, syncUpdatedAt, syncDeviceID, shelves
@@ -150,6 +155,8 @@ struct BookDTO: Codable {
         pageCount = try c.decodeIfPresent(Int.self, forKey: .pageCount)
         bookDescription = try c.decodeIfPresent(String.self, forKey: .bookDescription)
         descriptionSource = try c.decodeIfPresent(String.self, forKey: .descriptionSource)
+        series = try c.decodeIfPresent(String.self, forKey: .series)
+        genre = try c.decodeIfPresent(String.self, forKey: .genre)
         language = try c.decodeIfPresent(String.self, forKey: .language)
         physicalLocation = try c.decodeIfPresent(String.self, forKey: .physicalLocation)
         status = try c.decode(String.self, forKey: .status)
@@ -186,6 +193,8 @@ struct BookDTO: Codable {
         try c.encodeIfPresent(bookDescription, forKey: .bookDescription)
         try c.encodeIfPresent(descriptionSource, forKey: .descriptionSource)
         try c.encodeIfPresent(olKey, forKey: .olKey)
+        try c.encodeIfPresent(series, forKey: .series)
+        try c.encodeIfPresent(genre, forKey: .genre)
         try c.encodeIfPresent(language, forKey: .language)
         try c.encodeIfPresent(physicalLocation, forKey: .physicalLocation)
         try c.encode(status, forKey: .status)

@@ -1,44 +1,32 @@
 import SwiftUI
 
-/// Searchable multi-select filter over a list of plain strings (authors, tags).
-/// Shows a search field at the top, the currently selected items grouped at
-/// the top with a clear button, then an "All" row and the search-filtered list
-/// of every available item — tap one or more checkboxes. Selection commits
-/// only via the toolbar Done button (Cancel discards).
+/// Searchable multi-select filter over plain strings, organized into named
+/// sections (e.g. authors and tags). Each section shows its currently
+/// selected values with a per-section clear button, an "All" row, and the
+/// search-filtered list of every available value — tap to toggle checkboxes.
+/// Selection commits only via the toolbar Done button (Cancel discards).
 struct MultiSelectFilterSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let title: String
-    let items: [String]
-    /// Committed selection when Done is pressed.
-    let onDone: (Set<String>) -> Void
+    let searchTextPlaceholder: String
+    let sections: [FilterSection]
 
-    @State private var selection: Set<String>
+    struct FilterSection: Identifiable {
+        let title: String
+        let items: [String]
+        /// Committed selection when the sheet was opened.
+        let selection: Set<String>
+        let onChange: (Set<String>) -> Void
+
+        var id: String { title }
+    }
+
+    @State private var selections: [String: Set<String>] = [:]
     @State private var searchText = ""
 
-    init(title: String, items: [String], selection: Set<String>, onDone: @escaping (Set<String>) -> Void) {
-        self.title = title
-        self.items = items
-        self.onDone = onDone
-        _selection = State(initialValue: selection)
-    }
-
-    private var filteredResults: [String] {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = items.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-        guard !query.isEmpty else { return base }
-        return base.filter { $0.localizedCaseInsensitiveContains(query) }
-    }
-
-    private var selectedSorted: [String] {
-        selection.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
-    private func toggle(_ value: String) {
-        if selection.contains(value) {
-            selection.remove(value)
-        } else {
-            selection.insert(value)
-        }
+    init(searchTextPlaceholder: String, sections: [FilterSection]) {
+        self.searchTextPlaceholder = searchTextPlaceholder
+        self.sections = sections
+        _selections = State(initialValue: Dictionary(uniqueKeysWithValues: sections.map { ($0.id, $0.selection) }))
     }
 
     var body: some View {
@@ -48,7 +36,7 @@ struct MultiSelectFilterSheet: View {
                     HStack(spacing: 8) {
                         Image(systemName: "magnifyingglass")
                             .foregroundStyle(.secondary)
-                        TextField("Search \(title.lowercased())", text: $searchText)
+                        TextField(searchTextPlaceholder, text: $searchText)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                         if !searchText.isEmpty {
@@ -63,39 +51,11 @@ struct MultiSelectFilterSheet: View {
                         }
                     }
                 }
-                if !selectedSorted.isEmpty {
-                    Section("Selected") {
-                        ForEach(selectedSorted, id: \.self) { value in
-                            filterRow(value)
-                        }
-                        Button("Clear selection", role: .destructive) {
-                            selection = []
-                        }
-                    }
-                }
-                Section {
-                    Button {
-                        selection = []
-                    } label: {
-                        HStack {
-                            Text("All")
-                            Spacer()
-                            if selection.isEmpty {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-                Section {
-                    ForEach(filteredResults, id: \.self) { value in
-                        filterRow(value)
-                    }
-                } header: {
-                    Text("\(title) — tap to select multiple")
-                        .textCase(nil)
+                ForEach(sections) { section in
+                    sectionView(section)
                 }
             }
-            .navigationTitle(title)
+            .navigationTitle("Filter")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -103,7 +63,9 @@ struct MultiSelectFilterSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
-                        onDone(selection)
+                        for section in sections {
+                            section.onChange(selections[section.id] ?? [])
+                        }
                         dismiss()
                     }
                 }
@@ -111,10 +73,60 @@ struct MultiSelectFilterSheet: View {
         }
     }
 
-    private func filterRow(_ value: String) -> some View {
-        let isOn = selection.contains(value)
-        return Button {
-            toggle(value)
+    @ViewBuilder
+    private func sectionView(_ section: FilterSection) -> some View {
+        let selected = selections[section.id] ?? []
+        let selectedSorted = selected.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let searching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let selectedShown = selectedSorted.filter(matching: searchText)
+        let itemMatches = section.items.filter(matching: searchText)
+        // While searching, a section only appears if something matches it;
+        // otherwise it shows whenever it holds anything at all.
+        let showSection = searching
+            ? (!selectedShown.isEmpty || !itemMatches.isEmpty)
+            : (!section.items.isEmpty || !selected.isEmpty)
+
+        if showSection {
+            Section(section.title) {
+                if !selectedShown.isEmpty {
+                    ForEach(selectedShown, id: \.self) { value in
+                        row(value, section: section, isOn: true)
+                    }
+                    Button("Clear \(section.title.lowercased())", role: .destructive) {
+                        selections[section.id] = []
+                    }
+                }
+                if !searching {
+                    Button {
+                        selections[section.id] = []
+                    } label: {
+                        HStack {
+                            Text("All")
+                            Spacer()
+                            if selected.isEmpty {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+                if !itemMatches.isEmpty {
+                    ForEach(itemMatches, id: \.self) { value in
+                        row(value, section: section, isOn: selected.contains(value))
+                    }
+                }
+            }
+        }
+    }
+
+    private func row(_ value: String, section: FilterSection, isOn: Bool) -> some View {
+        Button {
+            var updated = selections[section.id] ?? []
+            if updated.contains(value) {
+                updated.remove(value)
+            } else {
+                updated.insert(value)
+            }
+            selections[section.id] = updated
         } label: {
             HStack {
                 Text(value)
@@ -124,5 +136,14 @@ struct MultiSelectFilterSheet: View {
                     .foregroundStyle(isOn ? Color.accentColor : Color(uiColor: .secondaryLabel))
             }
         }
+    }
+}
+
+private extension Sequence where Element == String {
+    /// Case-insensitive whole-string containment; empty query matches all.
+    func filter(matching query: String) -> [String] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return Array(self) }
+        return filter { $0.localizedCaseInsensitiveContains(trimmed) }
     }
 }

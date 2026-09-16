@@ -186,11 +186,12 @@ enum LibraryRetriever {
             let title = book.title
             let authors = book.authors.joined(separator: " ")
             let tags = book.tags.joined(separator: " ")
+            let series = book.series ?? ""
             let location = book.physicalLocation ?? ""
             let description = book.bookDescription ?? ""
             let notes = book.notes?.map(\.content).joined(separator: " ") ?? ""
 
-            let named = Self.words(title + " " + authors + " " + tags + " " + location)
+            let named = Self.words(title + " " + authors + " " + tags + " " + (book.genre ?? "") + " " + series + " " + location)
             // Fields are deliberately capped before tokenizing so one giant
             // description can't drown the index; the snapshot still carries
             // full detail for retrieved books.

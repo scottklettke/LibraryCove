@@ -69,6 +69,27 @@ enum LibraryDataService {
     static let archiveFileName = "library.json"
     static let readmeFileName = "README-FORMAT.md"
 
+    /// File name for a shareable export: `LibraryCove-<Kind>-<Library>-<yyyy-MM-dd>.<ext>`
+    /// where Kind is "Library" (zip) or "Catalog" (PDF). Characters illegal
+    /// in file names (`/:`) are replaced with `-`; an unnamed library falls
+    /// back to the member's default share title so the file is still identifiable.
+    static func exportFileName(kind: String, libraryName: String, memberName: String, ext: String, date: Date = Date()) -> String {
+        let rawName = libraryName.isEmpty ? SharedLibrarySettings.defaultShareTitle(for: memberName) : libraryName
+        let sanitized = rawName
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return "LibraryCove-\(kind)-\(sanitized)-\(formatter.string(from: date)).\(ext)"
+    }
+
+    /// The active member's display name — the fallback half of export file
+    /// names when the library itself is unnamed.
+    static func activeMemberName(_ context: ModelContext) -> String {
+        (try? context.fetch(FetchDescriptor<User>()))?.first(where: \.isActive)?.displayName ?? ""
+    }
+
     // MARK: - Export
 
     /// Fetches the bytes of a remote cover image. Returns `nil` on failure so
@@ -552,6 +573,8 @@ enum LibraryDataService {
                             descriptionSource: dto.descriptionSource,
                             olKey: dto.olKey,
                             language: dto.language,
+                            genre: dto.genre,
+                            series: dto.series,
                             physicalLocation: dto.physicalLocation,
                             status: dto.status,
                             acquiredDate: dto.acquiredDate,

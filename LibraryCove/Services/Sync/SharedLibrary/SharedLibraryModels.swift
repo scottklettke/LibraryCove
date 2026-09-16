@@ -90,6 +90,8 @@ struct SharedBook: Codable, Equatable {
     /// Open Library work key — internal enrichment data, shared like any other
     /// field so a participant's app can fetch descriptions deterministically.
     var olKey: String?
+    var series: String?
+    var genre: String?
     var language: String?
     var physicalLocation: String?
     var status: String = "to-read"

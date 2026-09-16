@@ -72,7 +72,9 @@ enum BookDuplicateRepair {
             keeper.bookDescription = duplicate.bookDescription
             keeper.descriptionSource = duplicate.descriptionSource
         }
+        if keeper.series == nil { keeper.series = duplicate.series }
         if keeper.physicalLocation == nil { keeper.physicalLocation = duplicate.physicalLocation }
+        if keeper.genre == nil { keeper.genre = duplicate.genre }
         if keeper.language == nil { keeper.language = duplicate.language }
         if keeper.publisher == nil { keeper.publisher = duplicate.publisher }
         if keeper.pageCount == nil { keeper.pageCount = duplicate.pageCount }

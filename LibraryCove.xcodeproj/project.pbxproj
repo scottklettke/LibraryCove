@@ -189,7 +189,7 @@
 		BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStore.swift; sourceTree = "<group>"; };
 		C011F248612BA0A3A5916731 /* ZipArchive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZipArchive.swift; sourceTree = "<group>"; };
 		C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
-		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryRecord.swift; sourceTree = "<group>"; };
 		C29BC837621AF27DC2775241 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		C44869DF584EC707A877F252 /* BackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupsView.swift; sourceTree = "<group>"; };
@@ -830,6 +830,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -849,6 +850,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 5F86DRD856;
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

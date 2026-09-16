@@ -38,7 +38,13 @@ final class Book {
     /// description fetches instead of fuzzy title+author re-search. Never
     /// user-editable; purely an internal enrichment key.
     var olKey: String?
+    /// Curated genre from the BookGenre taxonomy (user-assigned in the form);
+    /// drives Genres grouping and PDF export. nil = unassigned ("Unknown").
+    var genre: String?
     var language: String?
+    /// Series this book belongs to (e.g. "Harry Potter"), or nil. User-assigned
+    /// in the book form; drives Series grouping and PDF export.
+    var series: String?
     var physicalLocation: String?
     var status: String = "to-read"  // reading | to-read | completed | donated
     var acquiredDate: Date?
@@ -88,6 +94,8 @@ final class Book {
         descriptionSource: String? = nil,
         olKey: String? = nil,
         language: String? = nil,
+        genre: String? = nil,
+        series: String? = nil,
         physicalLocation: String? = nil,
         status: String = "to-read",
         acquiredDate: Date? = nil,
@@ -118,6 +126,8 @@ final class Book {
         self.descriptionSource = descriptionSource
         self.olKey = olKey
         self.language = language
+        self.genre = genre
+        self.series = series
         self.physicalLocation = physicalLocation
         self.status = status
         self.acquiredDate = acquiredDate
@@ -200,6 +210,104 @@ extension Book {
         }
         let check = (10 - sum % 10) % 10
         return "978" + first9 + String(check)
+    }
+}
+
+/// Curated genre taxonomy: two tiers — Fiction and Non-fiction — with
+/// subgenre hints shown in the picker. Drives the form's Genre section and
+/// Genres grouping. Radiology and Bitcoin are included at the user's request
+/// (single-item Nonfiction specialties).
+enum BookGenre: String, CaseIterable, Identifiable {
+    // Fiction
+    case literaryFiction = "literary-fiction"
+    case mysteryThriller = "mystery-thriller"
+    case scienceFiction = "science-fiction"
+    case fantasy = "fantasy"
+    case romance = "romance"
+    case horror = "horror"
+    case historicalFiction = "historical-fiction"
+    case actionAdventure = "action-adventure"
+    // Non-fiction
+    case biographyMemoir = "biography-memoir"
+    case history = "history"
+    case scienceMath = "science-math"
+    case selfHelp = "self-help"
+    case healthWellness = "health-wellness"
+    case businessMoney = "business-money"
+    case cookingFood = "cooking-food"
+    case travel = "travel"
+    case artsPhotography = "arts-photography"
+    case referenceEducation = "reference-education"
+    case radiology = "radiology"
+    case bitcoin = "bitcoin"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .literaryFiction: return "Literary Fiction"
+        case .mysteryThriller: return "Mystery & Thriller"
+        case .scienceFiction: return "Science Fiction"
+        case .fantasy: return "Fantasy"
+        case .romance: return "Romance"
+        case .horror: return "Horror"
+        case .historicalFiction: return "Historical Fiction"
+        case .actionAdventure: return "Action & Adventure"
+        case .biographyMemoir: return "Biography & Memoir"
+        case .history: return "History"
+        case .scienceMath: return "Science & Math"
+        case .selfHelp: return "Self-Help & Personal Growth"
+        case .healthWellness: return "Health & Wellness"
+        case .businessMoney: return "Business & Money"
+        case .cookingFood: return "Cooking & Food"
+        case .travel: return "Travel"
+        case .artsPhotography: return "Arts & Photography"
+        case .referenceEducation: return "Reference & Education"
+        case .radiology: return "Radiology"
+        case .bitcoin: return "Bitcoin"
+        }
+    }
+
+    /// Subgenre hints shown with the picker ("Crime, detective, suspense…").
+    var subgenres: String {
+        switch self {
+        case .literaryFiction: return "Contemporary, classics, character-driven novels"
+        case .mysteryThriller: return "Crime, detective, suspense, psychological thrillers"
+        case .scienceFiction: return "Space opera, dystopia, time travel, hard SF"
+        case .fantasy: return "Epic, urban, dark fantasy, magical realism"
+        case .romance: return "Contemporary, historical, romantic suspense"
+        case .horror: return "Supernatural, gothic, slasher, weird fiction"
+        case .historicalFiction: return "Period novels, war stories, alternate history"
+        case .actionAdventure: return "Quests, survival, espionage, thrillers of the non-mystery kind"
+        case .biographyMemoir: return "Life stories, autobiographies, personal essays"
+        case .history: return "World history, military history, historical analysis"
+        case .scienceMath: return "Popular science, nature, physics, biology"
+        case .selfHelp: return "Productivity, habits, motivation, psychology"
+        case .healthWellness: return "Fitness, nutrition, mental health, medicine"
+        case .businessMoney: return "Investing, entrepreneurship, management, economics"
+        case .cookingFood: return "Cookbooks, food writing, baking"
+        case .travel: return "Guides, travelogues, adventure narratives"
+        case .artsPhotography: return "Art history, music, design, photography books"
+        case .referenceEducation: return "Dictionaries, atlases, textbooks, study guides"
+        case .radiology: return "Medical imaging, diagnostic radiology"
+        case .bitcoin: return "Cryptocurrency, blockchain, digital money"
+        }
+    }
+
+    /// Which tier the genre belongs to.
+    var isFiction: Bool {
+        switch self {
+        case .literaryFiction, .mysteryThriller, .scienceFiction, .fantasy,
+             .romance, .horror, .historicalFiction, .actionAdventure:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// All genres within a tier, in display order.
+    static func all(inFiction: Bool) -> [BookGenre] {
+        allCases.filter { $0.isFiction == inFiction }
     }
 }
 

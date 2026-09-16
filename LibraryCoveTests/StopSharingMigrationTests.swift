@@ -98,3 +98,36 @@ import SwiftData
         #expect(titles.contains("Shared Book"), "mirror book must be added")
     }
 }
+
+@Suite @MainActor struct ContainerReuseTests {
+    /// Registry-level reuse guard: when the requested provider's store file
+    /// is the LIVE container's file, makeContainer must hand back the live
+    /// container instead of opening a second one (a second
+    /// NSPersistentCloudKitContainer on the same file breaks CK mirroring).
+    /// Installs its own container via swapShared — first-touch cannot be
+    /// relied on, because the host app has usually opened Persistence.shared
+    /// (cloud/nocloud store) before tests run.
+    @Test func makeContainerReusesLiveStore() throws {
+        let schema = Schema([
+            Book.self, Note.self, ReadingList.self,
+            ReadingListItem.self, Connection.self, User.self,
+        ])
+        let localOnlyURL = try SyncStoreRegistry.provider(for: .localOnly)
+            .makeStoreConfiguration().url
+        // Host already live on that file → nothing to prove safely here
+        // (installing would double-open); skip.
+        if Persistence.liveStoreURL == localOnlyURL { return }
+
+        let installed = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: nil, url: localOnlyURL, allowsSave: true)]
+        )
+        let original = Persistence.shared
+        defer { Persistence.swapShared(to: original) }
+        Persistence.swapShared(to: installed)
+
+        let reused = SyncStoreRegistry.makeContainer(for: .localOnly)
+        #expect(reused === installed,
+                "makeContainer must reuse the live container for the same store file")
+    }
+}

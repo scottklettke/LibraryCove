@@ -23,6 +23,7 @@ struct BookCatalogEntry: Identifiable {
     var pageCount: Int?
     var bookDescription: String?
     var language: String?
+    var series: String?
     var physicalLocation: String?
     var rating: Int?
     var loanedTo: String?
@@ -67,6 +68,7 @@ struct PDFExportOptions: Equatable {
     var includeStats: Bool = true
     var includeISBN: Bool = true
     var includeDescription: Bool = true
+    var includeSeries: Bool = true
     var includeLocation: Bool = true
     var includeRating: Bool = true
     var includeShelves: Bool = true
@@ -135,6 +137,7 @@ enum LibraryPDFExport {
                 pageCount: book.pageCount,
                 bookDescription: book.bookDescription,
                 language: book.language,
+                series: book.series,
                 physicalLocation: book.physicalLocation,
                 rating: book.rating,
                 loanedTo: book.loanedTo,
@@ -500,11 +503,15 @@ enum LibraryPDFExport {
         }
 
         add(entry.title.isEmpty ? "Untitled" : entry.title, titleAttrs, maxLines: 3)
-        add(authorsText(entry), authorAttrs, maxLines: 2, spacing: 4)
         if !metaText(entry).isEmpty {
             add(metaText(entry), smallAttrs, maxLines: 1, spacing: 3)
         }
         add(factsText(entry, options: options), smallAttrs, maxLines: 2, spacing: 3)
+        if options.includeSeries,
+           let series = entry.series?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !series.isEmpty {
+            add(series, smallAttrs, maxLines: 1, spacing: 3)
+        }
         if options.includeLabels, let labels = labelsText(entry, options: options) {
             add(labels, smallAttrs, maxLines: 2, spacing: 3)
         }
@@ -533,6 +540,11 @@ enum LibraryPDFExport {
         var meta: [String] = []
         if !metaText(entry).isEmpty { meta.append(metaText(entry)) }
         meta.append(entry.statusDisplay)
+        if options.includeSeries,
+           let series = entry.series?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !series.isEmpty {
+            meta.append(series)
+        }
         if options.includeLocation,
            let location = entry.physicalLocation?.trimmingCharacters(in: .whitespacesAndNewlines),
            !location.isEmpty {

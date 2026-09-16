@@ -48,16 +48,32 @@ different iCloud accounts** — the simulator has no iCloud account, so
 
 ## Leave / stop
 
-- Participant: Settings → **Leave Shared Library** → "Keep a Copy & Leave".
-  Expected: relaunch returns to the previous provider (usually Local only)
-  and the shared books appear merged into the private library (ISBN /
-  title+author dedup — no duplicates).
-- Owner: **Stop Sharing**. Expected: participants' apps auto-revert on their
-  next sync attempt — the zone no longer exists in their shared database, so
-  the engine drops membership and flips the provider back; the Settings
-  error row persists until relaunch (the Shared Library section then returns
-  to its unshared state). The participant's mirror file is kept as the only
-  local copy of the shared content.
+### In-session behavior (no relaunch needed)
+
+Stopping a share IN THE SAME SESSION it was started (Settings → Share
+Library → share sheet → Stop Sharing, without killing the app) hot-swaps
+the SAME container back — `SyncStoreRegistry.makeContainer` reuses the
+live container whenever the requested provider's store file is already
+open. Expected: NO CloudKit error like "BUG IN CLIENT OF CLOUDKIT:
+Registering a handler for a CKScheduler activity identifier that has
+already been registered (com.apple.coredata.cloudkit.activity.export.…)"
+and NO mirroring reset (`NSCloudKitMirroringDelegate resetAfterError`).
+Books merge back into the live cloud store and the UI re-renders on it
+immediately.
+
+- The mirror file is `default-shared.store` for whichever library is
+  shared (one global provider slot; joining over an existing membership
+  tears the old mirror down first, so at most one mirror exists);
+  leave/stop-sharing/discard all remove exactly that file.
+- Owner: **Stop Sharing**. Expected: the app switches back to iCloud (or
+  the previous provider) with a single container on `default-cloud.store`;
+  the owner's books merge home (no duplicates). Participants' apps
+  auto-revert on their next sync attempt — the zone no longer exists in
+  their shared database, so the engine drops membership and flips the
+  provider back; the Settings error row persists until relaunch (the
+  Shared Library section then returns to its unshared state). The
+  participant's mirror file is kept as the only local copy of the shared
+  content.
 
 ## Known gaps (deliberate scope)
 

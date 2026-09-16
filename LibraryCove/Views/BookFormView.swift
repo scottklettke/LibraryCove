@@ -102,6 +102,8 @@ struct BookFormView: View {
     @State private var pageCountText = ""
     @State private var languageText = ""
     @State private var description = ""
+    @State private var seriesText = ""
+    @State private var genreRaw: String = ""
     @State private var locationText = ""
     @State private var status: BookStatus = .toRead
     @State private var kind: BookKind = .notSet
@@ -192,6 +194,8 @@ struct BookFormView: View {
             _pageCountText = State(initialValue: existing.pageCount.map { String($0) } ?? "")
             _description = State(initialValue: existing.bookDescription ?? "")
             _activeDescriptionSource = State(initialValue: existing.descriptionSource)
+            _seriesText = State(initialValue: existing.series ?? "")
+            _genreRaw = State(initialValue: existing.genre ?? "")
             _locationText = State(initialValue: existing.physicalLocation ?? "")
             _selectedCover = State(initialValue: existing.coverImageURL)
             // Show the stored cover (if any) in the picker strip so the user
@@ -212,6 +216,8 @@ struct BookFormView: View {
             || languageText != (book.language ?? "")
             || description != (book.bookDescription ?? "")
             || activeDescriptionSource != book.descriptionSource
+            || seriesText != (book.series ?? "")
+            || genreRaw != (book.genre ?? "")
             || locationText != (book.physicalLocation ?? "")
             || status != book.statusEnum
             || kind != (BookKind(rawValue: book.kind) ?? .notSet)
@@ -533,10 +539,28 @@ struct BookFormView: View {
                 TextField("Pages in book", text: $pageCountText)
                     .keyboardType(.numberPad)
             }
-            TextField("Publisher", text: $publisherText)
-                .textInputAutocapitalization(.words)
             TextField("Language", text: $languageText)
                 .textInputAutocapitalization(.words)
+            TextField("Series", text: $seriesText)
+                .textInputAutocapitalization(.words)
+            Picker("Genre", selection: $genreRaw) {
+                Text("—").tag("")
+                Section("Fiction") {
+                    ForEach(BookGenre.all(inFiction: true)) { g in
+                        Text(g.displayName).tag(g.rawValue)
+                    }
+                }
+                Section("Non-fiction") {
+                    ForEach(BookGenre.all(inFiction: false)) { g in
+                        Text(g.displayName).tag(g.rawValue)
+                    }
+                }
+            }
+            if let selected = BookGenre(rawValue: genreRaw) {
+                Text(selected.subgenres)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             genrePicker
             if let isbn = catalog?.isbn ?? existing?.isbn {
                 LabeledContent("ISBN", value: isbn)
@@ -1042,6 +1066,7 @@ struct BookFormView: View {
         let tags = tagsText.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
         let year = Int(yearText.trimmingCharacters(in: .whitespacesAndNewlines))
         let pageCount = Int(pageCountText.trimmingCharacters(in: .whitespacesAndNewlines))
+        let series = seriesText.trimmingCharacters(in: .whitespacesAndNewlines)
         let location = locationText == "__new__" ? "" : locationText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !location.isEmpty {
             locationStore.add(location)
@@ -1074,6 +1099,8 @@ struct BookFormView: View {
             existing.language = languageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : languageText.trimmingCharacters(in: .whitespacesAndNewlines)
             existing.bookDescription = description.isEmpty ? nil : description
             existing.descriptionSource = description.isEmpty ? nil : (activeDescriptionSource ?? existing.descriptionSource)
+            existing.series = series.isEmpty ? nil : series
+            existing.genre = genreRaw.isEmpty ? nil : genreRaw
             existing.physicalLocation = location.isEmpty ? nil : location
             existing.status = status.rawValue
             existing.kind = kind.rawValue
@@ -1101,6 +1128,8 @@ struct BookFormView: View {
                 descriptionSource: description.isEmpty ? nil : (activeDescriptionSource ?? catalog?.descriptionSource),
                 olKey: catalog?.olWorkKey,
                 language: languageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : languageText.trimmingCharacters(in: .whitespacesAndNewlines),
+                genre: genreRaw.isEmpty ? nil : genreRaw,
+                series: series.isEmpty ? nil : series,
                 physicalLocation: location.isEmpty ? nil : location,
                 status: status.rawValue,
                 rating: rating,

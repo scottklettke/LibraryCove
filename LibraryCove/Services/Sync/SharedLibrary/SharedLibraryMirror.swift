@@ -217,6 +217,8 @@ final class SharedLibraryMirror {
         book.bookDescription = dto.bookDescription
         book.descriptionSource = dto.descriptionSource
         book.olKey = dto.olKey
+        book.series = dto.series
+        book.genre = dto.genre
         book.language = dto.language
         book.physicalLocation = dto.physicalLocation
         book.status = dto.status
@@ -366,6 +368,8 @@ final class SharedLibraryMirror {
         dto.bookDescription = book.bookDescription
         dto.descriptionSource = book.descriptionSource
         dto.olKey = book.olKey
+        dto.series = book.series
+        dto.genre = book.genre
         dto.language = book.language
         dto.physicalLocation = book.physicalLocation
         dto.status = book.status

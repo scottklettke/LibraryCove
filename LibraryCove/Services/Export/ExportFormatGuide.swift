@@ -93,6 +93,7 @@ extension LibraryDataService {
       "pageCount": 412,
       "bookDescription": "A desert planet. Spice. Destiny.",
       "descriptionSource": "openlibrary",
+      "genre": "science-fiction",
       "language": "en",
       "physicalLocation": "Shelf C",
       "status": "reading",
@@ -129,6 +130,7 @@ extension LibraryDataService {
     | `bookDescription` | string / null | Short summary or description. |
     | `descriptionSource` | string / null | Where the description came from (`openlibrary`, `googlebooks`, `wikipedia`, `none`). |
     | `olKey` | string / null | Internal Open Library work key (e.g. `/works/OL45804W`) captured during catalog lookups. You can leave it out or set it to null; the app backfills it on the next lookup. |
+    | `genre` | string / null | Curated genre (see `BookGenre` in the app), e.g. `science-fiction`. |
     | `language` | string / null | Language code, e.g. `en`. |
     | `physicalLocation` | string / null | Where the physical book lives, e.g. `Shelf C`. |
     | `status` | string | One of `to-read`, `reading`, `completed`, `donated`. |

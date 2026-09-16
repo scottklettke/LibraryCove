@@ -124,7 +124,7 @@ enum SharedLibraryCoordinator {
         let libraryID = LibraryScope.shared.activeID(context: Persistence.shared.mainContext)
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: keepCopy)
         try await SharedLibraryEngine.shared.leaveAsParticipant()
-        try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL(libraryID: libraryID))
+        try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
         SharedLibrarySettings.setMembership(.none, libraryID: libraryID)
         Persistence.swapShared(to: destination.container)
@@ -145,7 +145,7 @@ enum SharedLibraryCoordinator {
         }
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: true)
         try await SharedLibraryEngine.shared.stopSharingAsOwner()
-        try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL(libraryID: libraryID))
+        try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
         SharedLibrarySettings.setMembership(.none, libraryID: libraryID)
         Persistence.swapShared(to: destination.container)
@@ -178,20 +178,15 @@ enum SharedLibraryCoordinator {
     /// now operate on fresh/foreign content (delete-all, replace-import).
     @MainActor
     static func privateContextAfterDiscard() throws -> ModelContext {
-        let schema = Schema([
-            Book.self, Note.self, ReadingList.self,
-            ReadingListItem.self, Connection.self, User.self,
-        ])
-        let configuration = try SyncStoreRegistry.provider(
-            for: SyncSettings.selectedProvider
-        ).makeStoreConfiguration()
-        let container = try ModelContainer(for: schema, configurations: [configuration])
+        // Route through the registry: when the selected provider's store is
+        // already open (in-session share), this REUSES the live container
+        // instead of opening a second one on the same file.
+        let container = SyncStoreRegistry.makeContainer(for: SyncSettings.selectedProvider)
         // Hot-swap: the UI must render this (post-discard) store now, not
         // the removed mirror.
         Persistence.swapShared(to: container)
         return ModelContext(container)
     }
-
 
     /// The store books come home to: a fresh container on the destination
     /// provider, plus the provider kind for the settings flip.
@@ -219,19 +214,24 @@ enum SharedLibraryCoordinator {
         let cloudStoreURL = FileManager.default.urls(for: .applicationSupportDirectory,
                                                      in: .userDomainMask).first!
             .appendingPathComponent("default-cloud.store")
-        var cloudHasBooks = false
-        var cloudContainer: ModelContainer?
-        if FileManager.default.fileExists(atPath: cloudStoreURL.path),
-           let container = try? ModelContainer(for: schema,
-                                               configurations: [ModelConfiguration(schema: nil,
-                                                                                    url: cloudStoreURL,
-                                                                                    allowsSave: true)]) {
+        if Persistence.liveStoreURL == cloudStoreURL {
+            // The cloud store is already open (in-session share with no
+            // relaunch). NEVER probe-open a second container on the same
+            // file — CloudKit mirroring breaks ("CKScheduler activity
+            // identifier already registered").
+            let cloudContext = ModelContext(Persistence.shared)
+            if ((try? cloudContext.fetchCount(FetchDescriptor<Book>())) ?? 0) > 0 {
+                return HomeDestination(kind: .iCloud, container: Persistence.shared)
+            }
+        } else if FileManager.default.fileExists(atPath: cloudStoreURL.path),
+                  let container = try? ModelContainer(for: schema,
+                                                      configurations: [ModelConfiguration(schema: nil,
+                                                                                           url: cloudStoreURL,
+                                                                                           allowsSave: true)]) {
             let cloudContext = ModelContext(container)
-            cloudHasBooks = ((try? cloudContext.fetchCount(FetchDescriptor<Book>())) ?? 0) > 0
-            cloudContainer = container
-        }
-        if cloudHasBooks, let cloudContainer {
-            return HomeDestination(kind: .iCloud, container: cloudContainer)
+            if ((try? cloudContext.fetchCount(FetchDescriptor<Book>())) ?? 0) > 0 {
+                return HomeDestination(kind: .iCloud, container: container)
+            }
         }
         return HomeDestination(kind: .localOnly,
                                container: SyncStoreRegistry.makeContainer(for: .localOnly))
@@ -364,10 +364,16 @@ extension SwiftDataSharedLibrarySync {
             Book.self, Note.self, ReadingList.self,
             ReadingListItem.self, Connection.self, User.self,
         ])
+        // While running on .sharedLibrary, the mirror store is the LIVE
+        // container (syncNow writes through the app's injected context) —
+        // never open a second container on the same file.
+        if let liveURL = Persistence.liveStoreURL, liveURL == storeURL {
+            return Persistence.shared
+        }
         if let container = try? ModelContainer(for: schema,
                                                configurations: [ModelConfiguration(schema: nil,
-                                                                                   url: storeURL,
-                                                                                   allowsSave: true)]) {
+                                                                                    url: storeURL,
+                                                                                    allowsSave: true)]) {
             return container
         }
         return Persistence.shared

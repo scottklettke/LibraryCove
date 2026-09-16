@@ -67,6 +67,17 @@ enum SyncStoreRegistry {
     /// no iCloud account / unregistered container), it degrades to a local
     /// store instead of crashing — the app still launches.
     static func makeContainer(for kind: LibrarySync) -> ModelContainer {
+        // Reuse the live container when the requested provider's store IS
+        // the already-open store. Constructing a second
+        // NSPersistentCloudKitContainer on the same file breaks CloudKit
+        // mirroring ("Registering a handler for a CKScheduler activity
+        // identifier that has already been registered") — e.g. Stop Sharing
+        // resolving the iCloud destination while the iCloud store is live.
+        // Safe for all callers: the migration pours are id-skip idempotent.
+        if let requested = try? provider(for: kind).makeStoreConfiguration().url,
+           requested == Persistence.liveStoreURL {
+            return Persistence.shared
+        }
         let schema = Schema([
             Book.self, Note.self, ReadingList.self,
             ReadingListItem.self, Connection.self, User.self,
@@ -161,17 +172,11 @@ struct SwiftDataiCloudSync: SyncStoreProvider {
 struct SwiftDataSharedLibrarySync: SyncStoreProvider {
     let librarySync: LibrarySync = .sharedLibrary
 
-    /// Per-library mirror store: each shared library gets its own file, so
-    /// multiple shares can coexist (state-wise) without clobbering each
-    /// other. The legacy single-share URL is kept for the default library.
-    static func storeURL(libraryID: String) -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory,
-                                            in: .userDomainMask).first!
-        guard libraryID != LibraryScope.defaultLibraryID else {
-            return base.appendingPathComponent("default-shared.store")
-        }
-        return base.appendingPathComponent("default-shared-\(libraryID).store")
-    }
+    /// The mirror store file. ONE file for every library: the provider
+    /// slot is global (one `SyncSettings.selectedProvider` per app), and
+    /// joining a share tears down any prior mirror first (join removes
+    /// this file when a membership already exists), so at most one mirror
+    /// is ever live and no second file is needed.
 
     static var storeURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,

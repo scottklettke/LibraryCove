@@ -162,6 +162,12 @@ struct BookDetailView: View {
                 LabeledContent("Type", value: (BookKind(rawValue: book.kind).flatMap { $0 == .notSet ? nil : $0 }?.displayName) ?? "Not set")
                 LabeledContent("Date added", value: addedDateFormatter.string(from: book.createdAt))
                 LabeledContent("Added by", value: addedByName)
+            if let genre = book.genre, !genre.isEmpty {
+                LabeledContent("Genre", value: BookGenre(rawValue: genre)?.displayName ?? genre)
+            }
+            if let series = book.series, !series.isEmpty {
+                LabeledContent("Series", value: series)
+            }
             if let location = book.physicalLocation, !location.isEmpty {
                 LabeledContent("Location", value: location)
             }

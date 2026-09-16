@@ -135,6 +135,14 @@ enum AILibrarySnapshot {
         if let publisher = book.publisher, !publisher.isEmpty {
             meta.append(publisher)
         }
+        if let series = book.series, !series.isEmpty {
+            meta.append(series)
+        }
+        if let genre = book.genre, let g = BookGenre(rawValue: genre) {
+            meta.append(g.displayName)
+        } else if let genre = book.genre, !genre.isEmpty {
+            meta.append(genre)
+        }
         if let location = book.physicalLocation, !location.isEmpty {
             meta.append(location)
         }

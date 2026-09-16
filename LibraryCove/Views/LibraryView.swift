@@ -5,7 +5,6 @@ import PDFKit
 enum LibraryViewMode: String, CaseIterable, Identifiable {
     case grid = "grid"
     case list = "list"
-    case byLocation = "location"
     case dashboard = "dashboard"
 
     var id: String { rawValue }
@@ -14,7 +13,6 @@ enum LibraryViewMode: String, CaseIterable, Identifiable {
         switch self {
         case .grid: return "square.grid.2x2"
         case .list: return "list.bullet"
-        case .byLocation: return "mappin.and.ellipse"
         case .dashboard: return "chart.pie"
         }
     }
@@ -25,7 +23,9 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
     case none = "none"
     case author = "author"
     case genre = "genre"
-    case shelf = "shelf"
+    case location = "location"
+    case series = "series"
+    case genres = "genres"
 
     var id: String { rawValue }
 
@@ -34,7 +34,9 @@ enum LibraryGrouping: String, CaseIterable, Identifiable {
         case .none: return "None"
         case .author: return "Author"
         case .genre: return "Tags"
-        case .shelf: return "Shelf"
+        case .location: return "Location"
+        case .series: return "Series"
+        case .genres: return "Genres"
         }
     }
 }
@@ -110,7 +112,7 @@ private struct ScrollOffsetTracker: View {
     }
 }
 
-/// Main library screen: all books with cover grid, list, by-location, and dashboard views.
+/// Main library screen: all books with cover grid, list, and dashboard views.
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
     /// The active member — the greeting reads THIS object (the same
@@ -129,10 +131,13 @@ struct LibraryView: View {
     @State private var grouping: LibraryGrouping = .none
     @State private var filteredAuthors = Set<String>()
     @State private var filteredTags = Set<String>()
-    @State private var showAuthorFilter = false
-    @State private var showTagFilter = false
+    @State private var showFilter = false
     @State private var sortOrder: LibrarySort = .titleAsc
     @State private var isScrolled = false
+    /// Bumped whenever LibraryScope posts `librariesChangedNotification` so
+    /// the toolbar library menu re-evaluates and picks up Settings-side
+    /// creates/renames/deletes (`activeID` alone wouldn't refresh those).
+    @State private var registryEpoch = 0
     @State private var filteredSheet: FilteredSheet?
     @State private var genreStore = GenreStore()
     @State private var shelfStore = ShelfStore()
@@ -228,18 +233,22 @@ struct LibraryView: View {
         return parts.last.map(String.init) ?? author
     }
 
-    private func isSortField(_ field: LibrarySortField) -> Bool {
-        sortOrder.field == field
+
+
+    /// The direction the current sort runs in (ascending = A–Z / newest first).
+    private var sortAscending: Bool {
+        sortOrder == .titleAsc || sortOrder == .authorAsc || sortOrder == .dateNewest
     }
 
-    private func toggleSortField(_ field: LibrarySortField) {
-        switch field {
-        case .title:
-            sortOrder = (sortOrder == .titleAsc) ? .titleDesc : .titleAsc
-        case .author:
-            sortOrder = (sortOrder == .authorAsc) ? .authorDesc : .authorAsc
-        case .dateAdded:
-            sortOrder = (sortOrder == .dateNewest) ? .dateOldest : .dateNewest
+    /// Applies an explicit field + direction choice from the Sort menu.
+    private func applySort(field: LibrarySortField, ascending: Bool) {
+        switch (field, ascending) {
+        case (.title, true): sortOrder = .titleAsc
+        case (.title, false): sortOrder = .titleDesc
+        case (.author, true): sortOrder = .authorAsc
+        case (.author, false): sortOrder = .authorDesc
+        case (.dateAdded, true): sortOrder = .dateNewest
+        case (.dateAdded, false): sortOrder = .dateOldest
         }
     }
 
@@ -270,28 +279,65 @@ struct LibraryView: View {
                     } label: {
                         Label(groupLabel, systemImage: "rectangle.3.group")
                     }
-                    Group {
-                        Button {
-                            showAuthorFilter = true
-                        } label: {
-                            Label(authorFilterLabel, systemImage: "person")
-                        }
-                        Button {
-                            showTagFilter = true
-                        } label: {
-                            Label(tagFilterLabel, systemImage: "tag")
-                        }
+                    Button {
+                        showFilter = true
+                    } label: {
+                        Label(filterLabel, systemImage: "line.3.horizontal.decrease.circle")
                     }
+                    .accessibilityIdentifier("filterButton")
                     Menu {
-                        sortMenuItem(.title)
-                        sortMenuItem(.author)
-                        sortMenuItem(.dateAdded)
-                        Button("Tap a field again to reverse the order") {}
-                            .disabled(true)
-                            .accessibilityHidden(true)
+                        Picker("Sort by", selection: Binding(
+                            get: { sortOrder.field },
+                            set: { applySort(field: $0, ascending: sortAscending) }
+                        )) {
+                            ForEach(LibrarySortField.allCases) { field in
+                                Text(field.displayName).tag(field)
+                            }
+                        }
+                        .pickerStyle(.inline)
+                        Divider()
+                        Picker("Order", selection: Binding(
+                            get: { sortAscending },
+                            set: { applySort(field: sortOrder.field, ascending: $0) }
+                        )) {
+                            Text("Ascending").tag(true)
+                            Text("Descending").tag(false)
+                        }
+                        .pickerStyle(.inline)
                     } label: {
                         Label(sortOrder.displayName, systemImage: "arrow.up.arrow.down")
                     }
+                    Menu {
+                        // Re-evaluates when Settings creates/renames/deletes
+                        // a library (activeID wouldn't change in those cases).
+                        let _ = registryEpoch
+                        let activateLibrary = { (library: LibraryInfo) in
+                            LibraryScope.shared.activate(library, context: modelContext)
+                            selection = []
+                            filteredAuthors = []
+                            filteredTags = []
+                        }
+                        ForEach(LibraryScope.shared.all(context: modelContext)) { library in
+                            let name = library.name.isEmpty ? "Untitled Library" : library.name
+                            if library.id == libraryScope.activeID {
+                                Button {
+                                    activateLibrary(library)
+                                } label: {
+                                    Label(name, systemImage: "checkmark")
+                                }
+                            } else {
+                                Button {
+                                    activateLibrary(library)
+                                } label: {
+                                    Text(name)
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(libraryScope.activeName(context: modelContext, memberName: user.displayName),
+                              systemImage: "chevron.down")
+                    }
+                    .accessibilityIdentifier("librarySwitcher")
                 }
             }
         }
@@ -320,25 +366,11 @@ struct LibraryView: View {
         grouping == .none ? "Group" : "Group: \(grouping.displayName)"
     }
 
-    private func sortMenuItem(_ field: LibrarySortField) -> some View {
-        Button {
-            toggleSortField(field)
-        } label: {
-            Label(sortFieldLabel(field), systemImage: isSortField(field) ? "checkmark" : "arrow.up.arrow.down")
-        }
+    private var filterLabel: String {
+        let count = filteredAuthors.count + filteredTags.count
+        return count == 0 ? "Filter" : "Filter (\(count))"
     }
 
-
-    private func sortFieldLabel(_ field: LibrarySortField) -> String {
-        switch field {
-        case .title:
-            return isSortField(.title) ? "Title (A–Z)" : "Title (Z–A)"
-        case .author:
-            return isSortField(.author) ? "Author (A–Z)" : "Author (Z–A)"
-        case .dateAdded:
-            return isSortField(.dateAdded) ? "Date added (newest)" : "Date added (oldest)"
-        }
-    }
 
     /// The main grid/list shows only masters — one representative per ISBN —
     /// so duplicate copies never flood the list. All copies remain reachable
@@ -357,13 +389,6 @@ struct LibraryView: View {
         return copyCounts[normalized] ?? 1
     }
 
-    private var authorFilterLabel: String {
-        filteredAuthors.isEmpty ? "Author" : "Author (\(filteredAuthors.count))"
-    }
-
-    private var tagFilterLabel: String {
-        filteredTags.isEmpty ? "Tag" : "Tag (\(filteredTags.count))"
-    }
 
     // MARK: - Manual tag/shelf assignment + bulk select
 
@@ -558,7 +583,12 @@ struct LibraryView: View {
                 showExportOptions = false
                 return
             }
-            let name = "LibraryCove-Catalog-\(Self.dateFormatter.string(from: Date())).pdf"
+            let name = LibraryDataService.exportFileName(
+                kind: "Catalog",
+                libraryName: libraryScope.activeName(context: modelContext, memberName: user.displayName),
+                memberName: user.displayName,
+                ext: "pdf"
+            )
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
             try? data.write(to: url)
             pdfURL = url
@@ -621,6 +651,7 @@ struct LibraryView: View {
                 Section("Include") {
                     Toggle("Reading stats page", isOn: $exportOptions.includeStats)
                     Toggle("Description", isOn: $exportOptions.includeDescription)
+                    Toggle("Series", isOn: $exportOptions.includeSeries)
                     Toggle("Location", isOn: $exportOptions.includeLocation)
                     Toggle("Rating", isOn: $exportOptions.includeRating)
                     Toggle("Shelves", isOn: $exportOptions.includeShelves)
@@ -791,7 +822,6 @@ struct LibraryView: View {
                 switch viewMode {
                 case .grid: gridView
                 case .list: listView
-                case .byLocation: byLocationView
                 case .dashboard: dashboardView
                 }
             }
@@ -814,15 +844,13 @@ struct LibraryView: View {
         .sheet(item: $assignmentTarget) { target in
             assignmentSheet(target)
         }
-        .sheet(isPresented: $showAuthorFilter) {
-            MultiSelectFilterSheet(title: "Authors", items: allAuthors, selection: filteredAuthors) {
-                filteredAuthors = $0
-            }
-        }
-        .sheet(isPresented: $showTagFilter) {
-            MultiSelectFilterSheet(title: "Tags", items: allGenres, selection: filteredTags) {
-                filteredTags = $0
-            }
+        .sheet(isPresented: $showFilter) {
+            MultiSelectFilterSheet(searchTextPlaceholder: "Search authors or tags", sections: [
+                .init(title: "Authors", items: allAuthors, selection: filteredAuthors,
+                      onChange: { filteredAuthors = $0 }),
+                .init(title: "Tags", items: allGenres, selection: filteredTags,
+                      onChange: { filteredTags = $0 })
+            ])
         }
         .sheet(item: $copyPickerBook, onDismiss: { longPressBook = nil }) { book in
             CopyDeletePicker(
@@ -869,6 +897,9 @@ struct LibraryView: View {
         .onChange(of: grouping) { isScrolled = false }
         .sheet(isPresented: $showAdd) {
             AddBookView()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: LibraryScope.librariesChangedNotification)) { _ in
+            registryEpoch += 1
         }
         .sheet(isPresented: $showExportOptions) {
             pdfOptionsSheet
@@ -990,7 +1021,7 @@ struct LibraryView: View {
                                 }
                                 .padding()
                             } header: {
-                                Text(key ?? "Unknown")
+                                Text(grouping == .location && key == nil ? "Unplaced" : key ?? "Unknown")
                                     .font(.headline)
                                     .foregroundStyle(.secondary)
                                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1015,11 +1046,7 @@ struct LibraryView: View {
     private var listView: some View {
         if grouping == .none {
             return AnyView(List(displayBooks) { book in
-                NavigationLink {
-                    BookDetailView(book: book)
-                } label: {
-                    BookListRow(book: book, showAddedDate: sortOrder.sortsByDate, copyCount: copyBadge(for: book))
-                }
+                listRow(for: book, showAddedDate: sortOrder.sortsByDate)
             })
         } else {
             let grouped = Dictionary(grouping: displayBooks) { book in
@@ -1030,13 +1057,9 @@ struct LibraryView: View {
             }
             return AnyView(List {
                 ForEach(keys, id: \.self) { key in
-                    Section(key ?? "Unknown") {
+                    Section(grouping == .location && key == nil ? "Unplaced" : key ?? "Unknown") {
                         ForEach(grouped[key] ?? []) { book in
-                            NavigationLink {
-                                BookDetailView(book: book)
-                            } label: {
-                                BookListRow(book: book, copyCount: copyBadge(for: book))
-                            }
+                            listRow(for: book, showAddedDate: false)
                         }
                     }
                 }
@@ -1044,15 +1067,40 @@ struct LibraryView: View {
         }
     }
 
+    /// One list row: a NavigationLink to the book while browsing, or — in
+    /// selection mode — a row whose trailing status icon toggles selection
+    /// while taps anywhere else still push the book's details.
+    @ViewBuilder
+    private func listRow(for book: Book, showAddedDate: Bool) -> some View {
+        if isSelecting {
+            BookListRow(
+                book: book,
+                showAddedDate: showAddedDate,
+                copyCount: copyBadge(for: book),
+                isSelecting: true,
+                isSelected: selection.contains(book.id),
+                onToggleSelection: { toggleSelection(book.id) },
+                onOpenDetails: { pushedBook = BookRoute(book: book) }
+            )
+        } else {
+            NavigationLink {
+                BookDetailView(book: book)
+            } label: {
+                BookListRow(book: book, showAddedDate: showAddedDate, copyCount: copyBadge(for: book))
+            }
+        }
+    }
+
     private func groupKey(for book: Book) -> String? {
         // A just-deleted book can still appear in a stale query snapshot;
         // reading its attributes traps ("detached ... without resolving
         // attribute faults"). Skip it instead.
-        guard !book.isDeleted else { return nil }
         switch grouping {
         case .author: return book.authors.first
         case .genre: return book.tags.first
-        case .shelf: return book.shelves.first
+        case .location: return book.physicalLocation
+        case .series: return book.series
+        case .genres: return book.genre.flatMap { BookGenre(rawValue: $0)?.displayName ?? $0 }
         case .none: return nil
         }
     }
@@ -1108,53 +1156,6 @@ struct LibraryView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(Capsule().fill(Color(uiColor: .secondarySystemFill)))
-    }
-
-    // MARK: - By location
-
-    private var byLocationView: some View {
-        let grouped = Dictionary(grouping: filteredBooks, by: \.physicalLocation)
-        return List {
-            let locations = grouped.keys.sorted {
-                ($0 ?? "") < ($1 ?? "")
-            }
-            ForEach(locations, id: \.self) { location in
-                let shelf = grouped[location] ?? []
-                Section(location ?? "Unplaced") {
-                    if grouping == .none {
-                        // Default: books ordered by the active sort (Title A–Z).
-                        ForEach(shelf) { book in
-                            locationRow(for: book)
-                        }
-                    } else {
-                        // Author/genre subgroups, alphabetical by group name
-                        // (books still in title order within each group).
-                        let sub = Dictionary(grouping: shelf) { book in
-                            groupKey(for: book)
-                        }
-                        let keys = sub.keys.sorted { ($0 ?? "") < ($1 ?? "") }
-                        ForEach(keys, id: \.self) { key in
-                            Section {
-                                ForEach(sub[key] ?? []) { book in
-                                    locationRow(for: book)
-                                }
-                            } header: {
-                                Text(key ?? "Unknown")
-                                    .font(.subheadline)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func locationRow(for book: Book) -> some View {
-        NavigationLink {
-            BookDetailView(book: book)
-        } label: {
-            BookListRow(book: book, showAddedDate: sortOrder.sortsByDate)
-        }
     }
 
     // MARK: - Dashboard
@@ -1299,6 +1300,15 @@ struct BookListRow: View {
     let book: Book
     var showAddedDate = false
     var copyCount = 0
+    /// Selection mode: the trailing status icon becomes the selection toggle.
+    var isSelecting = false
+    var isSelected = false
+    var onToggleSelection: (() -> Void)? = nil
+    /// Selection mode: tapping the cover/title area opens the book's details.
+    /// Applied only to the leading stack so the icon Button sits outside the
+    /// gesture (List tap precedence between a Button and a parent gesture is
+    /// unreliable across row recycling).
+    var onOpenDetails: (() -> Void)? = nil
 
     var body: some View {
         if book.isDeleted {
@@ -1310,27 +1320,21 @@ struct BookListRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 40, height: 58)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(book.title)
-                    .font(.body)
-                if showAddedDate {
-                    HStack(spacing: 4) {
-                        Text(book.authorsText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("· \(addedDateFormatter.string(from: book.createdAt))")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                    }
-                } else {
-                    Text(book.authorsText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            leadingContent
             Spacer()
-            if copyCount > 1 {
+            if isSelecting, let onToggleSelection {
+                Button {
+                    onToggleSelection()
+                } label: {
+                    Image(systemName: isSelected ? book.statusEnum.filledSystemImage : book.statusEnum.systemImage)
+                        .foregroundStyle(isSelected ? Color.accentColor : Color(uiColor: .secondaryLabel))
+                        .frame(minWidth: 28, minHeight: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityIdentifier("listSelectToggle")
+                .accessibilityLabel(isSelected ? "Deselect \(book.title)" : "Select \(book.title)")
+            } else if copyCount > 1 {
                 Text("\(copyCount) copies")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -1344,6 +1348,40 @@ struct BookListRow: View {
             }
         }
     }
+
+    /// Cover + title/author. In selection mode this stack carries the
+    /// details tap; the trailing icon Button stays a gesture-free sibling.
+    private var leadingContent: some View {
+        let stack = HStack(spacing: 12) {
+            AsyncCoverView(url: CoverImageStore.displayURL(forCover: book.coverImageURL), width: 40, height: 58)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(book.title)
+                    .font(.body)
+                if showAddedDate {
+                    HStack(spacing: 4) {
+                        Text(book.authorsText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\u{b7} \(addedDateFormatter.string(from: book.createdAt))")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
+                } else {
+                    Text(book.authorsText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        if isSelecting, let onOpenDetails {
+            return AnyView(
+                stack
+                    .contentShape(Rectangle())
+                    .onTapGesture { onOpenDetails() }
+            )
+        }
+        return AnyView(stack)
+    }
 }
 
 extension BookStatus {
@@ -1353,6 +1391,17 @@ extension BookStatus {
         case .toRead: return "bookmark"
         case .completed: return "checkmark.circle"
         case .donated: return "heart"
+        }
+    }
+
+    /// Filled variant shown when a list row is selected in bulk-selection
+    /// mode (the status icon doubles as the selection toggle).
+    var filledSystemImage: String {
+        switch self {
+        case .reading: return "book.fill"
+        case .toRead: return "bookmark.fill"
+        case .completed: return "checkmark.circle.fill"
+        case .donated: return "heart.fill"
         }
     }
 }

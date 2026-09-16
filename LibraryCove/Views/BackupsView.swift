@@ -287,9 +287,13 @@ struct BackupsView: View {
                 showError = true
                 return
             }
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd"
-            let filename = "LibraryCove-Library-\(formatter.string(from: Date())).zip"
+            let member = LibraryDataService.activeMemberName(modelContext)
+            let filename = LibraryDataService.exportFileName(
+                kind: "Library",
+                libraryName: LibraryScope.shared.activeName(context: modelContext, memberName: member),
+                memberName: member,
+                ext: "zip"
+            )
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
             do {
                 try data.write(to: url)

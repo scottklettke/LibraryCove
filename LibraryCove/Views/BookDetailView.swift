@@ -36,7 +36,6 @@ struct BookDetailView: View {
     private var detailList: some View {
         List {
             headerSection
-            descriptionSection
             infoSection
             copiesSection
             notesSection
@@ -154,13 +153,6 @@ struct BookDetailView: View {
                 }
                 Spacer()
             }
-        }
-    }
-
-    /// The book description (or the fetch affordance when there is none),
-    /// pulled out directly under the title/cover header.
-    private var descriptionSection: some View {
-        Section {
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)

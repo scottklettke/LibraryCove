@@ -9,7 +9,7 @@ final class LocationStore {
 
     /// Default suggested locations.
     static let defaults = [
-        "Upstairs", "Scott's Office", "Downstairs", "Living Room",
+        "Upstairs", "Home Office", "Downstairs", "Living Room",
         "Library", "Borrowed", "Storage",
     ]
 

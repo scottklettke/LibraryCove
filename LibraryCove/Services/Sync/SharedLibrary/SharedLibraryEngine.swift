@@ -184,7 +184,7 @@ enum SharedLibrarySettings {
         set { d.set(newValue, forKey: Key.shareTitle) }
     }
 
-    /// The library name the user chose at welcome (e.g. "Scott's Library").
+    /// The library name the user chose at welcome (e.g. "Alex's Library").
     /// Used as the DEFAULT share title when a share is created; reset() does
     /// not clear it because it's the user's library identity, not share
     /// state.

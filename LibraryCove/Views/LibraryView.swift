@@ -944,7 +944,7 @@ struct LibraryView: View {
         .accessibilityIdentifier("modePicker")
     }
 
-    /// "Hi, Scott J" — the active member's full display name (the `user`
+    /// "Hi, Alex J" — the active member's full display name (the `user`
     /// instance passed from RootView — the same object Settings renames).
     /// Falls back to a plain greeting when no name is resolvable.
     private var greetingText: String {

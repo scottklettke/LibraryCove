@@ -3,7 +3,7 @@ import SwiftData
 
 /// First-launch welcome flow: three swipeable pages describing what
 /// LibraryCove does, then a setup form asking for the user's name and their
-/// library's name (prefilled from the name, e.g. "Scott" → "Scott's
+/// library's name (prefilled from the name, e.g. "Alex" → "Alex's
 /// Library"). The library name is what appears when the library is shared.
 struct WelcomeView: View {
     @Environment(\.modelContext) private var modelContext

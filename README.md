@@ -1,13 +1,16 @@
+<p align="center">
+  <img src="docs/app-icon.png" width="128" alt="LibraryCove app icon">
+</p>
+
 # LibraryCove
 
 A personal book library manager for iPhone and iPad. Catalog your shelf by
 scanning an ISBN barcode or searching Open Library / Google Books, organize it
-the way you think with tags, shelves, and AI assistance, and keep full control
+the way you think with tags and a curated genre taxonomy, and keep full control
 of your data — on-device, in iCloud, or in exports you can read by hand.
 
-> **Status:** active personal project. The app is currently private; this
-> repository documents the codebase, build, and feature set — it doubles as
-> the project website for now. Screenshots coming soon.
+> **Status:** active personal project, open source under the MIT license.
+
 
 <!-- Screenshots: paste a table here once captured.
 | Library | Book detail | Ask AI |
@@ -26,9 +29,9 @@ of your data — on-device, in iCloud, or in exports you can read by hand.
   Library, Wikipedia, or Google Books — pick your favorite from the
   description picker, or import one from the web with an in-app browser
   (source attributed automatically).
-- **Organize, not just store** — free-form **tags**, AI-suggested **shelves**
-  (Fiction / Non-fiction → library-specific categories), and
-  fiction/non-fiction classification with human approval.
+- **Organize, not just store** — free-form **tags**, a curated 20-genre
+  **taxonomy** (Fiction and Non-fiction tiers), fiction/non-fiction
+  classification, and grouping by tag, genre, series, or physical location.
 - **Scan safely** — scans are cached instantly and looked up in the background;
   a crash never loses your place. Duplicate scans are detected by normalized
   ISBN (10- and 13-digit forms match) and can be added as another copy.
@@ -104,6 +107,11 @@ Open-source software used by the app:
 Apple frameworks (SwiftUI, SwiftData, Foundation Models, NaturalLanguage) are
 governed by Apple's terms. The same attributions are shown in-app under
 **Settings → About & Feedback → Data sources**.
+
+## License
+
+LibraryCove is released under the [MIT License](LICENSE) — free to use,
+modify, and redistribute, including in commercial contexts, with attribution.
 
 ## Roadmap
 

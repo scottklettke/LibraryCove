@@ -101,10 +101,16 @@ struct RootView: View {
     /// UI-test seam: clear the library (and pending scans) at launch so
     /// deterministic offline UI tests always start from an empty store —
     /// previously records persisted across test runs and collided on re-run.
+    /// Also resets the library registry: a leftover active library (e.g.
+    /// from a manual shared-library test session) made seeded books
+    /// invisible — they get tagged into the default library while
+    /// `visibleBooks` filters on the stale active ID.
     private func resetDataIfNeeded() {
         guard ProcessInfo.processInfo.environment["UI_TEST_RESET_DATA"] == "1" else { return }
         try? modelContext.delete(model: Book.self)
         try? modelContext.save()
+        LibraryScope.shared.deleteAllLibraries()
+        LibraryScope.shared.migrateIfNeeded(context: modelContext)
         ScanQueueStore.shared.clear()
     }
 

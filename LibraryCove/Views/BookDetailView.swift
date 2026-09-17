@@ -36,6 +36,7 @@ struct BookDetailView: View {
     private var detailList: some View {
         List {
             headerSection
+            descriptionSection
             infoSection
             copiesSection
             notesSection
@@ -156,36 +157,10 @@ struct BookDetailView: View {
         }
     }
 
-    private var infoSection: some View {
-            Section("Details") {
-                LabeledContent("Status", value: book.statusEnum.displayName)
-                LabeledContent("Type", value: (BookKind(rawValue: book.kind).flatMap { $0 == .notSet ? nil : $0 }?.displayName) ?? "Not set")
-                LabeledContent("Date added", value: addedDateFormatter.string(from: book.createdAt))
-                LabeledContent("Added by", value: addedByName)
-            if let genre = book.genre, !genre.isEmpty {
-                LabeledContent("Genre", value: BookGenre(rawValue: genre)?.displayName ?? genre)
-            }
-            if let series = book.series, !series.isEmpty {
-                LabeledContent("Series", value: series)
-            }
-            if let location = book.physicalLocation, !location.isEmpty {
-                LabeledContent("Location", value: location)
-            }
-            if let publisher = book.publisher {
-                LabeledContent("Publisher", value: publisher)
-            }
-            if let language = book.language, !language.isEmpty {
-                LabeledContent("Language", value: language)
-            }
-            if let pageCount = book.pageCount {
-                LabeledContent("Pages", value: "\(pageCount)")
-            }
-            if let isbn = book.isbn {
-                LabeledContent("ISBN", value: isbn)
-            }
-            if !book.tags.isEmpty {
-                LabeledContent("Tags", value: book.tags.joined(separator: ", "))
-            }
+    /// The book description (or the fetch affordance when there is none),
+    /// pulled out directly under the title/cover header.
+    private var descriptionSection: some View {
+        Section {
             if let description = book.bookDescription {
                 Text(description)
                     .font(.body)
@@ -223,6 +198,33 @@ struct BookDetailView: View {
                     .accessibilityIdentifier("webSearchDescription")
                 }
             }
+        }
+    }
+
+    private var infoSection: some View {
+            Section("Details") {
+                LabeledContent("Status", value: book.statusEnum.displayName)
+                LabeledContent("Type", value: (BookKind(rawValue: book.kind).flatMap { $0 == .notSet ? nil : $0 }?.displayName) ?? "Not set")
+            if let genre = book.genre, !genre.isEmpty {
+                LabeledContent("Genre", value: BookGenre(rawValue: genre)?.displayName ?? genre)
+            }
+            if let series = book.series, !series.isEmpty {
+                LabeledContent("Series", value: series)
+            }
+            if let location = book.physicalLocation, !location.isEmpty {
+                LabeledContent("Location", value: location)
+            }
+            if let pageCount = book.pageCount {
+                LabeledContent("Pages", value: "\(pageCount)")
+            }
+            if let isbn = book.isbn {
+                LabeledContent("ISBN", value: isbn)
+            }
+            if !book.tags.isEmpty {
+                LabeledContent("Tags", value: book.tags.joined(separator: ", "))
+            }
+            LabeledContent("Added by", value: addedByName)
+            LabeledContent("Date added", value: addedDateFormatter.string(from: book.createdAt))
         }
     }
 

@@ -21,7 +21,7 @@ final class GreetingRenameTests: XCTestCase {
             let nameField = app.textFields["Your name"]
             XCTAssertTrue(nameField.waitForExistence(timeout: 4), "setup form never appeared")
             nameField.tap()
-            nameField.typeText("Scott")
+            nameField.typeText("Alex")
             app.buttons["Create My Library"].tap()
         }
 

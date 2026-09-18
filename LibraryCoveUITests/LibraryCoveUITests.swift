@@ -697,7 +697,12 @@ final class LibraryCoveUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Delete Library"].waitForExistence(timeout: 10), "Delete Library row missing")
         XCTAssertTrue(app.buttons["Backups"].exists, "Backups link missing")
         // Restored Shared Library section: direct entry, no long-press.
-        XCTAssertTrue(app.staticTexts["Shared Library"].waitForExistence(timeout: 5),
+        // Form section headers render UPPERCASE — compare case-insensitively
+        // (same pattern as the dashboard "Summary" assertion).
+        let sharedHeader = app.staticTexts.matching(
+            NSPredicate(format: "label ==[c] 'Shared Library'")
+        ).firstMatch
+        XCTAssertTrue(sharedHeader.waitForExistence(timeout: 5),
                       "Shared Library section missing")
         XCTAssertTrue(app.buttons["Share Library"].waitForExistence(timeout: 5),
                       "Share Library button missing")

@@ -111,6 +111,16 @@ struct RootView: View {
         try? modelContext.save()
         LibraryScope.shared.deleteAllLibraries()
         LibraryScope.shared.migrateIfNeeded(context: modelContext)
+        // Stale share state survives the registry rebuild (UserDefaults):
+        // a leftover membership on the re-created default library changed
+        // which button Settings renders ("Manage" vs "Share"). Sweep every
+        // "sharedLibrary.*" key — membership, zones, tokens, share titles —
+        // so tests start from a fresh-install sharing state.
+        let staleSharedKeys = UserDefaults.standard.dictionaryRepresentation().keys
+            .filter { $0.hasPrefix("sharedLibrary.") }
+        for key in staleSharedKeys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
         ScanQueueStore.shared.clear()
     }
 

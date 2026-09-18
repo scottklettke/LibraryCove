@@ -644,6 +644,48 @@ final class LibraryCoveUITests: XCTestCase {
                        "lookup still spinning after 45s — background processor never resolved it")
     }
 
+    /// Backups must carry the library they came from: the filename embeds
+    /// the active library's name, and the row caption surfaces it — so a
+    /// user with several libraries (or parked Local/iCloud sets) can tell
+    /// the sets apart.
+    func testBackupNameCarriesLibraryName() throws {
+        let app = pendingScansApp()
+        app.launch()
+        enterLibraryIfNeeded(app)
+        addSeededBooks(app)
+
+        app.tabBars.buttons["Settings"].tap()
+        let backups = app.buttons["Backups"]
+        XCTAssertTrue(backups.waitForExistence(timeout: 10), "Backups link missing")
+        backups.tap()
+
+        let create = app.buttons["Back up library now"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10), "backup button missing")
+        create.tap()
+
+        // Creation confirmation: "Backup complete". Its message quotes the
+        // file name — assert the library name made it through save() BEFORE
+        // dismissing, so a row-query failure can't hide an empty name.
+        let alertMessage = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS 'created'")
+        ).firstMatch
+        XCTAssertTrue(alertMessage.waitForExistence(timeout: 15),
+                      "backup completion alert missing")
+        XCTAssertTrue(alertMessage.label.contains("Tester's Library"),
+                      "confirmation does not carry the library name: \(alertMessage.label)")
+        app.buttons["OK"].tap()
+
+        // The new backup's filename leads with the active library's name
+        // (unnamed library → "<member>'s Library"). The list sits below
+        // the fold — scroll while waiting.
+        let row = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@ AND label CONTAINS 'books)'",
+                        "Tester\'s Library")
+        ).firstMatch
+        XCTAssertTrue(scrollWhileWaiting(app, for: row, timeout: 20),
+                      "backup row missing library name in label")
+    }
+
     /// Settings exposes data management: Delete Library directly, and
     /// Export/Import inside the Backups page (they merged there).
     func testSettingsShowsDataOptions() throws {

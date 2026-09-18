@@ -45,7 +45,7 @@ import SwiftData
         guard let zip1 = await LibraryDataService.export(context: context) else {
             Issue.record("export failed"); return
         }
-        let name = try BackupStore.save(data: zip1, bookCount: 2)
+        let name = try BackupStore.save(data: zip1, bookCount: 2, libraryName: "Test Library")
         defer { BackupStore.deleteAll() }
         let items = BackupStore.list()
         #expect(items.contains { $0.name == name })
@@ -85,5 +85,40 @@ import SwiftData
         #expect(!after.contains { $0.id == "stale-1" }, "stale row must be gone")
         #expect(after.contains { $0.id == "dup-a" } && after.contains { $0.id == "dup-b" },
                 "both duplicate copies must survive migration")
+    }
+    /// The backup filename must carry the library it came from, so users
+    /// with several libraries (or parked Local/iCloud sets) can tell them
+    /// apart. Same-day backups of DIFFERENT libraries must not collide or
+    /// share a sequence run.
+    @Test func backupNameCarriesLibraryNameAndSequencesPerLibrary() throws {
+        defer { BackupStore.deleteAll() }
+        let data = Data("zip".utf8)
+        let day = {
+            let f = DateFormatter()
+            f.dateFormat = "yyyy-MM-dd"
+            return f.string(from: Date())
+        }()
+
+        let n1 = try BackupStore.save(data: data, bookCount: 2, libraryName: "Home")
+        #expect(n1 == "Home \(day) (2 books)", "first Home backup of the day: got \(n1)")
+        let n2 = try BackupStore.save(data: data, bookCount: 3, libraryName: "Home")
+        #expect(n2 == "Home \(day) (3 books) 2", "second Home backup gains sequence 2: got \(n2)")
+        let n3 = try BackupStore.save(data: data, bookCount: 4, libraryName: "Home")
+        #expect(n3 == "Home \(day) (4 books) 3", "third Home backup gains sequence 3: got \(n3)")
+
+        // A different library the same day starts its own sequence run.
+        let o1 = try BackupStore.save(data: data, bookCount: 1, libraryName: "Office")
+        #expect(o1 == "Office \(day) (1 book)", "Office backup independent of Home's: got \(o1)")
+
+        // Unsafe characters are replaced; empty names fall back to the
+        // date-only shape.
+        let slashy = try BackupStore.save(data: data, bookCount: 1, libraryName: "A/B: C")
+        #expect(slashy.hasPrefix("A-B- C "), "path separators sanitized: got \(slashy)")
+        let blank = try BackupStore.save(data: data, bookCount: 0, libraryName: "   ")
+        #expect(blank == "\(day) (0 books)", "blank library falls back to date-only: got \(blank)")
+
+        // Long names are capped so rows stay readable.
+        let long = try BackupStore.save(data: data, bookCount: 1, libraryName: String(repeating: "x", count: 60))
+        #expect(long.hasPrefix(String(repeating: "x", count: 40) + " "), "long names capped at 40: got \(long)")
     }
 }

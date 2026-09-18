@@ -204,11 +204,25 @@ struct BackupsView: View {
                 Text("\(backup.name) (\(originTag(backup.origin)))")
                     .font(.body)
                     .lineLimit(2)
-                Text(backup.sizeText)
+                Text("\(libraryCaption(backup)) · \(backup.sizeText)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// The library a backup came from. Filenames carry it since the
+    /// library-name change ("Home 2026-09-17 (5 books).zip"); older
+    /// date-only names predate the feature, so they surface as unknown.
+    private func libraryCaption(_ backup: BackupStore.Item) -> String {
+        // Legacy shape: "yyyy-MM-dd (…". New shape: "<library> <date> (".
+        let dateOnly = backup.name.range(of: "^\\d{4}-\\d{2}-\\d{2} \\(", options: .regularExpression) != nil
+        if dateOnly { return "Library unknown (older backup)" }
+        guard let space = backup.name.range(of: " \\d{4}-\\d{2}-\\d{2} \\(", options: .regularExpression) else {
+            return "Library unknown"
+        }
+        let library = String(backup.name[..<space.lowerBound])
+        return library.isEmpty ? "Library unknown" : "From library: \(library)"
     }
 
     private var exportShareSheet: some View {
@@ -265,8 +279,10 @@ struct BackupsView: View {
                 return
             }
             let count = (try? liveContext.fetchCount(LibraryScope.shared.activeBooksDescriptor(context: liveContext))) ?? 0
+            let member = LibraryDataService.activeMemberName(liveContext)
+            let libraryName = LibraryScope.shared.activeName(context: liveContext, memberName: member)
             do {
-                let name = try BackupStore.save(data: data, bookCount: count)
+                let name = try BackupStore.save(data: data, bookCount: count, libraryName: libraryName)
                 resultIsBackup = true
                 lastResult = "Backup “\(name)” created."
                 showResult = true

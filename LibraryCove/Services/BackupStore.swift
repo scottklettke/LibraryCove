@@ -3,8 +3,11 @@ import SwiftData
 
 /// Manages named library backups: zipped `LibraryDataService.export`
 /// archives stored under Application Support/Backups. Files are named
-/// `yyyy-MM-dd (<bookCount> books) <n>.zip` where `<n>` is a same-day
-/// sequence number starting at 1 (omitted for the first backup of a day).
+/// `<library> yyyy-MM-dd (<bookCount> books) <n>.zip` where `<library>` is
+/// the active library's display name and `<n>` is a same-day sequence
+/// number starting at 1 (omitted for the first backup of a day). The
+/// library name tells the user which library a backup came from when
+/// several exist.
 ///
 /// Backups live on-device only. The "moved between local and iCloud like
 /// the library" behavior comes from BackupStore mirroring the backup
@@ -75,31 +78,58 @@ enum BackupStore {
         return items.sorted { $0.date > $1.date }
     }
 
-    /// Saves `data` as a backup named by today's date, the book count, and a
-    /// same-day sequence number. Returns the file name.
+    /// Saves `data` as a backup named by the library it came from, today's
+    /// date, the book count, and a same-day sequence number. Returns the
+    /// file name.
     @discardableResult
-    static func save(data: Data, bookCount: Int, date: Date = Date()) throws -> String {
+    static func save(data: Data, bookCount: Int, libraryName: String, date: Date = Date()) throws -> String {
         let fm = FileManager.default
         try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let day = formatter.string(from: date)
-        // Sequence: how many backups already exist for today's date?
+        let library = sanitizedLibraryName(libraryName)
+        // Sequence: how many backups already exist for today's date for
+        // THIS library (or any library when this one is unnamed)? Counted
+        // per library so same-day backups of different libraries each get
+        // their own 1, 2, 3… run.
         let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-        let sameDay = existing.filter { $0.lastPathComponent.hasPrefix("\(day) (") }.count
+        let marker = " \(day) ("
+        let sameDay = existing.filter {
+            library.isEmpty
+                ? $0.lastPathComponent.hasPrefix(marker.trimmingCharacters(in: .whitespaces))
+                : $0.lastPathComponent.hasPrefix(library + marker)
+        }.count
         let sequence = sameDay + 1
         let books = bookCount == 1 ? "1 book" : "\(bookCount) books"
-        let base = sequence == 1 ? "\(day) (\(books))" : "\(day) (\(books)) \(sequence)"
+        let stem = "\(day) (\(books))"
+        let base = library.isEmpty
+            ? (sequence == 1 ? stem : "\(stem) \(sequence)")
+            : (sequence == 1 ? "\(library) \(stem)" : "\(library) \(stem) \(sequence)")
         let url = directory.appendingPathComponent(base).appendingPathExtension("zip")
         // Defensive: never overwrite (sequence math should prevent it).
         var finalURL = url
         var bump = sequence
         while fm.fileExists(atPath: finalURL.path) {
             bump += 1
-            finalURL = directory.appendingPathComponent("\(day) (\(books)) \(bump)").appendingPathExtension("zip")
+            finalURL = directory.appendingPathComponent(library.isEmpty
+                ? "\(stem) \(bump)"
+                : "\(library) \(stem) \(bump)").appendingPathExtension("zip")
         }
         try data.write(to: finalURL, options: .atomic)
         return finalURL.deletingPathExtension().lastPathComponent
+    }
+
+    /// Makes a library name safe for a filename: path separators stripped,
+    /// trimmed, capped. Empty (or fully stripped) names yield "" — the
+    /// caller falls back to the date-only name shape.
+    private static func sanitizedLibraryName(_ raw: String) -> String {
+        let cleaned = raw
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleaned.count > 40 else { return cleaned }
+        return String(cleaned.prefix(40))
     }
 
     static func delete(url: URL) {

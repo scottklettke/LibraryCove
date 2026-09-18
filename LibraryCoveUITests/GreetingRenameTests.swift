@@ -8,7 +8,7 @@ final class GreetingRenameTests: XCTestCase {
         app.launch()
 
         // Fresh-install path (no members): run the welcome flow. The welcome
-        // is a 5-page TabView — pages 0–2 show "Continue", page 3 is the
+        // is a 6-page TabView — pages 0–3 show "Continue", page 4 is the
         // setup form where "Create My Library" appears. When the store
         // already has a member, skip to the rename step.
         if app.buttons["Continue"].waitForExistence(timeout: 4) {

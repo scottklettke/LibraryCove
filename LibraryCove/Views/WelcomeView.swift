@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// First-launch welcome flow: three swipeable pages describing what
+/// First-launch welcome flow: four swipeable pages describing what
 /// LibraryCove does, then a setup form asking for the user's name and their
 /// library's name (prefilled from the name, e.g. "Alex" → "Alex's
 /// Library"). The library name is what appears when the library is shared.
@@ -41,22 +41,22 @@ struct WelcomeView: View {
                         icon: "books.vertical",
                         title: "Multiple libraries",
                         text: "Start with one library — you can create more later in Settings > Libraries and switch between them anytime.",
-                        tag: 21
+                        tag: 3
                     )
-                    setupPage.tag(3)
+                    setupPage.tag(4)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
 
-                Button(page < 3 ? "Continue" : "Create My Library") {
-                    if page < 3 {
+                Button(page < 4 ? "Continue" : "Create My Library") {
+                    if page < 4 {
                         withAnimation { page += 1 }
                     } else {
                         finish()
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(page == 3 && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(page == 4 && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
             }
@@ -113,7 +113,7 @@ struct WelcomeView: View {
                 Text("The library name shows up when you share your library with others. You can create more libraries later in Settings > Libraries.")
             }
         }
-        .tag(3)
+        .tag(4)
     }
 
     private func finish() {

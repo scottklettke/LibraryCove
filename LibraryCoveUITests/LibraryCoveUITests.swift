@@ -68,8 +68,8 @@ final class LibraryCoveUITests: XCTestCase {
             enter.tap()
             return
         }
-        // Paged welcome flow (since 5c2f0df): pages 0–2 show "Continue";
-        // page 3 (setup form) shows "Create My Library". Page 0 also waits
+        // Paged welcome flow (since 5c2f0df): pages 0–3 show "Continue";
+        // page 4 (setup form) shows "Create My Library". Page 0 also waits
         // ~1s before accepting taps, so the first Continue needs a retry.
         if app.buttons["Continue"].waitForExistence(timeout: 5) {
             for _ in 0..<4 {

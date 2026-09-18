@@ -132,4 +132,66 @@ import SwiftData
         let otherRows = rows.filter { $0.libraryID == other.id }
         #expect(!otherRows.isEmpty, "other libraries' books must survive a replace-import into the active library")
     }
+
+    /// The Settings "Delete Library" flow: content wipe + registry entry
+    /// removal, so the deleted library disappears from the Libraries list.
+    @Test func settingsDeleteRemovesActiveLibraryFromRegistry() throws {
+        wipe()
+        let context = baseContext()
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let first = LibraryScope.shared.active(context: context)!
+        let second = try LibraryScope.shared.create(name: "Second", makeActive: true, context: context)
+
+        let secondBook = Book(id: "second-book", title: "Second", authors: [],
+                              isbn: nil, ownerID: nil, createdAt: Date())
+        secondBook.libraryID = second.id
+        context.insert(secondBook)
+        try context.save()
+
+        // Mirror SettingsView.deleteLibraryData(): content first, then the
+        // registry entry.
+        _ = LibraryDataService.deleteActiveLibraryContent(context: context)
+        LibraryScope.shared.delete(second, context: context)
+
+        #expect(!LibraryScope.shared.all(context: context).contains { $0.id == second.id },
+                "deleted library must disappear from the Libraries list")
+        #expect(LibraryScope.shared.activeID(context: context) == first.id,
+                "oldest remaining library becomes active")
+        let visible = try context.fetch(LibraryScope.shared.activeBooksDescriptor(context: context))
+        #expect(visible.isEmpty, "deleted library's content must be gone")
+        // The remaining library's content is intact and visible after the switch.
+        let firstBook = Book(id: "first-book", title: "First", authors: [],
+                             isbn: nil, ownerID: nil, createdAt: Date())
+        firstBook.libraryID = first.id
+        context.insert(firstBook)
+        try context.save()
+        let visibleAfter = try context.fetch(LibraryScope.shared.activeBooksDescriptor(context: context))
+        #expect(visibleAfter.count == 1 && visibleAfter.first?.id == "first-book")
+    }
+
+    /// Deleting the LAST library via the Settings flow: a fresh default is
+    /// recreated and active, so the empty-library message shows.
+    @Test func settingsDeleteOfLastLibraryRecreatesDefault() throws {
+        wipe()
+        let context = baseContext()
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let second = try LibraryScope.shared.create(name: "Second", makeActive: true, context: context)
+
+        let book = Book(id: "book", title: "T", authors: [],
+                        isbn: nil, ownerID: nil, createdAt: Date())
+        book.libraryID = second.id
+        context.insert(book)
+        try context.save()
+
+        _ = LibraryDataService.deleteActiveLibraryContent(context: context)
+        LibraryScope.shared.delete(second, context: context)
+
+        let libraries = LibraryScope.shared.all(context: context)
+        #expect(libraries.count == 1, "exactly the fresh default remains, got \(libraries.count)")
+        #expect(libraries.first?.id == LibraryScope.defaultLibraryID)
+        #expect(libraries.first?.isActive == true)
+        #expect(LibraryScope.shared.activeID(context: context) == LibraryScope.defaultLibraryID)
+        let visible = try context.fetch(LibraryScope.shared.activeBooksDescriptor(context: context))
+        #expect(visible.isEmpty, "fresh default starts empty — the empty-library message shows")
+    }
 }

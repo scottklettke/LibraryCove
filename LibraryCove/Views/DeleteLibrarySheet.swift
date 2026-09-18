@@ -29,7 +29,7 @@ struct DeleteLibrarySheet: View {
                     .frame(maxWidth: .infinity)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("This permanently deletes every book, note, reading list, and connection. Your member profile and settings stay. This cannot be undone.")
+                    Text("This permanently deletes this library and every book, note, reading list, and connection in it, and removes it from your Libraries list. Your member profile and settings stay. This cannot be undone.")
                     if sharingActive {
                         Label("This also stops sharing the library with everyone.", systemImage: "person.2.slash")
                             .foregroundStyle(.orange)

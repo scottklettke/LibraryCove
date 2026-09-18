@@ -332,12 +332,21 @@ struct SettingsView: View {
         }
     }
 
+    /// Content of the ACTIVE library only: "Delete Library" removes that
+    /// library itself, so the gate must not be blocked by other
+    /// libraries' content.
     private var libraryContentCount: Int {
-        ((try? modelContext.fetchCount(FetchDescriptor<Book>())) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<Note>())) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingList>())) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingListItem>())) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<Connection>())) ?? 0)
+        let id = LibraryScope.shared.activeID(context: modelContext)
+        return ((try? modelContext.fetchCount(FetchDescriptor<Book>(
+                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<Note>(
+                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingList>(
+                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingListItem>(
+                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
+            + ((try? modelContext.fetchCount(FetchDescriptor<Connection>(
+                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
     }
 
     /// Warns when the active library's (typed) name matches ANOTHER
@@ -680,7 +689,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Data")
                 } footer: {
-                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes every book (with notes and lists) but keeps your member profile.")
+                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes this library — every book (with notes and lists) in it — and takes it off your Libraries list. Your member profile is kept.")
                 }
     }
 
@@ -846,16 +855,20 @@ struct SettingsView: View {
     /// (default.store) and iCloud (default-cloud.store) stores via merge —
     /// so after any switch, BOTH stores hold the books. Deleting only the
     /// live store would leave a full copy in the other one, resurfacing on
-    /// the next switch. This clears whichever store is NOT currently live.
-    private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool) {
-        let schema = Schema([
-            Book.self, Note.self, ReadingList.self,
-            ReadingListItem.self, Connection.self, User.self,
-        ])
+    /// the next switch. This clears the doomed library's rows from
+    /// whichever store is NOT currently live; other libraries keep their
+    /// rows (their copies surface on the next provider-switch merge).
+    private func clearNonLiveStore(liveProvider: LibrarySync, contentOnly: Bool,
+                                   libraryID: String) {
         let otherProvider: LibrarySync = liveProvider == .iCloud ? .localOnly : .iCloud
         let container = SyncStoreRegistry.makeContainer(for: otherProvider)
         if contentOnly {
-            LibraryDataService.deleteLibraryContent(context: ModelContext(container))
+            // Scope to the one library: on a shared-library teardown the
+            // non-live store is the post-discard destination and holds the
+            // only copies of the REMAINING libraries' rows.
+            LibraryDataService.deleteLibraryContent(
+                context: ModelContext(container),
+                libraryID: libraryID)
         } else {
             LibraryDataService.deleteAll(context: ModelContext(container))
         }
@@ -870,24 +883,43 @@ struct SettingsView: View {
         // toggle, which calls BackupStore.deleteAll() itself.)
         // Multi-library: Delete Library removes the ACTIVE library's
         // content only — other libraries are untouched.
+        // Capture the doomed library BEFORE deleting content: the shared
+        // branch below reads SharedLibraryMembershipGate.membership for it,
+        // and LibraryScope.delete would switch the active library first.
+        let doomed = LibraryScope.shared.active(context: modelContext)
         LibraryDataService.deleteActiveLibraryContent(context: modelContext)
-        clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: true)
+        clearNonLiveStore(liveProvider: SyncSettings.selectedProvider, contentOnly: true,
+                          libraryID: doomed?.id ?? "")
         wipeAIRemnantsAndSearchHistory()
         if SharedLibraryMembershipGate.membership != .none {
             Task { @MainActor in
                 do {
                     try await SharedLibraryCoordinator.discardSharedContent()
                     let context = try SharedLibraryCoordinator.privateContextAfterDiscard()
-                    LibraryDataService.deleteLibraryContent(context: context)
+                    // Destination store holds every library's rows (the
+                    // mirror held only the shared library) — wipe just the
+                    // doomed library's rows, not all libraries' content.
+                    LibraryDataService.deleteLibraryContent(
+                        context: context,
+                        libraryID: doomed?.id ?? "")
                 } catch {
                     lastError = error.localizedDescription
                     showError = true
+                }
+                // Remove the library itself so it disappears from the
+                // Libraries list; the oldest remaining library becomes
+                // active (or a fresh default is created when none remain).
+                if let doomed {
+                    LibraryScope.shared.delete(doomed, context: modelContext)
                 }
                 isDeleting = false
                 // Land the user on the (now empty) Library page.
                 openLibraryTab()
             }
         } else {
+            if let doomed {
+                LibraryScope.shared.delete(doomed, context: modelContext)
+            }
             isDeleting = false
             openLibraryTab()
         }

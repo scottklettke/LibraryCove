@@ -241,6 +241,17 @@ enum SharedLibrarySettings {
         }
     }
 
+    /// Every trace of ONE library's share: membership, zone/share facts,
+    /// sync token, and the per-participant role keys — anything under
+    /// `sharedLibrary.<id>.`, including shapes added later. Used when a
+    /// share ends for that library only.
+    static func reset(libraryID: String) {
+        let prefix = "sharedLibrary.\(libraryID)."
+        for key in d.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            d.removeObject(forKey: key)
+        }
+    }
+
     // MARK: - Derived
 
     static var ownerZoneID: CKRecordZone.ID? {
@@ -886,6 +897,35 @@ final class SharedLibraryEngine: ObservableObject {
         }
         SharedLibrarySettings.reset()
         members = []
+    }
+
+    // MARK: - Leaving / stopping (per library)
+
+    /// Owner stops sharing ONE library: deletes that library's zone (the
+    /// share dies with it, revoking everyone's access) and clears that
+    /// library's local share state. Factory-reset path: the loop over all
+    /// libraries tolerates per-library CloudKit failures (no account,
+    /// offline) because the keys are cleared unconditionally afterwards.
+    func stopSharingAsOwner(libraryID: String) async throws {
+        if let zoneID = SharedLibrarySettings.ownerZoneID(libraryID: libraryID) {
+            // The owner zone lives in the private DB (see makeShare).
+            _ = try? await container.privateCloudDatabase
+                .modifyRecordZones(saving: [], deleting: [zoneID])
+        }
+        SharedLibrarySettings.reset(libraryID: libraryID)
+    }
+
+    /// Participant leaves ONE library's share: removes self from that share,
+    /// then clears that library's local share state. CloudKit failures
+    /// tolerated (see stopSharingAsOwner(libraryID:)) — keys clear regardless.
+    func leaveAsParticipant(libraryID: String) async throws {
+        if let share = try await currentShare(libraryID: libraryID),
+           let me = share.currentUserParticipant, me.role != .owner {
+            share.removeParticipant(me)
+            _ = try? await db(libraryID: libraryID).modifyRecords(
+                saving: [share], deleting: [], savePolicy: .changedKeys)
+        }
+        SharedLibrarySettings.reset(libraryID: libraryID)
     }
 }
 

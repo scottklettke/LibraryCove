@@ -32,7 +32,7 @@ struct AdvancedSettingsView: View {
                 showDeleteTypeConfirm = true
             }
         } message: {
-            Text("This permanently deletes every book, note, reading list, connection, and member — a full reset, as if the app had never been used. All backups are deleted too. Export a copy first if you want one. This cannot be undone." + (SharedLibraryMembershipGate.membership != .none ? " This also stops sharing the library with everyone." : ""))
+            Text("This permanently deletes every book, note, reading list, connection, and member — a full reset, as if the app had never been used. All backups are deleted too. Export a copy first if you want one. This cannot be undone. Sharing stops for every library and is not restored afterwards.")
         }
         .sheet(isPresented: $showDeleteTypeConfirm) {
             DeleteLibraryConfirmView(confirmText: $deleteConfirmText) {
@@ -79,7 +79,7 @@ struct AdvancedSettingsView: View {
             }
             .disabled(isDeleting)
         } footer: {
-            Text("Removes every book, note, reading list, connection, and your member profile — the app returns to its first-launch state. Export a backup first if you want to keep anything.")
+            Text("Removes every book, note, reading list, connection, and your member profile — the app returns to its first-launch state. Sharing stops for every library and is not restored afterwards. Export a backup first if you want to keep anything.")
         }
     }
 
@@ -160,6 +160,52 @@ struct AdvancedSettingsView: View {
     private func deleteAllData() {
         isDeleting = true
         SyncSettings.markBulkChange()
+        // Capture BEFORE the Task and before the tail below: the tail's
+        // resetProvider() deletes the syncProvider key, so reading it
+        // inside the Task would always yield .iCloud.
+        let mirrorWasLive = SyncSettings.selectedProvider == .sharedLibrary
+        // Stop sharing FIRST — every library, not just the one the legacy
+        // gate sees: owner zones and shares are removed (participants lose
+        // access), participant shares are left, and every library's share
+        // keys are cleared so nothing re-attaches after the reset (the
+        // re-created default library keeps its fixed id). CloudKit
+        // failures never block the wipe. The teardown also removes the
+        // mirror store file and resets the mirror index. The Task body
+        // runs after the synchronous tail below completes (MainActor
+        // scheduling); of what it touches, only the provider setting
+        // overlaps — its own epilogue flip intentionally lands after
+        // resetProvider and points at the pre-share provider, whose store
+        // the destination wipe then clears.
+        Task { @MainActor in
+            await SharedLibraryCoordinator.discardAllSharedContent()
+            // While a share was live, the mirror was the store being
+            // rendered. Hot-swap onto the destination private store, then
+            // wipe it AND the other non-shared store: previousProvider can
+            // be either (and localOnly reads normalize to .iCloud), and a
+            // provider switch before the share leaves full copies in both
+            // — a full reset leaves no copy anywhere.
+            if mirrorWasLive {
+                do {
+                    let context = try SharedLibraryCoordinator.privateContextAfterDiscard()
+                    LibraryDataService.deleteAll(context: context)
+                    let other: LibrarySync = SyncSettings.selectedProvider == .iCloud ? .localOnly : .iCloud
+                    LibraryDataService.deleteAll(context: ModelContext(SyncStoreRegistry.makeContainer(for: other)))
+                } catch {
+                    lastError = error.localizedDescription
+                    showError = true
+                }
+            }
+            // Belt and braces: no `sharedLibrary.*` key of any shape may
+            // survive the reset — a leftover key would re-attach to a
+            // re-created library and resurrect the share UI.
+            // (RootView.resetDataIfNeeded sweeps the same namespace for
+            // the same reason.)
+            for key in UserDefaults.standard.dictionaryRepresentation().keys
+            where key.hasPrefix("sharedLibrary.") {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+            isDeleting = false
+        }
         // Clear the LIVE store first: the UI and RootView's login switch
         // read from Persistence.shared, so the user sees the empty state
         // (login screen) immediately, without a restart.
@@ -172,26 +218,6 @@ struct AdvancedSettingsView: View {
         // choice returns to the default (.iCloud) on next launch.
         SyncSettings.resetProvider()
         wipeAIRemnantsAndSearchHistory()
-        // While sharing, delete-all also ENDS the share (owner: zone and
-        // share removed, participants lose access; participant: leaves the
-        // share). Then clear the destination private store so no copy
-        // survives there either; discardSharedContent removes the mirror
-        // store file.
-        if SharedLibraryMembershipGate.membership != .none {
-            Task { @MainActor in
-                do {
-                    try await SharedLibraryCoordinator.discardSharedContent()
-                    let context = try SharedLibraryCoordinator.privateContextAfterDiscard()
-                    LibraryDataService.deleteAll(context: context)
-                } catch {
-                    lastError = error.localizedDescription
-                    showError = true
-                }
-                isDeleting = false
-            }
-        } else {
-            isDeleting = false
-        }
     }
 
     /// Removes AI remnants and search history so "the entire library is
@@ -225,6 +251,9 @@ struct DeleteLibraryConfirmView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                Label("Sharing stops for every library and is not restored afterwards — you would share a library again from scratch.", systemImage: "person.2.slash")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
                 TextField("Type DELETE", text: $confirmText)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)

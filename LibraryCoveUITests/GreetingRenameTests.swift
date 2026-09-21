@@ -10,8 +10,10 @@ final class GreetingRenameTests: XCTestCase {
         // Fresh-install path (no members): run the welcome flow. The welcome
         // is a 6-page TabView — pages 0–3 show "Continue", page 4 is the
         // setup form where "Create My Library" appears. When the store
-        // already has a member, skip to the rename step.
-        if app.buttons["Continue"].waitForExistence(timeout: 4) {
+        // already has a member, skip to the rename step. The first wait
+        // spans cold simulator boot + first-launch store/account checks,
+        // so it must be generous or the whole flow is skipped.
+        if app.buttons["Continue"].waitForExistence(timeout: 20) {
             for _ in 0..<4 {
                 let cont = app.buttons["Continue"]
                 guard cont.waitForExistence(timeout: 3) else { break }

@@ -174,6 +174,74 @@ enum SharedLibraryCoordinator {
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
     }
 
+    /// Factory-reset variant of `discardSharedContent`: tears down EVERY
+    /// library's share, not just the legacy-gated one. The gate reads only
+    /// the pre-migration global keys, so per-library shares are invisible
+    /// to it; this iterates `sharedLibraryIDs` instead. CloudKit failures
+    /// (no account, offline) never block the reset — that library's keys
+    /// are cleared anyway so nothing can re-attach. Best-effort by design:
+    /// a participant migrated from legacy state has no per-library accepted
+    /// zone (`migrateLegacyShare` drops it), so the remote
+    /// removeParticipant is skipped — the local keys still clear. The
+    /// epilogue MUST run before the caller's final `sharedLibrary.*` key
+    /// sweep: the provider flip reads `previousProvider` (itself a
+    /// `sharedLibrary.` key), and the caller wipes whichever store the
+    /// flip selects.
+    static func discardAllSharedContent() async {
+        // No account → CloudKit calls would hang through network timeouts
+        // and fail anyway; skip straight to the local key clears. UI-test
+        // launches skip the probe entirely: accountStatus() can stall for
+        // the whole test in the XCUITest sandbox (the same stall the app
+        // root's degrade check skips), and offline-deterministic tests
+        // want the pure-local clears anyway.
+        let isUITest = ProcessInfo.processInfo.environment.keys
+            .contains { $0.hasPrefix("UI_TEST_") }
+        let hasAccount = isUITest ? false
+            : await SharedLibraryEngine.shared.hasICloudAccount()
+        for libraryID in SharedLibrarySettings.sharedLibraryIDs {
+            guard hasAccount else {
+                SharedLibrarySettings.reset(libraryID: libraryID)
+                continue
+            }
+            do {
+                switch SharedLibrarySettings.membership(libraryID: libraryID) {
+                case .owner:
+                    try await SharedLibraryEngine.shared.stopSharingAsOwner(libraryID: libraryID)
+                case .participant:
+                    try await SharedLibraryEngine.shared.leaveAsParticipant(libraryID: libraryID)
+                case .none:
+                    break
+                }
+            } catch {
+                // Unreachable CloudKit must not keep the share state alive.
+                SharedLibrarySettings.reset(libraryID: libraryID)
+            }
+        }
+        // Legacy single-share state on a device that has not migrated yet.
+        do {
+            switch SharedLibraryMembershipGate.membership {
+            case .owner:
+                try await SharedLibraryEngine.shared.stopSharingAsOwner()
+            case .participant:
+                try await SharedLibraryEngine.shared.leaveAsParticipant()
+            case .none:
+                break
+            }
+        } catch {
+            SharedLibrarySettings.reset()
+        }
+        // Sweep the legacy namespace even when the gate saw .none: the
+        // engine paths reset() themselves, but a .none observation (share
+        // torn down earlier, or the keys migrated away mid-flow) would
+        // otherwise leave legacy leftovers (shareTitle, tokens) behind —
+        // a factory reset must leave nothing.
+        SharedLibrarySettings.reset()
+        SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .iCloud
+        SharedLibrarySettings.previousProvider = nil
+        try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
+        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+    }
+
     /// A context on the PRIVATE store for flows that just ended a share and
     /// now operate on fresh/foreign content (delete-all, replace-import).
     @MainActor

@@ -22,6 +22,10 @@ import UIKit
     @MainActor @Test func inMemoryContainerInsertsBook() throws {
         let container = Persistence.inMemory
         let context = container.mainContext
+        // Suites share this container (LibraryDataServiceTests' note):
+        // clear rows earlier suites left so the count asserts THIS
+        // test's insert, not their leftovers.
+        try context.delete(model: Book.self)
         let book = Book(title: "Foundation")
         context.insert(book)
         try context.save()

@@ -1,6 +1,9 @@
 import Foundation
 import SwiftData
 import os.log
+import CloudKit
+import CoreData
+import UIKit
 
 /// Diagnostics for multi-library issues (fetch/insert mismatches on device).
 private let libraryLog = Logger(subsystem: "com.librarycove.app", category: "LibraryScope")
@@ -16,6 +19,30 @@ struct LibraryInfo: Identifiable, Codable, Equatable {
     var name: String
     var isActive: Bool
     var createdAt: Date
+    /// Last local rename, for CloudKit registry last-writer-wins. Optional
+    /// so pre-mirror JSON decodes; treated as `createdAt` when nil.
+    var modifiedAt: Date?
+}
+
+/// One registry entry, mirrored to the user's private CloudKit database so
+/// library names and the library list stay consistent across the owner's
+/// devices. `isActive` rides along only so a wiped-then-recreated device
+/// can adopt the other device's post-wipe library — which library is open
+/// stays a per-device choice (see the field note below).
+struct LibraryRegistryDTO: Codable, Equatable {
+    var id: String
+    var name: String
+    var createdAt: Date
+    /// The writer's local rename stamp, preferred over the CKRecord's
+    /// server modificationDate (a re-push of unchanged data gets a fresh
+    /// server stamp that must not outrank a real rename). Optional so
+    /// records mirrored before this field existed still decode.
+    var modifiedAt: Date? = nil
+    /// Which library the WRITER had open. Optional for records mirrored
+    /// before this field existed. Mirrored so a wiped-then-recreated
+    /// device adopts the other device's post-wipe library as active
+    /// instead of showing "Untitled Library".
+    var isActive: Bool? = nil
 }
 
 /// Central multi-library plumbing. Observable so views re-render when the
@@ -24,7 +51,8 @@ struct LibraryInfo: Identifiable, Codable, Equatable {
 final class LibraryScope: ObservableObject {
     static let shared = LibraryScope()
 
-    /// Posted after any registry change (create/activate/rename/delete).
+    /// Posted after any local registry change (create/activate/rename/
+    /// delete) and after a CloudKit pull folds remote registry changes in.
     /// Views observe it to refresh the active-library name.
     static let librariesChangedNotification = Notification.Name("librariesChanged")
 
@@ -45,8 +73,61 @@ final class LibraryScope: ObservableObject {
     /// Test seam: the registry file location (tests delete it between runs).
     var registryURLForTesting: URL { registryURL }
 
+    /// Test seam: read-only view of the active library id for fold tests.
+    var activeIDForTesting: String { activeID }
+
     private init() {
         activeID = loadRegistry().first(where: { $0.isActive })?.id ?? Self.defaultLibraryID
+        // Long-running sessions miss launch-time pulls: renames made on
+        // another device land only when this device foregrounds. Cheap,
+        // guarded by the in-flight flag; no account → silent no-op.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.pullRegistryFromCloud()
+                // A push that failed while offline republishes here (queued
+                // behind the pull, which folds any remote state first).
+                self?.pushRegistryToCloud()
+            }
+        }
+        // The willEnterForeground observer misses an app that stays open:
+        // subscribe to activity transitions too so switching back to an
+        // already-running iPad app picks up remote renames.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.pullRegistryFromCloud()
+            }
+        }
+        // CloudKit import events: the content store (books/notes/lists)
+        // mirrors into CloudKit continuously; when its importer lands
+        // remote rows the registry mirror may have changed remotely too.
+        // No container filter: hot-swap replaces the container and a
+        // captured reference would go stale.
+        NotificationCenter.default.addObserver(
+            forName: NSPersistentCloudKitContainer.eventChangedNotification,
+            object: nil, queue: .main
+        ) { [weak self] note in
+            guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
+                    as? NSPersistentCloudKitContainer.Event,
+                  event.type == .import,
+                  event.succeeded,
+                  event.endDate != nil else { return }
+            MainActor.assumeIsolated {
+                self?.pullRegistryFromCloud()
+            }
+        }
+        // Catch-all poll: registry-only changes produce no content import,
+        // and APNs is unreliable in the simulator. Cheap, in-flight-guarded.
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.pullRegistryFromCloud()
+            }
+        }
     }
 
     /// All libraries, oldest first.
@@ -85,7 +166,8 @@ final class LibraryScope: ObservableObject {
     func activate(_ library: LibraryInfo, context: ModelContext) {
         var registry = loadRegistry().map { info in
             LibraryInfo(id: info.id, name: info.name,
-                        isActive: info.id == library.id, createdAt: info.createdAt)
+                        isActive: info.id == library.id, createdAt: info.createdAt,
+                        modifiedAt: info.modifiedAt)
         }
         if !registry.contains(where: { $0.id == library.id }) {
             registry.append(library)
@@ -100,7 +182,8 @@ final class LibraryScope: ObservableObject {
     @discardableResult
     func create(name: String, makeActive: Bool, context: ModelContext) throws -> LibraryInfo {
         let library = LibraryInfo(id: UUID().uuidString, name: name,
-                                  isActive: false, createdAt: Date())
+                                  isActive: false, createdAt: Date(),
+                                  modifiedAt: Date())
         var registry = all(context: context)
         registry.append(library)
         if makeActive {
@@ -116,6 +199,7 @@ final class LibraryScope: ObservableObject {
         if makeActive {
             activeID = library.id
         }
+        pushRegistryToCloud()
         notifyChanged()
         return library
     }
@@ -157,6 +241,8 @@ final class LibraryScope: ObservableObject {
                 _ = ensureDefault(context: context)
             }
         }
+        deleteRegistryRecord(id: id)
+        pushRegistryToCloud()
         notifyChanged()
     }
 
@@ -166,7 +252,8 @@ final class LibraryScope: ObservableObject {
         var registry = loadRegistry()
         if registry.isEmpty {
             registry = [LibraryInfo(id: Self.defaultLibraryID, name: "",
-                                    isActive: true, createdAt: Date(timeIntervalSinceReferenceDate: 0))]
+                                    isActive: true, createdAt: Date(timeIntervalSinceReferenceDate: 0),
+                                    modifiedAt: nil)]
             saveRegistry(registry)
         }
         guard let defaultLibrary = registry.first(where: { $0.id == Self.defaultLibraryID }) else {
@@ -186,8 +273,13 @@ final class LibraryScope: ObservableObject {
     /// Remove every library (Delete everything) — content rows are cleared
     /// separately by the caller.
     func deleteAllLibraries() {
-        saveRegistry([])
+        // Drop the registry file entirely: a stale in-memory snapshot would
+        // re-publish pre-wipe libraries on the next push. The wipe itself
+        // propagates via the meta record (wipedAt) that the empty-snapshot
+        // push writes.
+        try? FileManager.default.removeItem(at: registryURL)
         activeID = Self.defaultLibraryID
+        pushRegistryToCloud()
         notifyChanged()
     }
 
@@ -215,6 +307,11 @@ final class LibraryScope: ObservableObject {
             predicate: #Predicate { $0.libraryID == oldID }
         ))) ?? [] { row.libraryID = newID }
         try? context.save()
+        // The old record key is stale after the re-id: remove it remotely so
+        // another device's pull does not re-add the old id as an unknown
+        // library, then publish the re-id'd registry.
+        deleteRegistryRecord(id: oldID)
+        pushRegistryToCloud()
         notifyChanged()
     }
 
@@ -223,7 +320,9 @@ final class LibraryScope: ObservableObject {
         var registry = loadRegistry()
         guard let idx = registry.firstIndex(where: { $0.id == id }) else { return }
         registry[idx].name = name
+        registry[idx].modifiedAt = Date()
         saveRegistry(registry)
+        pushRegistryToCloud()
         notifyChanged()
     }
 
@@ -245,7 +344,8 @@ final class LibraryScope: ObservableObject {
             return existing
         }
         let library = LibraryInfo(id: Self.defaultLibraryID, name: "",
-                                  isActive: true, createdAt: Date(timeIntervalSinceReferenceDate: 0))
+                                  isActive: true, createdAt: Date(timeIntervalSinceReferenceDate: 0),
+                                  modifiedAt: nil)
         registry.append(library)
         saveRegistry(registry)
         activeID = library.id
@@ -271,8 +371,419 @@ final class LibraryScope: ObservableObject {
         ))) ?? [] { row.libraryID = libraryID; changed = true }
         if changed { try? context.save() }
     }
+    // MARK: - Registry CloudKit mirror
 
-    // MARK: - JSON registry
+    private static let registryZoneName = "LibraryCoveRegistry"
+    private static let registryRecordType = "LibraryRegistry"
+    /// Full-set wipe marker (delete-everything). Its `wipedAt` tells pulls
+    /// which local entries predate the wipe and must be removed.
+    private static let registryMetaRecordName = "library-meta"
+    /// Fixed id for the silent zone subscription that wakes this device
+    /// when the registry mirror changes remotely (APNs → didReceiveRemote
+    /// Notification → pull).
+    private static let registrySubscriptionID = "LibraryCoveRegistryChanges"
+
+    /// Serialized mirror traffic: overlapping ops coalesce. A pending full
+    /// push replays once; pending record deletes replay before it so a
+    /// trailing push cannot resurrect what the deletes removed. Pulls
+    /// arriving mid-op queue the same way instead of being dropped.
+    private var registrySyncInFlight = false
+    private var registrySyncPending = false
+    private var registryPendingDeletes: [String] = []
+    private var registryPullPending = false
+
+    /// Pushes every library as one CKRecord into the private DB (record
+    /// name = library id, own zone, so devices converge on the same
+    /// records and a factory reset can drop the zone in one call).
+    func pushRegistryToCloud() {
+        guard !registrySyncInFlight else {
+            registrySyncPending = true
+            return
+        }
+        registrySyncInFlight = true
+        let snapshot = loadRegistry()
+        Task { @MainActor in
+            defer {
+                registrySyncInFlight = false
+                drainPendingRegistryWork()
+            }
+            let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
+            let database = container.privateCloudDatabase
+            do {
+                guard try await container.accountStatus() == .available else { return }
+                let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
+                                             ownerName: CKCurrentUserDefaultName)
+                // CloudKit does not auto-create custom zones: without this
+                // the first push/pull into the mirror zone fails
+                // (partialFailure/zoneNotFound) and names never leave the
+                // device.
+                _ = try? await database.modifyRecordZones(saving: [CKRecordZone(zoneID: zoneID)],
+                                                         deleting: [])
+                ensureRegistrySubscription()
+                // Pull-and-fold FIRST, then publish the MERGED snapshot: a
+                // stale local snapshot pushed blind would clobber a rename
+                // the other device just landed (an empty recreated default
+                // overwriting "My Library"). The wipe branch below is
+                // exempt — a wipe must overwrite everything, fold or not.
+                if !snapshot.isEmpty {
+                    if await pullAndFoldRegistry() {
+                        // The fold may have adopted a remote rename/active
+                        // switch before publish; refresh the UI now instead
+                        // of waiting for the next pull.
+                        notifyChanged()
+                    }
+                }
+                let snapshot = loadRegistry()
+                if snapshot.isEmpty {
+                    // Registry wiped locally (delete-everything): publish the
+                    // wipe as a meta record + remove every library record.
+                    // Dropping the whole zone would HIDE the wipe: devices
+                    // pulling later see an absent zone ("never pushed") and
+                    // keep — then re-publish — their stale libraries.
+                    do {
+                        let existing = try await database.records(
+                            matching: CKQuery(recordType: Self.registryRecordType,
+                                              predicate: NSPredicate(value: true)),
+                            inZoneWith: zoneID,
+                            resultsLimit: 400)
+                        let staleIDs = existing.matchResults.compactMap {
+                            if case .success(let record) = $0.1,
+                               record.recordID.recordName != Self.registryMetaRecordName {
+                                return record.recordID
+                            }
+                            return nil
+                        }
+                        if !staleIDs.isEmpty {
+                            _ = try await database.modifyRecords(saving: [], deleting: staleIDs)
+                        }
+                    } catch { /* zone empty or transient; the meta write below still lands */ }
+                    let meta = CKRecord(recordType: Self.registryRecordType,
+                                        recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
+                                                              zoneID: zoneID))
+                    meta["wipedAt"] = Date()
+                    _ = try await database.modifyRecords(saving: [meta], deleting: [],
+                                                         savePolicy: .allKeys)
+                    return
+                }
+                let records = snapshot.map { info -> CKRecord in
+                    let record = CKRecord(
+                        recordType: Self.registryRecordType,
+                        recordID: CKRecord.ID(recordName: "library-\(info.id)", zoneID: zoneID))
+                    record["dto"] = try! JSONEncoder().encode(
+                        LibraryRegistryDTO(id: info.id, name: info.name, createdAt: info.createdAt,
+                                           modifiedAt: info.modifiedAt ?? info.createdAt,
+                                           isActive: info.isActive))
+                    return record
+                }
+                // allKeys, not changedKeys: these CKRecords were synthesized
+                // locally with no server change tags, so changedKeys
+                // diffing is undefined and can silently drop the renamed
+                // dto field. allKeys overwrites the record wholesale —
+                // correct for a full-snapshot publisher.
+                _ = try await database.modifyRecords(saving: records, deleting: [],
+                                                     savePolicy: .allKeys)
+            } catch {
+                // Offline/no-account/transient failures must not surface as
+                // UI errors. No kill-switch: the willEnterForeground handler
+                // re-pushes (queued behind a fresh pull), so a failed
+                // publish retries on every foreground instead of being
+                // silenced for the whole launch.
+                libraryLog.error("Registry push failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// Pulls the mirror and folds it into the local registry. Per-library
+    /// last-writer-wins on NAME; libraries known only remotely are
+    /// appended (their synced content rows already exist here with
+    /// matching `libraryID` stamps). Local-only libraries survive — not
+    /// pushed yet, or the other device has not pulled; the next push
+    /// publishes them.
+    func pullRegistryFromCloud() {
+        guard !registrySyncInFlight else {
+            // Queue instead of dropping: a pull arriving while another op
+            // is in flight replays when it drains.
+            registryPullPending = true
+            return
+        }
+        registrySyncInFlight = true
+        Task { @MainActor in
+            defer {
+                registrySyncInFlight = false
+                drainPendingRegistryWork()
+            }
+            if await pullAndFoldRegistry() {
+                notifyChanged()
+            }
+        }
+    }
+
+    /// Fetches the registry zone and folds it into the local registry.
+    /// Shared by the pull path and the push path (which folds BEFORE
+    /// publishing so a stale local snapshot never clobbers a remote
+    /// rename). Returns whether the fold changed local state.
+    @discardableResult
+    private func pullAndFoldRegistry() async -> Bool {
+        let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
+        let database = container.privateCloudDatabase
+        do {
+            guard try await container.accountStatus() == .available else { return false }
+            let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
+                                         ownerName: CKCurrentUserDefaultName)
+            var results: (matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
+                          queryCursor: CKQueryOperation.Cursor?)
+            do {
+                results = try await database.records(
+                    matching: CKQuery(recordType: Self.registryRecordType,
+                                      predicate: NSPredicate(value: true)),
+                    inZoneWith: zoneID,
+                    resultsLimit: 200)
+            } catch let error as CKError
+            where error.isZoneNotFound || error.code == .unknownItem {
+                // Zone not created yet (fresh account / other device
+                // hasn't pushed): nothing remote to fold, not an error.
+                return false
+            }
+            // The wipe marker (delete-everything on another device):
+            // entries modified before wipedAt must be removed locally.
+            var wipedAt: Date?
+            var entries: [(dto: LibraryRegistryDTO, modDate: Date)] = []
+            for (_, result) in results.matchResults {
+                guard case .success(let record) = result else { continue }
+                if record.recordID.recordName == Self.registryMetaRecordName {
+                    wipedAt = record["wipedAt"] as? Date
+                    continue
+                }
+                guard let data = record["dto"] as? Data,
+                      let dto = try? JSONDecoder().decode(LibraryRegistryDTO.self, from: data)
+                else { continue }
+                entries.append((dto, record.modificationDate ?? .distantPast))
+            }
+            return foldRemoteRegistry(entries, wipedAt: wipedAt)
+        } catch {
+            // No account, offline, or transient CloudKit failure: stay local.
+            return false
+        }
+    }
+
+    /// Idempotently (re)registers a silent CloudKit subscription on the
+    /// registry zone so a rename/create on one device wakes the other via
+    /// APNs. Fixed subscription id — saving is an upsert; without a
+    /// subscription the remote-notification delivery path never engages.
+    private func ensureRegistrySubscription() {
+        // Fire-and-forget: runs inside the push's in-flight window, so it
+        // must NOT touch registrySyncInFlight (its defer would clobber the
+        // flag mid-push and let a queued op interleave).
+        Task { @MainActor in
+            let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
+            let database = container.privateCloudDatabase
+            do {
+                guard try await container.accountStatus() == .available else { return }
+                let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
+                                             ownerName: CKCurrentUserDefaultName)
+                let sub = CKRecordZoneSubscription(zoneID: zoneID,
+                                                   subscriptionID: Self.registrySubscriptionID)
+                let info = CKSubscription.NotificationInfo()
+                info.shouldSendContentAvailable = true
+                sub.notificationInfo = info
+                _ = try await database.modifySubscriptions(saving: [sub], deleting: [])
+            } catch {
+                libraryLog.error("Registry subscription save failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// Removes ONE library's mirror record (deletion propagation). Without
+    /// this, a deleted library's record would linger in the zone and the
+    /// other device's next pull would re-append it. Ordered BEFORE any
+    /// coalesced re-push: a full push that ran first would resurrect the
+    /// record this delete is meant to remove.
+    func deleteRegistryRecord(id: String) {
+        guard !registrySyncInFlight else {
+            registrySyncPending = true
+            // Replay the delete when the in-flight op drains, not just the
+            // push — a pending push alone would re-publish the deleted
+            // library's record.
+            registryPendingDeletes.append(id)
+            return
+        }
+        registrySyncInFlight = true
+        Task { @MainActor in
+            defer {
+                registrySyncInFlight = false
+                drainPendingRegistryWork()
+            }
+            let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
+            let database = container.privateCloudDatabase
+            do {
+                guard try await container.accountStatus() == .available else { return }
+                let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
+                                             ownerName: CKCurrentUserDefaultName)
+                let recordID = CKRecord.ID(recordName: "library-\(id)", zoneID: zoneID)
+                _ = try? await database.modifyRecords(saving: [], deleting: [recordID],
+                                                      savePolicy: .allKeys)
+            } catch {
+                // Best-effort; the other device re-pushes its own registry.
+            }
+        }
+    }
+
+    /// Runs coalesced work after an in-flight mirror op finishes: queued
+    /// record deletes first (so a trailing full push doesn't resurrect
+    /// them), then a pending full push, then a queued pull.
+    private func drainPendingRegistryWork() {
+        if !registryPendingDeletes.isEmpty {
+            let ids = registryPendingDeletes
+            registryPendingDeletes.removeAll()
+            for id in ids {
+                deleteRegistryRecord(id: id)
+            }
+            return
+        }
+        if registrySyncPending {
+            registrySyncPending = false
+            pushRegistryToCloud()
+        }
+        if registryPullPending {
+            registryPullPending = false
+            pullRegistryFromCloud()
+        }
+    }
+
+    /// Merge rules, offline-testable:
+    ///   - `wipedAt` set (delete-everything on another device): remove every
+    ///     local entry whose last modification predates the wipe; entries
+    ///     created/renamed AFTER it survive (they are post-wipe state).
+    ///   - remote entry, unknown id → append as inactive (active flag is
+    ///     per-device).
+    ///   - remote entry, same id + strictly newer mod date + different name →
+    ///     take remote name (last-writer-wins).
+    ///   - LOCAL entry with no remote counterpart → REMOVE, but only when
+    ///     the remote set is actually populated (or a wipe was seen): a
+    ///     transient empty query must not nuke local libraries.
+    /// Returns whether anything changed.
+    @discardableResult
+    func foldRemoteRegistry(_ remote: [(dto: LibraryRegistryDTO, modDate: Date)],
+                            wipedAt: Date? = nil) -> Bool {
+        var registry = loadRegistry()
+        var changed = false
+
+        // Remote entries eligible to fold in. Never an EMPTY name: a stale
+        // wiped device re-pushing "" must not clobber a remote rename or
+        // resurrect itself. Never pre-wipe state: an entry stamped before
+        // the wipe marker must not rename or re-append into a post-wipe
+        // registry. The DTO's own modifiedAt (the writer's local stamp)
+        // beats the record's server modificationDate: a re-push of
+        // unchanged data gets a fresh server stamp that must not outrank a
+        // real rename.
+        let eligible = remote.filter { entry in
+            !entry.dto.name.isEmpty
+                && (entry.dto.modifiedAt ?? entry.modDate) >= (wipedAt ?? .distantPast)
+        }
+
+        // 0. Fresh local registry (never synced, or recreated after a
+        // wipe): adopt the eligible remote state wholesale — entries,
+        // names, and the writer's active library — instead of layering
+        // remote entries on top of a synthetic empty default (which would
+        // sit "Untitled" and could itself push over the remote rename).
+        if registry.isEmpty, !eligible.isEmpty {
+            registry = eligible.map { dto, _ in
+                LibraryInfo(id: dto.id, name: dto.name,
+                            isActive: dto.isActive ?? false,
+                            createdAt: dto.createdAt,
+                            modifiedAt: dto.modifiedAt)
+            }
+            if !registry.contains(where: { $0.isActive }), let first = registry.first {
+                registry[0].isActive = true
+            }
+            if let active = registry.first(where: { $0.isActive }) {
+                activeID = active.id
+            }
+            saveRegistry(registry)
+            return true
+        }
+
+        // 1. Wipe cutoff: everything modified before the wipe is gone.
+        if let wipedAt {
+            let before = registry.count
+            registry.removeAll { ($0.modifiedAt ?? $0.createdAt) < wipedAt }
+            if registry.count != before {
+                changed = true
+            }
+        }
+
+        // 2. Remote-absence removal: a populated remote set is
+        // authoritative — entries it lacks were deleted remotely. With a
+        // wipe but an EMPTY remote set, skip: the wipe cutoff above already
+        // did the removals, and locally-created post-wipe entries have not
+        // been pushed yet (they must survive).
+        if !remote.isEmpty {
+            let before = registry.count
+            let remoteIDs = Set(remote.map { $0.dto.id })
+            registry.removeAll { !remoteIDs.contains($0.id) }
+            if registry.count != before {
+                changed = true
+            }
+        }
+
+        // 3. Everything gone → recreate the default locally; the next push
+        // publishes it as the post-wipe state. Stamped with NOW so a later
+        // wipe cutoff (wipedAt > now) can never mistake it for pre-wipe
+        // state and delete it.
+        if registry.isEmpty {
+            let library = LibraryInfo(id: Self.defaultLibraryID, name: "",
+                                      isActive: true, createdAt: Date(),
+                                      modifiedAt: Date())
+            registry = [library]
+            activeID = library.id
+            changed = true
+        } else if !registry.contains(where: { $0.isActive }) {
+            if let next = registry.first {
+                for i in registry.indices { registry[i].isActive = registry[i].id == next.id }
+                activeID = next.id
+                changed = true
+            }
+        }
+
+        // 4. Fold eligible remote entries: rename on strictly newer stamp,
+        // append on unknown ids. An empty LOCAL name is a recreated default
+        // that was never named by the user — any real remote name is
+        // authoritative for it regardless of stamp order (the recreated
+        // default's Date() stamp is newer than the other device's rename).
+        // Mirror the writer's active choice only from strictly newer
+        // records so an old one cannot flip the local user's current
+        // library.
+        for entry in eligible {
+            let dto = entry.dto
+            let remoteStamp = dto.modifiedAt ?? entry.modDate
+            if let idx = registry.firstIndex(where: { $0.id == dto.id }) {
+                let localStamp = registry[idx].modifiedAt ?? registry[idx].createdAt
+                let remoteNewer = remoteStamp > localStamp
+                if (remoteNewer || registry[idx].name.isEmpty),
+                   registry[idx].name != dto.name {
+                    registry[idx].name = dto.name
+                    registry[idx].modifiedAt = max(localStamp, remoteStamp)
+                    changed = true
+                }
+                if remoteNewer,
+                   let remoteActive = dto.isActive, remoteActive != registry[idx].isActive {
+                    registry[idx].isActive = remoteActive
+                    changed = true
+                }
+            } else {
+                registry.append(LibraryInfo(id: dto.id, name: dto.name,
+                                            isActive: dto.isActive ?? false,
+                                            createdAt: dto.createdAt,
+                                            modifiedAt: remoteStamp))
+                changed = true
+            }
+        }
+
+        if changed {
+            saveRegistry(registry)
+        }
+        return changed
+    }
 
     private func loadRegistry() -> [LibraryInfo] {
         guard let data = try? Data(contentsOf: registryURL) else { return [] }

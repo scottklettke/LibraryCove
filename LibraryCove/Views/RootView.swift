@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import CloudKit
 
 /// Root view: auth gate → main tab layout.
 struct RootView: View {
@@ -13,6 +14,14 @@ struct RootView: View {
     }
     @Environment(\.modelContext) private var modelContext
 
+    /// First device sets everything up; the next device on the same iCloud
+    /// account inherits it. A fresh store waits a short window for
+    /// CloudKit's first import to deliver the other device's member row
+    /// before falling back to the welcome flow — without this, a second
+    /// device shows the welcome form while its data is still in flight and
+    /// the user re-enters a profile that already exists in the cloud.
+    @State private var inheritCheckDone = false
+
     var body: some View {
         Group {
             if let currentUser = users.first(where: \.isActive) {
@@ -21,13 +30,24 @@ struct RootView: View {
                 // A store with members but no active user is a pre-welcome
                 // install (or post-reset) — legacy login still applies.
                 LoginView()
+            } else if !inheritCheckDone {
+                // Fresh store, still checking iCloud for an existing
+                // profile (first-import in flight).
+                ProgressView()
             } else {
                 WelcomeView(onComplete: {})
             }
         }
         .task {
+            await inheritFromICloudIfNeeded()
             resetDataIfNeeded()
             seedLibraryBooksIfNeeded(context: modelContext)
+            // Registry CloudKit mirror: fold in other devices' library
+            // names/creates/deletes BEFORE migration so the registry the
+            // user sees this launch is already converged. Pushes happen on
+            // each mutation; this pull also publishes this device's own
+            // registry once the other device has pulled.
+            LibraryScope.shared.pullRegistryFromCloud()
             // Multi-library: ensure the default library exists and legacy
             // rows (libraryID == nil) are tagged into it. Idempotent.
             LibraryScope.shared.migrateIfNeeded(context: modelContext)
@@ -86,6 +106,37 @@ struct RootView: View {
         }
     }
 
+    /// Fresh-store inheritance: when the iCloud account already holds this
+    /// user's data (set up on another device), wait for CloudKit's first
+    /// import to land the member row before showing the welcome flow.
+    /// Bounded: ~7s across three sleeps, then fall back to welcome — an
+    /// interrupted first import delivers on a later launch and this gate
+    /// re-runs whenever the store is still fresh.
+    private func inheritFromICloudIfNeeded() async {
+        // Deterministic UI tests start from an empty local store and must
+        // not sit behind the multi-second first-import wait — the welcome
+        // flow has to be up within the test's short timeouts.
+        guard ProcessInfo.processInfo.environment["UI_TEST_RESET_DATA"] != "1" else {
+            inheritCheckDone = true
+            return
+        }
+        guard users.isEmpty, !inheritCheckDone else {
+            inheritCheckDone = true
+            return
+        }
+        let status = (try? await CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
+            .accountStatus()) ?? .couldNotDetermine
+        guard status == .available else {
+            inheritCheckDone = true
+            return
+        }
+        for _ in 0..<3 {
+            try? await Task.sleep(nanoseconds: 2_500_000_000)
+            if !users.isEmpty { break }
+        }
+        inheritCheckDone = true
+    }
+
     /// Shared-library mirror stores start empty (participants pull everything
     /// from the cloud). Without a User row the login gate would cover the
     /// shared library with LoginView — seed a placeholder identity.
@@ -108,6 +159,10 @@ struct RootView: View {
     private func resetDataIfNeeded() {
         guard ProcessInfo.processInfo.environment["UI_TEST_RESET_DATA"] == "1" else { return }
         try? modelContext.delete(model: Book.self)
+        // Members too: rows persist across test classes in one process, and
+        // a renamed member from an earlier test (e.g. a greeting rename)
+        // would otherwise name this test's library "<TheirName>'s Library".
+        try? modelContext.delete(model: User.self)
         try? modelContext.save()
         LibraryScope.shared.deleteAllLibraries()
         LibraryScope.shared.migrateIfNeeded(context: modelContext)

@@ -46,8 +46,11 @@ import SwiftData
         #expect(SharedLibrarySettings.membership(libraryID: LibraryScope.defaultLibraryID) == .owner)
         #expect(SharedLibrarySettings.ownerZoneName(libraryID: LibraryScope.defaultLibraryID) == "legacy-zone")
         #expect(SharedLibrarySettings.ownerShareRecordName(libraryID: LibraryScope.defaultLibraryID) == "legacy-share-record")
-        // Legacy keys are cleared (per-library namespace holds the data).
-        #expect(SharedLibrarySettings.membership(libraryID: LibraryScope.defaultLibraryID) == .owner)
+
+        // Clean up the migrated namespace: keys persist process-wide and
+        // would otherwise poison concurrent suites (Swift Testing
+        // serializes per-suite, not the whole process).
+        SharedLibrarySettings.reset(libraryID: LibraryScope.defaultLibraryID)
     }
 
     @Test func guestRoleCannotStopSharing() throws {

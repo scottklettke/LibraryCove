@@ -721,13 +721,26 @@ final class LibraryCoveUITests: XCTestCase {
     }
 
     /// Deleting everything is guarded by two warnings and a typed confirmation.
+    /// The action lives in Settings → Advanced ("Delete everything and
+    /// start fresh") since the settings restructure.
     func testDeleteAllDataRequiresTypedConfirmation() throws {
         let app = pendingScansApp()
         app.launch()
         enterLibraryIfNeeded(app)
         app.tabBars.buttons["Settings"].tap()
 
-        let deleteRow = app.buttons["Delete all data"]
+        // The Advanced row sits near the bottom of the Settings form.
+        let advanced = app.buttons["Advanced"]
+        XCTAssertTrue(scrollWhileWaiting(app, for: advanced, timeout: 15),
+                      "Advanced row missing")
+        advanced.tap()
+
+        var scrolls = 0
+        while !app.buttons["Delete everything and start fresh"].exists && scrolls < 6 {
+            app.swipeUp()
+            scrolls += 1
+        }
+        let deleteRow = app.buttons["Delete everything and start fresh"]
         XCTAssertTrue(deleteRow.waitForExistence(timeout: 10), "Delete row missing")
 
         // First warning: a confirmation dialog must appear before anything else.
@@ -765,9 +778,11 @@ final class LibraryCoveUITests: XCTestCase {
 
         confirmButton.tap()
 
-        // Data (including the active member) is gone → back to the login screen.
-        XCTAssertTrue(app.buttons["Enter library"].waitForExistence(timeout: 10),
-                      "library was not reset — login screen expected")
+        // Everything (including the active member) is gone → the fresh-store
+        // path: the paged welcome flow, exactly as on first launch.
+        XCTAssertTrue(app.buttons["Continue"].waitForExistence(timeout: 10)
+                          || app.buttons["Enter library"].waitForExistence(timeout: 2),
+                      "library was not reset — welcome flow expected")
     }
 
     /// The Ask AI tab must exist and, with no AI engine configured on the
@@ -852,13 +867,15 @@ final class LibraryCoveUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Saved, Automatically as you type"].exists,
                       "saved-automatically feedback missing")
 
-        // Connection logs section sits below the AI section.
-        scrolls = 0
-        while !app.staticTexts["AI connection logs"].exists && scrolls < 8 {
-            app.swipeUp()
-            scrolls += 1
-        }
-        XCTAssertTrue(app.staticTexts["AI connection logs"].exists,
+        // Connection logs moved to Settings → Advanced ("AI connection logs"
+        // section header) during the settings restructure. The Advanced row
+        // sits near the bottom of the Settings form — scroll to it.
+        app.tabBars.buttons["Settings"].tap()
+        let advanced = app.buttons["Advanced"]
+        XCTAssertTrue(scrollWhileWaiting(app, for: advanced, timeout: 15),
+                      "Advanced row missing")
+        advanced.tap()
+        XCTAssertTrue(app.staticTexts["AI connection logs"].waitForExistence(timeout: 10),
                       "AI connection logs section missing")
     }
 
@@ -989,13 +1006,34 @@ final class LibraryCoveUITests: XCTestCase {
         book.press(forDuration: 1.2)
 
         // Long-press opens the action dialog (edit tags / delete copy).
+        // Match the dialog's buttons with firstMatch: the AssignValuesSheet
+        // offscreen pre-render can duplicate "Edit tags…" in the hierarchy.
         let editTags = app.buttons.matching(
             NSPredicate(format: "label CONTAINS 'Edit tags'")
         ).firstMatch
         XCTAssertTrue(editTags.waitForExistence(timeout: 5), "edit-tags menu missing")
         // Dismiss the dialog — the grouping assertions below don't need the
-        // assignment itself, only that the long-press menu works.
-        app.buttons["Cancel"].firstMatch.tap()
+        // assignment itself, only that the long-press menu works. Tapping
+        // the dialog's Cancel races SwiftUI idling under XCUITest (the
+        // dialog re-renders and the tap lands after auto-dismiss), so take
+        // the real path instead: "Edit tags…" opens the assignment sheet,
+        // whose toolbar Cancel dismisses deterministically.
+        if !app.buttons["Cancel"].firstMatch.exists {
+            book.firstMatch.press(forDuration: 1.2)
+        }
+        let editTagsButton = app.buttons["Edit tags…"].firstMatch
+        if editTagsButton.waitForExistence(timeout: 5) {
+            editTagsButton.tap()
+            let sheetCancel = app.buttons["Cancel"].firstMatch
+            XCTAssertTrue(sheetCancel.waitForExistence(timeout: 8), "sheet Cancel missing")
+            sheetCancel.tap()
+        } else {
+            let cancel = app.buttons["Cancel"].firstMatch
+            XCTAssertTrue(cancel.waitForExistence(timeout: 5), "dialog Cancel missing")
+            cancel.tap()
+        }
+        // Whatever sheet/dialog was opened must be gone before grouping.
+        XCTAssertTrue(editTags.waitForNonExistence(timeout: 5), "long-press dialog did not dismiss")
 
         // Group by Location sections the grid by physicalLocation.
         let group = app.buttons["Group"]

@@ -32,6 +32,27 @@ final class ShareAcceptDelegate: NSObject, UIApplicationDelegate {
             NotificationCenter.default.post(name: .sharedLibraryInviteArrived, object: nil)
         }
     }
+
+    /// CloudKit delivers the registry zone's silent subscription through
+    /// APNs; forward it so library renames made on one device reach an
+    /// already-running app on the other. Content-row mirroring has its own
+    /// import path; this only funnels into the registry pull.
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        application.registerForRemoteNotifications()
+        return true
+    }
+
+    func application(_ application: UIApplication,
+                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        if CKNotification(fromRemoteNotificationDictionary: userInfo) != nil {
+            Task { @MainActor in
+                LibraryScope.shared.pullRegistryFromCloud()
+            }
+        }
+        completionHandler(.noData)
+    }
 }
 
 /// Scene-level share-accept hook (the supported path since iOS 26).
@@ -74,10 +95,22 @@ struct LibraryCoveApp: App {
                         // local store until an iCloud account is actually
                         // available; the provider switch path moves data into
                         // the cloud store once the user signs in.
-                        if SyncSettings.selectedProvider == .iCloud,
-                           !(await SharedLibraryEngine.shared.hasICloudAccount()) {
-                            Persistence.degradeToLocal()
-                            container = Persistence.shared
+                        // UI tests skip the accountStatus() probe entirely:
+                        // it can stall for the whole test in the XCUITest
+                        // sandbox (empty Color.clear window), and offline-
+                        // deterministic tests want the local store anyway.
+                        // ANY UI_TEST_* env marks a test launch — the
+                        // persistence-relaunch test needs the skip without
+                        // the reset seam.
+                        if SyncSettings.selectedProvider == .iCloud {
+                            let isUITest = ProcessInfo.processInfo.environment.keys
+                                .contains { $0.hasPrefix("UI_TEST_") }
+                            let hasAccount = isUITest ? true
+                                : await SharedLibraryEngine.shared.hasICloudAccount()
+                            if !hasAccount {
+                                Persistence.degradeToLocal()
+                                container = Persistence.shared
+                            }
                         }
                         storeReady = true
                     }

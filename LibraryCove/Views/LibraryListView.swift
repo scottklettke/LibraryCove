@@ -88,6 +88,13 @@ struct LibraryListView: View {
         .navigationTitle("Libraries")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { reload() }
+        // Remote folds (another device's rename/create/delete) post
+        // librariesChangedNotification without this view leaving the
+        // screen — refresh the visible list instead of showing a stale
+        // "Untitled Library" until the next onAppear.
+        .onReceive(NotificationCenter.default.publisher(for: LibraryScope.librariesChangedNotification)) { _ in
+            reload()
+        }
         .alert("Couldn't create library", isPresented: Binding(
             get: { createError != nil },
             set: { if !$0 { createError = nil } }

@@ -34,6 +34,13 @@ final class CloudSyncMonitor: ObservableObject {
     /// Last finished event's outcome, kept briefly for the status line.
     @Published private(set) var lastError: String?
 
+    /// A batch that outlives this window (app suspended mid-upload, a
+    /// missed end notification) is treated as lost: without this the
+    /// Settings status row stays "Uploading to iCloud" forever. Long
+    /// first-sync uploads can take a while, so the window is generous —
+    /// the cost of a premature clear is only a missing progress row.
+    private static let stalenessTimeout: TimeInterval = 15 * 60
+    private var stalenessTimer: Timer?
     private var observer: NSObjectProtocol?
 
     private init() {}
@@ -55,12 +62,27 @@ final class CloudSyncMonitor: ObservableObject {
                 self.handle(event: event)
             }
         }
+        stalenessTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.clearStaleActivity()
+            }
+        }
+    }
+
+    /// Drops a running activity older than the staleness window. Events
+    /// still genuinely running re-post notifications; the next start event
+    /// re-populates the row.
+    private func clearStaleActivity() {
+        guard let activity,
+              activity.startedAt.timeIntervalSinceNow < -Self.stalenessTimeout else { return }
+        self.activity = nil
     }
 
     private func handle(event: NSPersistentCloudKitContainer.Event) {
         if event.endDate == nil {
-            // Started (or still running).
-            if activity == nil {
+            // Started (or still running). A newer start supersedes a stale
+            // shown batch (e.g. the previous batch's end was missed).
+            if activity == nil || event.startDate >= (activity?.startedAt ?? .distantPast) {
                 activity = SyncActivity(kind: kind(of: event), startedAt: event.startDate)
             }
         } else {
@@ -70,7 +92,12 @@ final class CloudSyncMonitor: ObservableObject {
             } else {
                 lastError = nil
             }
-            if activity?.kind == kind(of: event) {
+            // Clear the shown batch when its own end arrives, or when a
+            // batch that started no earlier than it ends (the shown batch's
+            // end notification was missed). An OLDER overlapping batch's
+            // end must not clear a newer in-flight one.
+            if activity?.startedAt == event.startDate
+                || event.startDate >= (activity?.startedAt ?? .distantPast) {
                 activity = nil
             }
         }

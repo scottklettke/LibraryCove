@@ -378,6 +378,17 @@ struct ImportPreviewView: View {
     /// Name of the library the import lands in. Defaults to the active
     /// library's name; changing it creates/uses a library with that name.
     @State private var targetLibraryName = ""
+    /// All libraries for the destination picker.
+    @State private var libraries: [LibraryInfo] = []
+
+    private var activeLibraryName: String {
+        let context = Persistence.shared.mainContext
+        return LibraryScope.shared.activeName(
+            context: context,
+            memberName: ((try? context.fetch(FetchDescriptor<User>(
+                predicate: #Predicate { $0.isActive }
+            ))) ?? []).first?.displayName ?? "")
+    }
 
     var body: some View {
         NavigationStack {
@@ -399,7 +410,39 @@ struct ImportPreviewView: View {
                     Text("Import into library")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    TextField("Library name", text: $targetLibraryName)
+                    Menu {
+                        ForEach(libraries) { library in
+                            Button {
+                                if !library.name.isEmpty {
+                                    targetLibraryName = library.name
+                                }
+                            } label: {
+                                let displayName = library.name.isEmpty ? "Untitled Library" : library.name
+                                if !library.name.isEmpty &&
+                                    library.name.caseInsensitiveCompare(targetLibraryName) == .orderedSame {
+                                    Label(displayName, systemImage: "checkmark")
+                                } else {
+                                    Text(displayName)
+                                }
+                            }
+                        }
+                        Divider()
+                        Button {
+                            targetLibraryName = ""
+                        } label: {
+                            Label("New library…", systemImage: "plus")
+                        }
+                    } label: {
+                        Label {
+                            Text(targetLibraryName.isEmpty
+                                 ? "Choose existing or type new…"
+                                 : targetLibraryName)
+                        } icon: {
+                            Image(systemName: "books.vertical")
+                        }
+                    }
+                    .padding(.horizontal, 24)
+                    TextField("Or type a new library name", text: $targetLibraryName)
                         .textFieldStyle(.roundedBorder)
                         .padding(.horizontal, 24)
                 }
@@ -418,7 +461,7 @@ struct ImportPreviewView: View {
                             .padding(.vertical, 8)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(isImporting)
+                    .disabled(isImporting || targetLibraryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     Button {
                         showReplaceConfirm = true
@@ -429,7 +472,7 @@ struct ImportPreviewView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(.red)
-                    .disabled(isImporting)
+                    .disabled(isImporting || targetLibraryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
 
                 if isImporting {
@@ -460,11 +503,8 @@ struct ImportPreviewView: View {
             // library — swiping the sheet away mid-run must not be possible.
             .interactiveDismissDisabled(isImporting)
             .task {
-                targetLibraryName = LibraryScope.shared.activeName(
-                    context: Persistence.shared.mainContext,
-                    memberName: ((try? Persistence.shared.mainContext.fetch(FetchDescriptor<User>(
-                        predicate: #Predicate { $0.isActive }
-                    ))) ?? []).first?.displayName ?? "")
+                libraries = LibraryScope.shared.all(context: Persistence.shared.mainContext)
+                targetLibraryName = activeLibraryName
                 loadPreview()
             }
         }

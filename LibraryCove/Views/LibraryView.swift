@@ -795,8 +795,24 @@ struct LibraryView: View {
         Set(visibleBooks.flatMap(\.tags)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
+    /// Small caption at the top of grid, list, and dashboard naming the
+    /// active library, so multi-library users always know which collection
+    /// they are browsing. `activeName` matches the toolbar switcher:
+    /// "«Member»'s Library" when the library was never named.
+    private var activeLibraryBanner: some View {
+        Text(libraryScope.activeName(context: modelContext, memberName: user.displayName))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 4)
+            .background(Color(uiColor: .secondarySystemGroupedBackground))
+            .accessibilityLabel("Active library: \(libraryScope.activeName(context: modelContext, memberName: user.displayName))")
+            .accessibilityIdentifier("activeLibraryBanner")
+    }
+
     private var libraryContent: some View {
         VStack(spacing: 0) {
+            activeLibraryBanner
             if hasActiveFilters {
                 activeFiltersBar
             }

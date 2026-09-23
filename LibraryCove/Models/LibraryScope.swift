@@ -22,6 +22,11 @@ struct LibraryInfo: Identifiable, Codable, Equatable {
     /// Last local rename, for CloudKit registry last-writer-wins. Optional
     /// so pre-mirror JSON decodes; treated as `createdAt` when nil.
     var modifiedAt: Date?
+    /// Share facts adopted from the registry mirror (nil = not shared).
+    /// The OWNER device writes these after creating/stopping a share; other
+    /// devices fold them in, so Settings renders the shared-library section
+    /// consistently across the same iCloud account's devices.
+    var share: LibraryRegistryDTO.ShareFacts?
 }
 
 /// One registry entry, mirrored to the user's private CloudKit database so
@@ -43,6 +48,19 @@ struct LibraryRegistryDTO: Codable, Equatable {
     /// device adopts the other device's post-wipe library as active
     /// instead of showing "Untitled Library".
     var isActive: Bool? = nil
+    /// Share facts written by the device that OWNS the share. Mirrored so
+    /// the user's other devices learn a library became shared (Settings
+    /// renders the management section instead of "Share Library") — and
+    /// that sharing stopped. Nil = not shared.
+    var share: ShareFacts? = nil
+
+    struct ShareFacts: Codable, Equatable {
+        /// The owner's shared zone: `LibraryCoveSharedLibrary-<hash>`.
+        var zoneName: String
+        var zoneOwnerName: String
+        /// The CKShare record's name in the owner's private DB.
+        var shareRecordName: String
+    }
 }
 
 /// Central multi-library plumbing. Observable so views re-render when the
@@ -188,7 +206,7 @@ final class LibraryScope: ObservableObject {
         var registry = loadRegistry().map { info in
             LibraryInfo(id: info.id, name: info.name,
                         isActive: info.id == library.id, createdAt: info.createdAt,
-                        modifiedAt: info.modifiedAt)
+                        modifiedAt: info.modifiedAt, share: info.share)
         }
         if !registry.contains(where: { $0.id == library.id }) {
             registry.append(library)
@@ -347,6 +365,27 @@ final class LibraryScope: ObservableObject {
         notifyChanged()
     }
 
+    /// Publishes (or clears, with `nil`) a library's share facts into the
+    /// registry and pushes. Called by the device that OWNS the share after
+    /// creating or stopping it — the account's other devices fold the facts
+    /// in on their next registry pull and render the shared-library UI
+    /// accordingly.
+    func setShareFacts(_ facts: LibraryRegistryDTO.ShareFacts?, libraryID: String) {
+        var registry = loadRegistry()
+        guard let idx = registry.firstIndex(where: { $0.id == libraryID }) else { return }
+        guard registry[idx].share != facts else { return }
+        registry[idx].share = facts
+        registry[idx].modifiedAt = Date()
+        saveRegistry(registry)
+        pushRegistryToCloud()
+        notifyChanged()
+    }
+
+    /// The registry's share facts for a library (nil = not shared).
+    func shareFacts(libraryID: String) -> LibraryRegistryDTO.ShareFacts? {
+        loadRegistry().first(where: { $0.id == libraryID })?.share
+    }
+
     /// A fetch descriptor for the ACTIVE library's books (helper for view
     /// layer call sites).
     func activeBooksDescriptor(context: ModelContext) -> FetchDescriptor<Book> {
@@ -498,7 +537,8 @@ final class LibraryScope: ObservableObject {
                     record["dto"] = try! JSONEncoder().encode(
                         LibraryRegistryDTO(id: info.id, name: info.name, createdAt: info.createdAt,
                                            modifiedAt: info.modifiedAt ?? info.createdAt,
-                                           isActive: info.isActive))
+                                           isActive: info.isActive,
+                                           share: info.share))
                     return record
                 }
                 // allKeys, not changedKeys: these CKRecords were synthesized
@@ -833,7 +873,8 @@ final class LibraryScope: ObservableObject {
                 LibraryInfo(id: dto.id, name: dto.name,
                             isActive: dto.isActive ?? false,
                             createdAt: dto.createdAt,
-                            modifiedAt: dto.modifiedAt)
+                            modifiedAt: dto.modifiedAt,
+                            share: dto.share)
             }
             if !registry.contains(where: { $0.isActive }), let _ = registry.first {
                 registry[0].isActive = true
@@ -920,11 +961,28 @@ final class LibraryScope: ObservableObject {
                     registry[idx].isActive = remoteActive
                     changed = true
                 }
+                // Share facts are owner-authored event state, not
+                // contested state. A non-nil set adopts when the remote
+                // stamp is >= local (a peer's newer NAME stamp must not
+                // clobber the owner's publish), while a CLEAR always
+                // lands: the owner re-stamps its entry when stopping, but
+                // a peer may have renamed even later — the stop must
+                // still propagate. nil-vs-nil is a no-op.
+                if let remoteFacts = dto.share {
+                    if registry[idx].share != remoteFacts, remoteStamp >= localStamp {
+                        registry[idx].share = remoteFacts
+                        changed = true
+                    }
+                } else if registry[idx].share != nil {
+                    registry[idx].share = nil
+                    changed = true
+                }
             } else {
                 registry.append(LibraryInfo(id: dto.id, name: dto.name,
                                             isActive: dto.isActive ?? false,
                                             createdAt: dto.createdAt,
-                                            modifiedAt: remoteStamp))
+                                            modifiedAt: remoteStamp,
+                                            share: dto.share))
                 changed = true
             }
         }
@@ -951,7 +1009,36 @@ final class LibraryScope: ObservableObject {
         } catch {
             libraryLog.error("LibraryScope registry save FAILED")
         }
+        adoptShareFacts(libraries)
         notifyChanged()
+    }
+
+    /// Registry share facts adopted from another device: seed this device's
+    /// SharedLibrarySettings so the share's CloudKit machinery (currentShare,
+    /// participants, the Settings management section) works identically
+    /// here. Runs on every registry save — a no-op when the local state
+    /// already matches. Only handles the OWNER side: a joined share is
+    /// always created locally by the accept flow (which writes the
+    /// participant-side keys and can't be reconstructed from facts alone).
+    private func adoptShareFacts(_ registry: [LibraryInfo]) {
+        for info in registry {
+            guard let facts = info.share else {
+                // Facts gone (owner stopped sharing): drop locally-adopted
+                // owner state so the UI reverts to "Share Library".
+                if SharedLibrarySettings.membership(libraryID: info.id) == .owner,
+                   SharedLibrarySettings.ownerZoneName(libraryID: info.id) != nil {
+                    SharedLibrarySettings.reset(libraryID: info.id)
+                    libraryLog.notice("Cleared adopted shared-library facts for \(info.id, privacy: .public)")
+                }
+                continue
+            }
+            guard SharedLibrarySettings.membership(libraryID: info.id) == .none else { continue }
+            SharedLibrarySettings.setMembership(.owner, libraryID: info.id)
+            SharedLibrarySettings.setOwnerZoneName(facts.zoneName, libraryID: info.id)
+            SharedLibrarySettings.setOwnerZoneOwnerName(facts.zoneOwnerName, libraryID: info.id)
+            SharedLibrarySettings.setOwnerShareRecordName(facts.shareRecordName, libraryID: info.id)
+            libraryLog.notice("Adopted shared-library facts for \(info.id, privacy: .public) from the registry")
+        }
     }
 
     private func notifyChanged() {

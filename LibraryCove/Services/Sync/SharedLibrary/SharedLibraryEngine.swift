@@ -420,6 +420,15 @@ final class SharedLibraryEngine: ObservableObject {
         SharedLibrarySettings.setShareURLString(share.url?.absoluteString, libraryID: libraryID)
         SharedLibrarySettings.shareTitle = title
         SharedLibrarySettings.setMembership(.owner, libraryID: libraryID)
+        // Mirror the share facts into the registry so the account's OTHER
+        // devices learn this library is shared (Settings renders the
+        // management section instead of "Share Library"). The push retries
+        // on every foreground via willEnterForeground.
+        LibraryScope.shared.setShareFacts(
+            LibraryRegistryDTO.ShareFacts(zoneName: zoneID.zoneName,
+                                          zoneOwnerName: zoneID.ownerName,
+                                          shareRecordName: share.recordID.recordName),
+            libraryID: libraryID)
         refreshParticipants(from: share)
         return share
     }
@@ -895,8 +904,12 @@ final class SharedLibraryEngine: ObservableObject {
             _ = try? await container.privateCloudDatabase
                 .modifyRecordZones(saving: [], deleting: [zoneID])
         }
+        let libraryID = LibraryScope.defaultLibraryID
         SharedLibrarySettings.reset()
         members = []
+        // Mirror the stop into the registry so other devices drop their
+        // shared-library UI for this library too.
+        LibraryScope.shared.setShareFacts(nil, libraryID: libraryID)
     }
 
     // MARK: - Leaving / stopping (per library)
@@ -913,6 +926,9 @@ final class SharedLibraryEngine: ObservableObject {
                 .modifyRecordZones(saving: [], deleting: [zoneID])
         }
         SharedLibrarySettings.reset(libraryID: libraryID)
+        // Mirror the stop into the registry so other devices drop their
+        // shared-library UI for this library too.
+        LibraryScope.shared.setShareFacts(nil, libraryID: libraryID)
     }
 
     /// Participant leaves ONE library's share: removes self from that share,

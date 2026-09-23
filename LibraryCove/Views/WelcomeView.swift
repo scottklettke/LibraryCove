@@ -127,8 +127,15 @@ struct WelcomeView: View {
         let chosenName = trimmedLibrary.isEmpty
             ? SharedLibrarySettings.defaultShareTitle(for: trimmedName)
             : trimmedLibrary
-        LibraryScope.shared.rename(id: LibraryScope.defaultLibraryID, to: chosenName,
-                            context: modelContext)
+        // Only stamp the library name when the user actually typed one, or
+        // the local default has no name yet. Blindly renaming here gives
+        // the default a NOW stamp that outranks a rename the user made on
+        // ANOTHER device — onboarding would silently undo it.
+        let localName = LibraryScope.shared.active(context: modelContext)?.name
+        if libraryNameEdited || (localName ?? "").isEmpty {
+            LibraryScope.shared.rename(id: LibraryScope.defaultLibraryID, to: chosenName,
+                                context: modelContext)
+        }
         SharedLibrarySettings.preferredShareTitle = chosenName
         try? modelContext.save()
         onComplete()

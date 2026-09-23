@@ -73,6 +73,27 @@ final class LibraryScope: ObservableObject {
     /// Test seam: the registry file location (tests delete it between runs).
     var registryURLForTesting: URL { registryURL }
 
+    /// Persisted server change token for the registry zone (per-device,
+    /// UserDefaults). Non-nil = next pull is a delta fetch; cleared on any
+    /// failure so the next pull falls back to a full enumeration.
+    private static let registryChangeTokenKey = "LibraryCoveRegistryChangeToken"
+
+    private static func loadRegistryChangeToken() -> CKServerChangeToken? {
+        guard let data = UserDefaults.standard.data(forKey: registryChangeTokenKey) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self,
+                                                       from: data) as? CKServerChangeToken
+    }
+
+    private static func saveRegistryChangeToken(_ token: CKServerChangeToken?) {
+        guard let token else {
+            UserDefaults.standard.removeObject(forKey: registryChangeTokenKey)
+            return
+        }
+        let data = try? NSKeyedArchiver.archivedData(withRootObject: token,
+                                                     requiringSecureCoding: true)
+        UserDefaults.standard.set(data, forKey: registryChangeTokenKey)
+    }
+
     /// Test seam: read-only view of the active library id for fold tests.
     var activeIDForTesting: String { activeID }
 
@@ -440,21 +461,19 @@ final class LibraryScope: ObservableObject {
                     // Dropping the whole zone would HIDE the wipe: devices
                     // pulling later see an absent zone ("never pushed") and
                     // keep — then re-publish — their stale libraries.
+                    // Enumerate via a one-shot FULL zone-changes fetch (no
+                    // token, no fold, no persistence): same Production-safe
+                    // path as the pull, no queryable indexes required.
                     do {
-                        let existing = try await database.records(
-                            matching: CKQuery(recordType: Self.registryRecordType,
-                                              predicate: NSPredicate(value: true)),
-                            inZoneWith: zoneID,
-                            resultsLimit: 400)
-                        let staleIDs = existing.matchResults.compactMap {
-                            if case .success(let record) = $0.1,
-                               record.recordID.recordName != Self.registryMetaRecordName {
-                                return record.recordID
-                            }
-                            return nil
+                        let fetched = try await fetchRegistryZone(previousToken: nil)
+                        let staleIDs = fetched.entries.map { entry in
+                            CKRecord.ID(recordName: "library-\(entry.dto.id)", zoneID: zoneID)
                         }
-                        if !staleIDs.isEmpty {
-                            _ = try await database.modifyRecords(saving: [], deleting: staleIDs)
+                        if !staleIDs.isEmpty || fetched.wipedAt != nil {
+                            var deleting = staleIDs
+                            deleting.append(CKRecord.ID(
+                                recordName: Self.registryMetaRecordName, zoneID: zoneID))
+                            _ = try await database.modifyRecords(saving: [], deleting: deleting)
                         }
                     } catch { /* zone empty or transient; the meta write below still lands */ }
                     let meta = CKRecord(recordType: Self.registryRecordType,
@@ -465,7 +484,14 @@ final class LibraryScope: ObservableObject {
                                                          savePolicy: .allKeys)
                     return
                 }
-                let records = snapshot.map { info -> CKRecord in
+                let records = snapshot.compactMap { info -> CKRecord? in
+                    // An empty name is a locally-recreated default that was
+                    // never named by the user. Publishing it with allKeys
+                    // overwrites the record server-side and ERASES the
+                    // other device's rename (the two devices then ping-pong
+                    // empty names forever). Skip it — the fold's empty-
+                    // local-name repair adopts the remote name instead.
+                    guard !info.name.isEmpty else { return nil }
                     let record = CKRecord(
                         recordType: Self.registryRecordType,
                         recordID: CKRecord.ID(recordName: "library-\(info.id)", zoneID: zoneID))
@@ -482,6 +508,14 @@ final class LibraryScope: ObservableObject {
                 // correct for a full-snapshot publisher.
                 _ = try await database.modifyRecords(saving: records, deleting: [],
                                                      savePolicy: .allKeys)
+                // The remote set is now populated and authoritative (fold
+                // step 2 removes whatever it lacks). A stale wipe marker
+                // would permanently filter every later pull, so drop it.
+                if !records.isEmpty {
+                    let metaID = CKRecord.ID(recordName: Self.registryMetaRecordName,
+                                             zoneID: zoneID)
+                    _ = try? await database.modifyRecords(saving: [], deleting: [metaID])
+                }
             } catch {
                 // Offline/no-account/transient failures must not surface as
                 // UI errors. No kill-switch: the willEnterForeground handler
@@ -518,50 +552,136 @@ final class LibraryScope: ObservableObject {
         }
     }
 
+    /// One `CKFetchRecordZoneChangesOperation` pass over the registry zone.
+    /// Caller decides what the collected records mean (delta fold vs. wipe
+    /// enumeration). Pass `previousToken: nil` for a full enumeration. On
+    /// success returns the fresh server token; the caller decides whether
+    /// to persist it.
+    private struct RegistryZoneFetch {
+        var entries: [(dto: LibraryRegistryDTO, modDate: Date)] = []
+        var deletions: [String] = []
+        var wipedAt: Date?
+        var serverChangeToken: CKServerChangeToken?
+    }
+
+    private func fetchRegistryZone(previousToken: CKServerChangeToken?) async throws -> RegistryZoneFetch {
+        let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
+        let database = container.privateCloudDatabase
+        let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
+                                     ownerName: CKCurrentUserDefaultName)
+        let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
+        config.previousServerChangeToken = previousToken
+        // Zone holds a handful of records; a limit guards against a
+        // runaway loop.
+        config.resultsLimit = 400
+        let op = CKFetchRecordZoneChangesOperation(
+            recordZoneIDs: [zoneID],
+            configurationsByRecordZoneID: [zoneID: config])
+
+        var fetched = RegistryZoneFetch()
+
+        op.recordWasChangedBlock = { recordID, result in
+            guard case .success(let record) = result else {
+                // Never re-fetched while the change token persists: log so
+                // a persistent per-record failure is visible in Console.
+                let failure = (try? Result<CKRecord, any Error>.get(result)) as? Error
+                libraryLog.error("Registry record fetch failed (\(recordID.recordName, privacy: .public)): \(String(describing: failure), privacy: .public)")
+                return
+            }
+            if record.recordID.recordName == Self.registryMetaRecordName {
+                fetched.wipedAt = record["wipedAt"] as? Date
+                return
+            }
+            guard let data = record["dto"] as? Data,
+                  let dto = try? JSONDecoder().decode(LibraryRegistryDTO.self, from: data)
+            else {
+                // Same: a corrupt/partial dto is dropped permanently under
+                // a persisted token — surface it.
+                libraryLog.error("Registry record has undecodable dto (\(record.recordID.recordName, privacy: .public))")
+                return
+            }
+            fetched.entries.append((dto, record.modificationDate ?? .distantPast))
+        }
+        op.recordWithIDWasDeletedBlock = { recordID, _ in
+            // "library-<uuid>" record gone remotely → that library was
+            // deleted on another device.
+            let name = recordID.recordName
+            if name.hasPrefix("library-"), name != Self.registryMetaRecordName {
+                fetched.deletions.append(String(name.dropFirst("library-".count)))
+            }
+        }
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            var resumed = false
+            let finish: (Result<Void, Error>) -> Void = { outcome in
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(with: outcome)
+            }
+            op.recordZoneFetchResultBlock = { _, result in
+                if case .success(let payload) = result {
+                    fetched.serverChangeToken = payload.serverChangeToken
+                } else if case .failure(let error) = result {
+                    // Per-zone errors surface here too (zoneNotFound,
+                    // tokenExpired); resume so the caller can classify
+                    // them.
+                    finish(.failure(error))
+                }
+            }
+            op.fetchRecordZoneChangesResultBlock = { result in
+                switch result {
+                case .failure(let error):
+                    finish(.failure(error))
+                case .success:
+                    finish(.success(()))
+                }
+            }
+            database.add(op)
+        }
+
+        return fetched
+    }
+
     /// Fetches the registry zone and folds it into the local registry.
     /// Shared by the pull path and the push path (which folds BEFORE
     /// publishing so a stale local snapshot never clobbers a remote
     /// rename). Returns whether the fold changed local state.
+    ///
+    /// Uses `CKFetchRecordZoneChangesOperation` (not CKQuery): record-type
+    /// queries need promoted queryable indexes and fail in Production if
+    /// never promoted — every pull error would otherwise be swallowed and
+    /// the registry never converges. A persisted server change token makes
+    /// follow-up pulls deltas; any failure clears it so the next pull
+    /// re-enumerates the whole (tiny) zone.
     @discardableResult
     private func pullAndFoldRegistry() async -> Bool {
         let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-        let database = container.privateCloudDatabase
         do {
             guard try await container.accountStatus() == .available else { return false }
-            let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
-                                         ownerName: CKCurrentUserDefaultName)
-            var results: (matchResults: [(CKRecord.ID, Result<CKRecord, any Error>)],
-                          queryCursor: CKQueryOperation.Cursor?)
-            do {
-                results = try await database.records(
-                    matching: CKQuery(recordType: Self.registryRecordType,
-                                      predicate: NSPredicate(value: true)),
-                    inZoneWith: zoneID,
-                    resultsLimit: 200)
-            } catch let error as CKError
-            where error.isZoneNotFound || error.code == .unknownItem {
-                // Zone not created yet (fresh account / other device
-                // hasn't pushed): nothing remote to fold, not an error.
-                return false
-            }
-            // The wipe marker (delete-everything on another device):
-            // entries modified before wipedAt must be removed locally.
-            var wipedAt: Date?
-            var entries: [(dto: LibraryRegistryDTO, modDate: Date)] = []
-            for (_, result) in results.matchResults {
-                guard case .success(let record) = result else { continue }
-                if record.recordID.recordName == Self.registryMetaRecordName {
-                    wipedAt = record["wipedAt"] as? Date
-                    continue
-                }
-                guard let data = record["dto"] as? Data,
-                      let dto = try? JSONDecoder().decode(LibraryRegistryDTO.self, from: data)
-                else { continue }
-                entries.append((dto, record.modificationDate ?? .distantPast))
-            }
-            return foldRemoteRegistry(entries, wipedAt: wipedAt)
+            let savedToken = Self.loadRegistryChangeToken()
+            let fetched = try await fetchRegistryZone(previousToken: savedToken)
+
+            Self.saveRegistryChangeToken(fetched.serverChangeToken)
+
+            // A delta fetch reports only what changed since the token; the
+            // fold's wholesale-adoption / absence-removal / default-recreation
+            // steps assume a FULL remote set. Deltas only rename/append/apply
+            // deletions.
+            let fullSnapshot = (savedToken == nil)
+            return foldRemoteRegistry(fetched.entries, wipedAt: fetched.wipedAt,
+                                      deletions: fetched.deletions,
+                                      fullSnapshot: fullSnapshot)
+        } catch let error as CKError
+        where error.isZoneNotFound || error.code == .unknownItem {
+            // Zone not created yet (fresh account / other device hasn't
+            // pushed): nothing remote to fold, not an error.
+            Self.saveRegistryChangeToken(nil)
+            return false
         } catch {
-            // No account, offline, or transient CloudKit failure: stay local.
+            // No account, offline, or transient CloudKit failure: stay
+            // local, drop the token so the next pull re-enumerates fully.
+            Self.saveRegistryChangeToken(nil)
+            libraryLog.error("Registry pull failed: \(String(describing: error), privacy: .public)")
             return false
         }
     }
@@ -661,12 +781,32 @@ final class LibraryScope: ObservableObject {
     ///   - LOCAL entry with no remote counterpart → REMOVE, but only when
     ///     the remote set is actually populated (or a wipe was seen): a
     ///     transient empty query must not nuke local libraries.
+    ///   - `deletions`: record names (library ids) that were deleted
+    ///     remotely since the last fetch — applied on delta fetches, where
+    ///     absence-removal against a partial remote set would nuke
+    ///     everything else.
+    ///   - `fullSnapshot`: false when the fetch was a token-based DELTA.
+    ///     The wholesale-adoption, absence-removal, and default-recreation
+    ///     steps assume the remote set is complete; on a delta only
+    ///     wipe-cutoff, deletions, and the LWW rename/append pass run.
     /// Returns whether anything changed.
     @discardableResult
     func foldRemoteRegistry(_ remote: [(dto: LibraryRegistryDTO, modDate: Date)],
-                            wipedAt: Date? = nil) -> Bool {
+                            wipedAt: Date? = nil,
+                            deletions: [String] = [],
+                            fullSnapshot: Bool = true) -> Bool {
         var registry = loadRegistry()
         var changed = false
+
+        // Apply remote deletions FIRST so a library deleted elsewhere is
+        // gone before any other step can rename or promote it.
+        if !deletions.isEmpty {
+            let before = registry.count
+            registry.removeAll { deletions.contains($0.id) }
+            if registry.count != before {
+                changed = true
+            }
+        }
 
         // Remote entries eligible to fold in. Never an EMPTY name: a stale
         // wiped device re-pushing "" must not clobber a remote rename or
@@ -686,14 +826,15 @@ final class LibraryScope: ObservableObject {
         // names, and the writer's active library — instead of layering
         // remote entries on top of a synthetic empty default (which would
         // sit "Untitled" and could itself push over the remote rename).
-        if registry.isEmpty, !eligible.isEmpty {
+        // FULL fetches only: a delta by definition carries a subset.
+        if fullSnapshot, registry.isEmpty, !eligible.isEmpty {
             registry = eligible.map { dto, _ in
                 LibraryInfo(id: dto.id, name: dto.name,
                             isActive: dto.isActive ?? false,
                             createdAt: dto.createdAt,
                             modifiedAt: dto.modifiedAt)
             }
-            if !registry.contains(where: { $0.isActive }), let first = registry.first {
+            if !registry.contains(where: { $0.isActive }), let _ = registry.first {
                 registry[0].isActive = true
             }
             if let active = registry.first(where: { $0.isActive }) {
@@ -716,8 +857,9 @@ final class LibraryScope: ObservableObject {
         // authoritative — entries it lacks were deleted remotely. With a
         // wipe but an EMPTY remote set, skip: the wipe cutoff above already
         // did the removals, and locally-created post-wipe entries have not
-        // been pushed yet (they must survive).
-        if !remote.isEmpty {
+        // been pushed yet (they must survive). FULL fetches only: a delta
+        // carries only what changed, so absence there means nothing.
+        if fullSnapshot, !remote.isEmpty {
             let before = registry.count
             let remoteIDs = Set(remote.map { $0.dto.id })
             registry.removeAll { !remoteIDs.contains($0.id) }
@@ -729,15 +871,22 @@ final class LibraryScope: ObservableObject {
         // 3. Everything gone → recreate the default locally; the next push
         // publishes it as the post-wipe state. Stamped with NOW so a later
         // wipe cutoff (wipedAt > now) can never mistake it for pre-wipe
-        // state and delete it.
-        if registry.isEmpty {
+        // state and delete it. FULL fetches only — a delta that happens to
+        // carry no changed records must not invent a phantom default.
+        if fullSnapshot, registry.isEmpty {
             let library = LibraryInfo(id: Self.defaultLibraryID, name: "",
                                       isActive: true, createdAt: Date(),
                                       modifiedAt: Date())
             registry = [library]
             activeID = library.id
             changed = true
-        } else if !registry.contains(where: { $0.isActive }) {
+        }
+
+        // 3b. No active library (e.g. deletions removed the active one, or
+        // a rename promoted another device's choice): promote the first
+        // remaining entry. Runs on deltas too — deletions there can strand
+        // the active flag.
+        if !registry.isEmpty, !registry.contains(where: { $0.isActive }) {
             if let next = registry.first {
                 for i in registry.indices { registry[i].isActive = registry[i].id == next.id }
                 activeID = next.id

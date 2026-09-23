@@ -210,4 +210,80 @@ import SwiftData
             #expect(libs.first?.name == "Kept")
         }
     }
+
+    // MARK: - Delta fetches (fullSnapshot: false)
+
+    @Test func deltaAppliesRenameByStamp() throws {
+        try withSandboxedRegistry {
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            seed([
+                LibraryInfo(id: "lib-1", name: "Old", isActive: true,
+                            createdAt: base, modifiedAt: base),
+                LibraryInfo(id: "lib-2", name: "Untouched", isActive: false,
+                            createdAt: base, modifiedAt: base),
+            ])
+            // Delta carries ONLY the changed record; lib-2's absence means
+            // nothing on a delta.
+            let dto = LibraryRegistryDTO(id: "lib-1", name: "Renamed Remotely",
+                                         createdAt: base, modifiedAt: base.addingTimeInterval(60))
+            #expect(LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(60))],
+                                                           fullSnapshot: false))
+            let libs = load()
+            #expect(libs.first { $0.id == "lib-1" }?.name == "Renamed Remotely")
+            // Untouched entry survives — absence-removal must NOT run.
+            #expect(libs.count == 2)
+            #expect(libs.first { $0.id == "lib-2" }?.name == "Untouched")
+        }
+    }
+
+    @Test func deltaAppliesRemoteDeletionAndPromotesActive() throws {
+        try withSandboxedRegistry {
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            seed([
+                LibraryInfo(id: "lib-gone", name: "Deleted Elsewhere", isActive: true,
+                            createdAt: base, modifiedAt: base),
+                LibraryInfo(id: "lib-2", name: "Survivor", isActive: false,
+                            createdAt: base, modifiedAt: base),
+            ])
+            #expect(LibraryScope.shared.foldRemoteRegistry([], deletions: ["lib-gone"],
+                                                           fullSnapshot: false))
+            let libs = load()
+            #expect(libs.count == 1)
+            #expect(libs.first?.id == "lib-2")
+            // The deleted library was active: the survivor is promoted.
+            #expect(libs.first?.isActive == true)
+        }
+    }
+
+    @Test func deltaNeverRecreatesDefault() throws {
+        try withSandboxedRegistry {
+            // Empty registry + delta with no entries: step 3 (default
+            // recreation) is full-fetch-only, so no phantom default — the
+            // push path will publish local state instead.
+            seed([])
+            #expect(!LibraryScope.shared.foldRemoteRegistry([], fullSnapshot: false))
+            #expect(load().isEmpty)
+        }
+    }
+
+    @Test func deltaAppendsRemoteOnlyLibrary() throws {
+        try withSandboxedRegistry {
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
+                              createdAt: base, modifiedAt: base)])
+            // A NEW library created remotely arrives via a delta.
+            let dto = LibraryRegistryDTO(id: "new-lib", name: "Reading 2026",
+                                         createdAt: base.addingTimeInterval(30),
+                                         modifiedAt: base.addingTimeInterval(30))
+            #expect(LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(30))],
+                                                           fullSnapshot: false))
+            let libs = load()
+            #expect(libs.count == 2)
+            #expect(libs.first { $0.id == "new-lib" }?.name == "Reading 2026")
+            // The appended remote library is NOT active here (per-device
+            // active flag is untouched by an append).
+            #expect(libs.first { $0.id == "new-lib" }?.isActive == false)
+            #expect(libs.first { $0.id == "lib-1" }?.isActive == true)
+        }
+    }
 }

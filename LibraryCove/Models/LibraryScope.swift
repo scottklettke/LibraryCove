@@ -332,6 +332,11 @@ final class LibraryScope: ObservableObject {
         // propagates via the meta record (wipedAt) that the empty-snapshot
         // push writes.
         try? FileManager.default.removeItem(at: registryURL)
+        // The wipe invalidates every server record the token delta-tracks:
+        // keeping the token would make the next pull a DELTA against
+        // pre-wipe state, replaying stale changes over the freshly created
+        // post-wipe default (renames vanished after "Delete everything").
+        Self.saveRegistryChangeToken(nil)
         activeID = Self.defaultLibraryID
         pushRegistryToCloud()
         notifyChanged()
@@ -540,7 +545,12 @@ final class LibraryScope: ObservableObject {
                                 recordName: Self.registryMetaRecordName, zoneID: zoneID))
                             _ = try await database.modifyRecords(saving: [], deleting: deleting)
                         }
-                    } catch { /* zone empty or transient; the meta write below still lands */ }
+                    } catch {
+                        // A failed enumeration leaves the stale records in
+                        // the zone (resurrection fuel for later pulls);
+                        // surface it instead of swallowing.
+                        libraryLog.error("Wipe enumeration failed: \(String(describing: error), privacy: .public)")
+                    }
                     let meta = CKRecord(recordType: Self.registryRecordType,
                                         recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
                                                               zoneID: zoneID))

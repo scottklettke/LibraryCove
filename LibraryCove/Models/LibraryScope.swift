@@ -584,8 +584,9 @@ final class LibraryScope: ObservableObject {
             guard case .success(let record) = result else {
                 // Never re-fetched while the change token persists: log so
                 // a persistent per-record failure is visible in Console.
-                let failure = (try? Result<CKRecord, any Error>.get(result)) as? Error
-                libraryLog.error("Registry record fetch failed (\(recordID.recordName, privacy: .public)): \(String(describing: failure), privacy: .public)")
+                if case .failure(let error) = result {
+                    libraryLog.error("Registry record fetch failed (\(recordID.recordName, privacy: .public)): \(String(describing: error), privacy: .public)")
+                }
                 return
             }
             if record.recordID.recordName == Self.registryMetaRecordName {

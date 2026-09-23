@@ -406,4 +406,51 @@ import SwiftData
             #expect(load().first { $0.id == "lib-1" }?.share == nil)
         }
     }
+
+    @Test func activatePreservesShareClocks() throws {
+        try withSandboxedRegistry {
+            // Library switches rebuild every registry entry through
+            // activate(); dropping the stop event there would resurrect the
+            // dead share on the next pull. Both clocks must survive — and
+            // locally-adopted owner keys must not re-seed.
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            let publish = base.addingTimeInterval(60)
+            let stop = base.addingTimeInterval(120)
+            let facts = LibraryRegistryDTO.ShareFacts(
+                zoneName: "z", zoneOwnerName: "o", shareRecordName: "s",
+                stampedAt: publish)
+            seed([
+                LibraryInfo(id: "lib-1", name: "Shared One", isActive: true,
+                            createdAt: base, modifiedAt: base.addingTimeInterval(90),
+                            shareClearedAt: stop),
+                LibraryInfo(id: "lib-2", name: "Other", isActive: false,
+                            createdAt: base, modifiedAt: base),
+            ])
+            // Adopted owner keys from a pre-clear pull on this device.
+            SharedLibrarySettings.setMembership(.owner, libraryID: "lib-1")
+            SharedLibrarySettings.setOwnerZoneName("z", libraryID: "lib-1")
+            LibraryScope.shared.activate(
+                LibraryInfo(id: "lib-2", name: "Other", isActive: true,
+                            createdAt: base, modifiedAt: base),
+                context: Persistence.shared.mainContext)
+            let lib1 = load().first { $0.id == "lib-1" }
+            #expect(lib1?.shareClearedAt == stop)
+            #expect(lib1?.share == nil)
+            // adoptShareFacts dropped the stale adopted keys (share is nil).
+            #expect(SharedLibrarySettings.membership(libraryID: "lib-1") == .none)
+            // The clear event survives a later pull of the stale publish.
+            // lib-2 must be in the remote set too — absence-removal would
+            // otherwise return true for the wrong reason.
+            let dto = LibraryRegistryDTO(id: "lib-1", name: "Shared One",
+                                         createdAt: base,
+                                         modifiedAt: base.addingTimeInterval(600),
+                                         share: facts)
+            let dto2 = LibraryRegistryDTO(id: "lib-2", name: "Other",
+                                          createdAt: base,
+                                          modifiedAt: base)
+            #expect(!LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(600)),
+                                                             (dto2, base)]))
+            #expect(load().first { $0.id == "lib-1" }?.share == nil)
+        }
+    }
 }

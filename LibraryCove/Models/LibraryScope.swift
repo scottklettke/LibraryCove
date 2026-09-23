@@ -220,7 +220,8 @@ final class LibraryScope: ObservableObject {
         var registry = loadRegistry().map { info in
             LibraryInfo(id: info.id, name: info.name,
                         isActive: info.id == library.id, createdAt: info.createdAt,
-                        modifiedAt: info.modifiedAt, share: info.share)
+                        modifiedAt: info.modifiedAt, share: info.share,
+                        shareClearedAt: info.shareClearedAt)
         }
         if !registry.contains(where: { $0.id == library.id }) {
             registry.append(library)

@@ -27,6 +27,8 @@ struct LibraryInfo: Identifiable, Codable, Equatable {
     /// devices fold them in, so Settings renders the shared-library section
     /// consistently across the same iCloud account's devices.
     var share: LibraryRegistryDTO.ShareFacts?
+    /// The owner's stop-sharing event time (see LibraryRegistryDTO).
+    var shareClearedAt: Date?
 }
 
 /// One registry entry, mirrored to the user's private CloudKit database so
@@ -51,8 +53,16 @@ struct LibraryRegistryDTO: Codable, Equatable {
     /// Share facts written by the device that OWNS the share. Mirrored so
     /// the user's other devices learn a library became shared (Settings
     /// renders the management section instead of "Share Library") — and
-    /// that sharing stopped. Nil = not shared.
+    /// that sharing stopped. Nil = not shared. Ordered by `stampedAt`
+    /// (below), NOT the entry's modifiedAt: renames move that stamp, share
+    /// events must not be ordered by them.
     var share: ShareFacts? = nil
+    /// The owner's stop-sharing event time. Set (with `share == nil`)
+    /// when sharing stops; peers preserve it. Ordering share events needs
+    /// this separate clock: a peer's rename re-publishes an old `share`
+    /// block, and the entry's modifiedAt cannot tell that publish from
+    /// the owner's later stop.
+    var shareClearedAt: Date? = nil
 
     struct ShareFacts: Codable, Equatable {
         /// The owner's shared zone: `LibraryCoveSharedLibrary-<hash>`.
@@ -60,6 +70,10 @@ struct LibraryRegistryDTO: Codable, Equatable {
         var zoneOwnerName: String
         /// The CKShare record's name in the owner's private DB.
         var shareRecordName: String
+        /// When the owner published these facts. Peers adopt the block
+        /// VERBATIM (clock included) and never re-stamp it — so a peer's
+        /// later rename can never out-rank the owner's stop event.
+        var stampedAt: Date
     }
 }
 
@@ -369,13 +383,24 @@ final class LibraryScope: ObservableObject {
     /// registry and pushes. Called by the device that OWNS the share after
     /// creating or stopping it — the account's other devices fold the facts
     /// in on their next registry pull and render the shared-library UI
-    /// accordingly.
+    /// accordingly. Stamps the SHARE EVENT's own clock (`stampedAt` /
+    /// `shareClearedAt`), never the entry's modifiedAt: peers re-publish
+    /// these blocks verbatim, and their renames must never out-rank the
+    /// owner's later stop event.
     func setShareFacts(_ facts: LibraryRegistryDTO.ShareFacts?, libraryID: String) {
         var registry = loadRegistry()
         guard let idx = registry.firstIndex(where: { $0.id == libraryID }) else { return }
-        guard registry[idx].share != facts else { return }
-        registry[idx].share = facts
-        registry[idx].modifiedAt = Date()
+        if let facts {
+            guard registry[idx].share?.stampedAt != facts.stampedAt
+                || registry[idx].share != facts else { return }
+            registry[idx].share = facts
+            registry[idx].shareClearedAt = nil
+        } else {
+            let now = Date()
+            guard registry[idx].share != nil || registry[idx].shareClearedAt != now else { return }
+            registry[idx].share = nil
+            registry[idx].shareClearedAt = now
+        }
         saveRegistry(registry)
         pushRegistryToCloud()
         notifyChanged()
@@ -538,7 +563,8 @@ final class LibraryScope: ObservableObject {
                         LibraryRegistryDTO(id: info.id, name: info.name, createdAt: info.createdAt,
                                            modifiedAt: info.modifiedAt ?? info.createdAt,
                                            isActive: info.isActive,
-                                           share: info.share))
+                                           share: info.share,
+                                           shareClearedAt: info.shareClearedAt))
                     return record
                 }
                 // allKeys, not changedKeys: these CKRecords were synthesized
@@ -874,7 +900,8 @@ final class LibraryScope: ObservableObject {
                             isActive: dto.isActive ?? false,
                             createdAt: dto.createdAt,
                             modifiedAt: dto.modifiedAt,
-                            share: dto.share)
+                            share: dto.share,
+                            shareClearedAt: dto.shareClearedAt)
             }
             if !registry.contains(where: { $0.isActive }), let _ = registry.first {
                 registry[0].isActive = true
@@ -961,28 +988,41 @@ final class LibraryScope: ObservableObject {
                     registry[idx].isActive = remoteActive
                     changed = true
                 }
-                // Share facts are owner-authored event state, not
-                // contested state. A non-nil set adopts when the remote
-                // stamp is >= local (a peer's newer NAME stamp must not
-                // clobber the owner's publish), while a CLEAR always
-                // lands: the owner re-stamps its entry when stopping, but
-                // a peer may have renamed even later — the stop must
-                // still propagate. nil-vs-nil is a no-op.
+                // Share events are ordered by their OWN clock, never the
+                // entry's modifiedAt (renames move that; share events must
+                // not be ordered by them). A remote SHARE block adopts when
+                // its stampedAt beats the local share clock; a remote
+                // CLEAR (nil share) adopts when its shareClearedAt beats
+                // the local share clock. Peers adopt the owner's block
+                // VERBATIM — clocks included — so a peer re-publishing
+                // after a rename can never out-rank the owner's later
+                // stop event. Local share clock = stampedAt of the held
+                // facts, else shareClearedAt, else none.
+                let localShareClock = registry[idx].share?.stampedAt
+                    ?? registry[idx].shareClearedAt
                 if let remoteFacts = dto.share {
-                    if registry[idx].share != remoteFacts, remoteStamp >= localStamp {
+                    let remoteShareClock = remoteFacts.stampedAt
+                    if remoteShareClock > (localShareClock ?? .distantPast),
+                       registry[idx].share != remoteFacts {
                         registry[idx].share = remoteFacts
+                        registry[idx].shareClearedAt = nil
                         changed = true
                     }
-                } else if registry[idx].share != nil {
-                    registry[idx].share = nil
-                    changed = true
+                } else if let clearedAt = dto.shareClearedAt,
+                          clearedAt > (localShareClock ?? .distantPast) {
+                    if registry[idx].share != nil || registry[idx].shareClearedAt != clearedAt {
+                        registry[idx].share = nil
+                        registry[idx].shareClearedAt = clearedAt
+                        changed = true
+                    }
                 }
             } else {
                 registry.append(LibraryInfo(id: dto.id, name: dto.name,
                                             isActive: dto.isActive ?? false,
                                             createdAt: dto.createdAt,
                                             modifiedAt: remoteStamp,
-                                            share: dto.share))
+                                            share: dto.share,
+                                            shareClearedAt: dto.shareClearedAt))
                 changed = true
             }
         }

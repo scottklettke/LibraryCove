@@ -422,12 +422,14 @@ final class SharedLibraryEngine: ObservableObject {
         SharedLibrarySettings.setMembership(.owner, libraryID: libraryID)
         // Mirror the share facts into the registry so the account's OTHER
         // devices learn this library is shared (Settings renders the
-        // management section instead of "Share Library"). The push retries
-        // on every foreground via willEnterForeground.
+        // management section instead of "Share Library"). stampedAt is the
+        // SHARE EVENT's clock — peers adopt this block verbatim, so their
+        // later renames can never out-rank this publish or the stop event.
         LibraryScope.shared.setShareFacts(
             LibraryRegistryDTO.ShareFacts(zoneName: zoneID.zoneName,
                                           zoneOwnerName: zoneID.ownerName,
-                                          shareRecordName: share.recordID.recordName),
+                                          shareRecordName: share.recordID.recordName,
+                                          stampedAt: Date()),
             libraryID: libraryID)
         refreshParticipants(from: share)
         return share

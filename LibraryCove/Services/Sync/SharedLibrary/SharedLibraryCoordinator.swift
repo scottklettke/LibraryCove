@@ -144,7 +144,11 @@ enum SharedLibraryCoordinator {
             throw SharedLibraryError.notPermitted
         }
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: true)
-        try await SharedLibraryEngine.shared.stopSharingAsOwner()
+        // Per-library shares: the GLOBAL stopSharingAsOwner reads the legacy
+        // global ownerZoneID (nil under the per-library model) — no zone
+        // would be deleted and participants would keep access. Always tear
+        // down the ACTIVE library's share.
+        try await SharedLibraryEngine.shared.stopSharingAsOwner(libraryID: libraryID)
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
         SharedLibrarySettings.setMembership(.none, libraryID: libraryID)

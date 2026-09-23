@@ -287,9 +287,9 @@ import SwiftData
         }
     }
 
-    // MARK: - Share-facts mirroring
+    // MARK: - Share-facts mirroring (share events have their own clock)
 
-    @Test func foldAdoptsShareFactsFromNewerRemote() throws {
+    @Test func foldAdoptsSharePublish() throws {
         try withSandboxedRegistry {
             let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
             seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
@@ -297,7 +297,8 @@ import SwiftData
             let facts = LibraryRegistryDTO.ShareFacts(
                 zoneName: "LibraryCoveSharedLibrary-1234",
                 zoneOwnerName: "_a1b2c3",
-                shareRecordName: "share-xyz")
+                shareRecordName: "share-xyz",
+                stampedAt: base.addingTimeInterval(60))
             let dto = LibraryRegistryDTO(id: "lib-1", name: "Home", createdAt: base,
                                          modifiedAt: base.addingTimeInterval(60),
                                          share: facts)
@@ -312,63 +313,96 @@ import SwiftData
         }
     }
 
-    @Test func foldClearsShareFactsFromNewerRemote() throws {
+    @Test func foldIgnoresStaleSharePublishAfterClear() throws {
         try withSandboxedRegistry {
+            // THE PING-PONG REGRESSION: a device stopped sharing, then a
+            // peer's re-push of the OLD publish block (verbatim, older
+            // stampedAt) arrives. The share clock must keep the share
+            // dead — the peer's entry stamp is irrelevant.
             let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
-            // This device locally owns a share (it created one earlier).
+            let publish = base.addingTimeInterval(60)
+            let stop = base.addingTimeInterval(120)
+            let facts = LibraryRegistryDTO.ShareFacts(
+                zoneName: "z", zoneOwnerName: "o", shareRecordName: "s",
+                stampedAt: publish)
             seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
-                              createdAt: base, modifiedAt: base)])
-            LibraryScope.shared.setShareFacts(
-                LibraryRegistryDTO.ShareFacts(zoneName: "z", zoneOwnerName: "o",
-                                              shareRecordName: "s"),
-                libraryID: "lib-1")
-            #expect(SharedLibrarySettings.membership(libraryID: "lib-1") == .owner)
-            // The OWNER device stopped sharing; the newer remote entry has
-            // no facts. The fold must clear the registry AND the adopted
-            // local share state.
+                              createdAt: base, modifiedAt: base.addingTimeInterval(90),
+                              shareClearedAt: stop)])
+            // Remote record still carrying the pre-stop publish (e.g. a
+            // peer that hasn't pulled the stop yet), re-pushed later.
             let dto = LibraryRegistryDTO(id: "lib-1", name: "Home", createdAt: base,
-                                         modifiedAt: base.addingTimeInterval(120))
+                                         modifiedAt: base.addingTimeInterval(600),
+                                         share: facts)
+            #expect(!LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(600))]))
+            let lib = load().first { $0.id == "lib-1" }
+            #expect(lib?.share == nil)
+            #expect(lib?.shareClearedAt == stop)
+        }
+    }
+
+    @Test func foldClearsOnNewerStopEvent() throws {
+        try withSandboxedRegistry {
+            // Peer adopted the owner's publish (clock included), then
+            // renamed (bumping the ENTRY stamp without touching the share
+            // clock). The owner stops sharing: the stop event beats the
+            // held publish clock, so the clear lands despite the newer
+            // entry stamp — and adoptShareFacts drops the local share UI.
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            let publish = base.addingTimeInterval(60)
+            let stop = base.addingTimeInterval(500)
+            let facts = LibraryRegistryDTO.ShareFacts(
+                zoneName: "z", zoneOwnerName: "o", shareRecordName: "s",
+                stampedAt: publish)
+            seed([LibraryInfo(id: "lib-1", name: "Locally Renamed", isActive: true,
+                              createdAt: base, modifiedAt: base.addingTimeInterval(300),
+                              share: facts)])
+            #expect(SharedLibrarySettings.membership(libraryID: "lib-1") == .none)
+            SharedLibrarySettings.setMembership(.owner, libraryID: "lib-1")
+            SharedLibrarySettings.setOwnerZoneName("z", libraryID: "lib-1")
+            let dto = LibraryRegistryDTO(id: "lib-1", name: "Locally Renamed",
+                                         createdAt: base,
+                                         modifiedAt: base.addingTimeInterval(120),
+                                         shareClearedAt: stop)
             #expect(LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(120))]))
-            #expect(load().first { $0.id == "lib-1" }?.share == nil)
+            let lib = load().first { $0.id == "lib-1" }
+            #expect(lib?.share == nil)
+            #expect(lib?.shareClearedAt == stop)
             #expect(SharedLibrarySettings.membership(libraryID: "lib-1") == .none)
         }
     }
 
-    @Test func foldAppliesFactsEvenAgainstNewerLocalStamp() throws {
+    @Test func foldKeepsHeldPublishAgainstOlderStop() throws {
         try withSandboxedRegistry {
-            // The stop-sharing race: the owner device re-stamps the entry
-            // when stopping (setShareFacts(nil) stamps NOW), but a peer may
-            // have renamed even later — the clear must still propagate.
+            // A record carrying a stop event OLDER than the publish this
+            // device already holds (e.g. a stale snapshot with a cleared
+            // marker from a previous share generation) must not kill the
+            // live share.
             let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
-            let facts = LibraryRegistryDTO.ShareFacts(zoneName: "z", zoneOwnerName: "o",
-                                                      shareRecordName: "s")
-            seed([LibraryInfo(id: "lib-1", name: "Locally Renamed", isActive: true,
-                              createdAt: base, modifiedAt: base.addingTimeInterval(300),
+            let oldStop = base.addingTimeInterval(10)
+            let publish = base.addingTimeInterval(60)
+            let facts = LibraryRegistryDTO.ShareFacts(
+                zoneName: "z2", zoneOwnerName: "o2", shareRecordName: "s2",
+                stampedAt: publish)
+            seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
+                              createdAt: base, modifiedAt: base.addingTimeInterval(90),
                               share: facts)])
-            // Remote carries the owner's stop-sharing clear with an OLDER
-            // stamp than the peer's rename: nil clears regardless.
-            let dto = LibraryRegistryDTO(id: "lib-1", name: "Locally Renamed",
-                                         createdAt: base,
-                                         modifiedAt: base.addingTimeInterval(120))
-            #expect(LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(120))]))
-            #expect(load().first { $0.id == "lib-1" }?.share == nil)
+            let dto = LibraryRegistryDTO(id: "lib-1", name: "Home", createdAt: base,
+                                         modifiedAt: base.addingTimeInterval(120),
+                                         shareClearedAt: oldStop)
+            #expect(!LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(120))]))
+            #expect(load().first { $0.id == "lib-1" }?.share == facts)
         }
     }
 
-    @Test func foldIgnoresStaleShareSetAgainstNewerLocalStamp() throws {
+    @Test func foldIgnoresNilShareWhenNothingHeld() throws {
         try withSandboxedRegistry {
-            // nil-vs-nil is a no-op: nothing changes when the remote has no
-            // facts and neither does local. Also: a non-nil remote SET with
-            // an older stamp than a peer's rename must NOT adopt (the
-            // owner's publish predates the peer's edit; the next owner
-            // push re-stamps and wins).
+            // nil-share vs nothing-held is a no-op (no share clock moves).
             let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
-            seed([LibraryInfo(id: "lib-1", name: "Locally Renamed", isActive: true,
-                              createdAt: base, modifiedAt: base.addingTimeInterval(300))])
-            let dto = LibraryRegistryDTO(id: "lib-1", name: "Locally Renamed",
-                                         createdAt: base,
-                                         modifiedAt: base.addingTimeInterval(120))
-            #expect(!LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(120))]))
+            seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
+                              createdAt: base, modifiedAt: base)])
+            let dto = LibraryRegistryDTO(id: "lib-1", name: "Home", createdAt: base,
+                                         modifiedAt: base.addingTimeInterval(60))
+            #expect(!LibraryScope.shared.foldRemoteRegistry([(dto, base.addingTimeInterval(60))]))
             #expect(load().first { $0.id == "lib-1" }?.share == nil)
         }
     }

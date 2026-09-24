@@ -546,23 +546,30 @@ final class LibraryScope: ObservableObject {
                     // Wipe pending (delete-everything, possibly re-populated
                     // locally before the publish confirmed): delete every
                     // library record and save the wipedAt marker in ONE
-                    // atomic modifyRecords — the marker must never land
-                    // without the deletes, and vice versa. Cleared ONLY
-                    // when the server confirms every item; any failure
-                    // leaves the flag set so the next push retries (the
-                    // willEnterForeground handler re-pushes), instead of
-                    // the wipe silently vanishing.
+                    // atomic modifyRecords. The marker ID is NOT in the
+                    // delete list — a same-ID save+delete pair in one batch
+                    // is unsupported and could leave the zone markerless or
+                    // fail the item (retry loop); the .allKeys save of the
+                    // new meta alone overwrites any prior marker, atomically
+                    // with the stale deletes. Cleared ONLY when the server
+                    // confirms every item; any failure leaves the flag set
+                    // so the next push retries (the willEnterForeground
+                    // handler re-pushes), instead of the wipe silently
+                    // vanishing.
+                    // Stamped BEFORE the enumeration await: a name entered
+                    // while the publish runs must stamp AFTER the cutoff,
+                    // or the next fold's wipe filter would delete the
+                    // user's freshly typed name.
+                    let wipeStamp = Date()
                     do {
                         let fetched = try await fetchRegistryZone(previousToken: nil)
-                        var deleting = fetched.entries.map { entry in
+                        let deleting = fetched.entries.map { entry in
                             CKRecord.ID(recordName: "library-\(entry.dto.id)", zoneID: zoneID)
                         }
-                        deleting.append(CKRecord.ID(
-                            recordName: Self.registryMetaRecordName, zoneID: zoneID))
                         let meta = CKRecord(recordType: Self.registryRecordType,
                                             recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
                                                                   zoneID: zoneID))
-                        meta["wipedAt"] = Date()
+                        meta["wipedAt"] = wipeStamp
                         let result = try await database.modifyRecords(
                             saving: [meta], deleting: deleting, savePolicy: .allKeys)
                         var failures: [Error] = result.saveResults.values.compactMap {
@@ -767,6 +774,11 @@ final class LibraryScope: ObservableObject {
     /// re-enumerates the whole (tiny) zone.
     @discardableResult
     private func pullAndFoldRegistry() async -> Bool {
+        // A pending wipe must never fold remote state: pre-wipe records
+        // pulled mid-wipe would re-populate the wiped registry (and get
+        // pushed back) before the wipe publish confirms. The publish path
+        // re-checks the flag after its awaits.
+        guard !Self.wipePending else { return false }
         let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
         do {
             guard try await container.accountStatus() == .available else { return false }

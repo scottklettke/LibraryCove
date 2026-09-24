@@ -543,7 +543,17 @@ final class LibraryScope: ObservableObject {
                             var deleting = staleIDs
                             deleting.append(CKRecord.ID(
                                 recordName: Self.registryMetaRecordName, zoneID: zoneID))
-                            _ = try await database.modifyRecords(saving: [], deleting: deleting)
+                            let result = try await database.modifyRecords(
+                                saving: [], deleting: deleting)
+                            // A partialFailure here means stale records
+                            // SURVIVED the delete (resurrection fuel);
+                            // opaque top-level success would hide it.
+                            let partials = (result.deleteResults.values.compactMap {
+                                if case .failure(let e) = $0 { return e } else { return nil }
+                            })
+                            if !partials.isEmpty {
+                                libraryLog.error("Wipe record delete had failures: \(String(describing: partials), privacy: .public)")
+                            }
                         }
                     } catch {
                         // A failed enumeration leaves the stale records in
@@ -555,8 +565,15 @@ final class LibraryScope: ObservableObject {
                                         recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
                                                               zoneID: zoneID))
                     meta["wipedAt"] = Date()
-                    _ = try await database.modifyRecords(saving: [meta], deleting: [],
-                                                         savePolicy: .allKeys)
+                    let metaResult = try await database.modifyRecords(
+                        saving: [meta], deleting: [], savePolicy: .allKeys)
+                    // The wipedAt marker IS the cutoff every later pull
+                    // folds against — a failed save must be loud.
+                    for (_, outcome) in metaResult.saveResults {
+                        if case .failure(let e) = outcome {
+                            libraryLog.error("Wipe meta save failed: \(String(describing: e), privacy: .public)")
+                        }
+                    }
                     return
                 }
                 let records = snapshot.compactMap { info -> CKRecord? in

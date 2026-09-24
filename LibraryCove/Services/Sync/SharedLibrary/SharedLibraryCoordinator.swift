@@ -244,6 +244,42 @@ enum SharedLibraryCoordinator {
         SharedLibrarySettings.previousProvider = nil
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+
+        // Belt and braces: the per-library teardown above relies on
+        // per-library UserDefaults keys to know which zone to delete. A
+        // wiped device may have no keys (membership cleared, or CloudKit
+        // failed mid-wipe) while the OWNER zone still sits in the private
+        // DB holding every pre-wipe book — NSPersistentCloudKitContainer
+        // then re-downloads them on the next launch and the registry
+        // re-synthesizes old libraries. Enumerate the private DB and
+        // delete every zone whose name stems from THIS app's share zone
+        // (fixed base name + "-<hash>"), owner or not.
+        if hasAccount {
+            do {
+                let database = SharedLibraryEngine.shared.container.privateCloudDatabase
+                let zones = try await database.allRecordZones()
+                let ours = zones.filter { zone in
+                    zone.zoneID.zoneName == SharedLibraryEngine.zoneName
+                        || zone.zoneID.zoneName.hasPrefix(SharedLibraryEngine.zoneName + "-")
+                }
+                if !ours.isEmpty {
+                    let result = try await database.modifyRecordZones(
+                        saving: [], deleting: ours.map(\.zoneID))
+                    let failures = result.deleteResults.values.compactMap {
+                        if case .failure(let e) = $0 { return e } else { return nil }
+                    }
+                    if !failures.isEmpty {
+                        SharedLibraryEngine.shared.reportError(
+                            "Reset zone sweep had failures: \(failures)")
+                    }
+                }
+            } catch {
+                // Unreachable CloudKit must not block the reset; the wipe
+                // marker in the registry zone still carries the cutoff.
+                SharedLibraryEngine.shared.reportError(
+                    "Reset zone sweep failed: \(error)")
+            }
+        }
     }
 
     /// A context on the PRIVATE store for flows that just ended a share and

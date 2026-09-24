@@ -585,14 +585,10 @@ final class LibraryScope: ObservableObject {
                 // correct for a full-snapshot publisher.
                 _ = try await database.modifyRecords(saving: records, deleting: [],
                                                      savePolicy: .allKeys)
-                // The remote set is now populated and authoritative (fold
-                // step 2 removes whatever it lacks). A stale wipe marker
-                // would permanently filter every later pull, so drop it.
-                if !records.isEmpty {
-                    let metaID = CKRecord.ID(recordName: Self.registryMetaRecordName,
-                                             zoneID: zoneID)
-                    _ = try? await database.modifyRecords(saving: [], deleting: [metaID])
-                }
+                // The wipe marker (meta record with wipedAt) MUST persist
+                // after this push: it is the cutoff that lets later full
+                // pulls discard pre-wipe state. Deleting it here would let
+                // stale pre-wipe records resurrect on the next full pull.
             } catch {
                 // Offline/no-account/transient failures must not surface as
                 // UI errors. No kill-switch: the willEnterForeground handler

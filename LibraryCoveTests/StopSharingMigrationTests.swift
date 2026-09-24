@@ -29,8 +29,15 @@ import SwiftData
         // Mirror books carry the ACTIVE library id: in production the
         // mirror syncs the owner's personal books, which are tagged with
         // the active library. The JSON registry is global, so compute the
-        // active id at test time.
+        // active id at test time. Migration no longer synthesizes a
+        // default — create one explicitly with a fixed id for the tag.
         LibraryScope.shared.migrateIfNeeded(context: Persistence.inMemory.mainContext)
+        if LibraryScope.shared.all(context: Persistence.inMemory.mainContext).isEmpty {
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "Mirror Test",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: Persistence.inMemory.mainContext)
+        }
         let activeID = LibraryScope.shared.activeID(context: Persistence.inMemory.mainContext)
         let container = try makeMirrorStore(books: [
             Book(id: "b1", title: "Dune", authors: ["Frank Herbert"], isbn: "9780441172719"),
@@ -81,6 +88,12 @@ import SwiftData
             .appendingPathComponent("test-mirror-merge-\(UUID().uuidString).store")
         defer { try? FileManager.default.removeItem(at: mirrorURL) }
         LibraryScope.shared.migrateIfNeeded(context: Persistence.inMemory.mainContext)
+        if LibraryScope.shared.all(context: Persistence.inMemory.mainContext).isEmpty {
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "Mirror Test",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: Persistence.inMemory.mainContext)
+        }
         let mirrorActiveID = LibraryScope.shared.activeID(context: Persistence.inMemory.mainContext)
         let mirrorContainer = try makeMirrorStore(books: [
             Book(id: "mir-1", title: "Shared Book", authors: ["Someone"]),

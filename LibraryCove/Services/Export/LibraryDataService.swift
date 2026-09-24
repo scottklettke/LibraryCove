@@ -221,9 +221,12 @@ enum LibraryDataService {
     }
 
     /// Deletes one library's content rows (books, notes, lists, items,
-    /// connections) — NOT its Library row, NOT other libraries, NOT members.
+    /// connections) — NOT its Library row, NOT other libraries, NOT
+    /// members. `libraryID == nil` (no active library) is a no-op
+    /// returning 0 — there is nothing to delete.
     @discardableResult
-    static func deleteLibraryContent(context: ModelContext, libraryID: String) -> Int {
+    static func deleteLibraryContent(context: ModelContext, libraryID: String?) -> Int {
+        guard let libraryID else { return 0 }
         let bookCount = (try? context.fetchCount(FetchDescriptor<Book>(
             predicate: #Predicate { $0.libraryID == libraryID }
         ))) ?? 0

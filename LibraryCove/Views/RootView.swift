@@ -260,6 +260,7 @@ struct MainTabView: View {
             }
             .tabItem { Label("Library", systemImage: "books.vertical") }
             .tag(AppTab.library)
+            .environment(\.openSettingsTab, { selectedTab = .settings })
             NavigationStack {
                 AIAskView()
             }
@@ -286,9 +287,19 @@ struct OpenLibraryTabKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 
+/// Lets the Library page's no-library state jump straight to Settings
+/// (where Create Library lives).
+struct OpenSettingsTabKey: EnvironmentKey {
+    static let defaultValue: () -> Void = {}
+}
+
 extension EnvironmentValues {
     var openLibraryTab: () -> Void {
         get { self[OpenLibraryTabKey.self] }
         set { self[OpenLibraryTabKey.self] = newValue }
+    }
+    var openSettingsTab: () -> Void {
+        get { self[OpenSettingsTabKey.self] }
+        set { self[OpenSettingsTabKey.self] = newValue }
     }
 }

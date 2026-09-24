@@ -14,16 +14,20 @@ import SwiftData
     @Test func exportImportExportPreservesDuplicates() async throws {
         let context = baseContext()
 
-        // Mirror the real app: launch migration creates the default
-        // library and tags legacy (libraryID == nil) rows into it. Other
-        // suites may have left other libraries in the shared registry, so
-        // make the DEFAULT library the active one explicitly.
+        // Mirror the real app: launch migration tags legacy rows into the
+        // default library. Migration no longer synthesizes a default on an
+        // empty registry, so tests create one explicitly with the FIXED
+        // default id (migrateArchive/copyArchive key off the active id).
         LibraryScope.shared.migrateIfNeeded(context: context)
-        if let defaultLibrary = LibraryScope.shared.all(context: context)
+        if LibraryScope.shared.all(context: context)
+            .first(where: { $0.id == LibraryScope.defaultLibraryID }) == nil {
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "Default",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        } else if let defaultLibrary = LibraryScope.shared.all(context: context)
             .first(where: { $0.id == LibraryScope.defaultLibraryID }) {
             LibraryScope.shared.activate(defaultLibrary, context: context)
-        } else {
-            _ = try LibraryScope.shared.create(name: "Default", makeActive: true, context: context)
         }
         let activeLibraryID = LibraryScope.shared.activeID(context: context)
         let user = User(id: "u-d", email: "d@d.c", displayName: "Dup", isActive: true)
@@ -54,7 +58,16 @@ import SwiftData
         #expect(back1.count == 2, "backup zip must contain BOTH copies, got \(back1.count)")
 
         // 2) Replace-restore path: importArchive into a wiped store.
+        // deleteAll clears the registry (no active library); recreate the
+        // fixed-id default so importArchive tags restored rows into it.
         LibraryDataService.deleteAll(context: context)
+        if LibraryScope.shared.all(context: context)
+            .first(where: { $0.id == LibraryScope.defaultLibraryID }) == nil {
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "Test Library",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        }
         let summary = try LibraryDataService.importArchive(data: zip1, context: context)
         #expect(summary.books == 2, "restore must reinstate BOTH copies, got \(summary.books)")
         let rows = try context.fetch(FetchDescriptor<Book>())

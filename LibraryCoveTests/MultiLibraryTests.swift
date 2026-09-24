@@ -47,10 +47,64 @@ import SwiftData
                 "legacy row must be tagged into the default library")
     }
 
+    @Test func migrationOnEmptyStoreStaysLibraryLess() throws {
+        wipe()
+        let context = baseContext()
+        // Fresh install / post-wipe: empty registry AND no content rows —
+        // migration must NOT synthesize an "Untitled" default.
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        #expect(LibraryScope.shared.all(context: context).isEmpty,
+                "empty store stays library-less")
+        #expect(LibraryScope.shared.active(context: context) == nil)
+    }
+
+    @Test func deletingLastLibraryLeavesRegistryEmpty() throws {
+        wipe()
+        let context = baseContext()
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let only = try LibraryScope.shared.create(name: "Only One", makeActive: true,
+                                                  context: context)
+        // Deleting the LAST library used to silently recreate an empty
+        // "Untitled" default — the bug: Active Library showed a blank name
+        // and the Libraries list said "Untitled".
+        LibraryScope.shared.delete(only, context: context)
+        #expect(LibraryScope.shared.all(context: context).isEmpty,
+                "no phantom default after deleting the last library")
+        #expect(LibraryScope.shared.active(context: context) == nil)
+        #expect(LibraryScope.shared.activeID(context: context) == nil)
+        #expect(LibraryScope.shared.activeName(context: context, memberName: "Matt") == nil)
+    }
+
+    @Test func deletingActiveLibraryPromotesOldestRemaining() throws {
+        wipe()
+        let context = baseContext()
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        let first = try LibraryScope.shared.create(name: "First", makeActive: true,
+                                                   context: context)
+        _ = try LibraryScope.shared.create(name: "Second", makeActive: true,
+                                           context: context)
+        // Delete the ACTIVE one: the oldest remaining library promotes
+        // (pre-existing behavior), NOT the no-library state.
+        LibraryScope.shared.delete(first, context: context)
+        let libs = LibraryScope.shared.all(context: context)
+        #expect(libs.count == 1)
+        #expect(libs.first?.id == LibraryScope.shared.activeID(context: context))
+        #expect(libs.first?.isActive == true)
+    }
+
     @Test func contentIsInvisibleAcrossLibraries() throws {
         wipe()
         let context = baseContext()
         LibraryScope.shared.migrateIfNeeded(context: context)
+        if LibraryScope.shared.active(context: context) == nil {
+            // Migration no longer synthesizes a default on an empty
+            // registry — these tests exercise multi-library behavior, so
+            // seed the fixed-id default explicitly.
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "First",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        }
         let first = LibraryScope.shared.active(context: context)!
 
         // Second library, active (the switch).
@@ -80,6 +134,15 @@ import SwiftData
         wipe()
         let context = baseContext()
         LibraryScope.shared.migrateIfNeeded(context: context)
+        if LibraryScope.shared.active(context: context) == nil {
+            // Migration no longer synthesizes a default on an empty
+            // registry — these tests exercise multi-library behavior, so
+            // seed the fixed-id default explicitly.
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "First",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        }
         let first = LibraryScope.shared.active(context: context)!
         let second = try LibraryScope.shared.create(name: "Second", makeActive: false, context: context)
 
@@ -108,6 +171,12 @@ import SwiftData
         wipe()
         let context = baseContext()
         LibraryScope.shared.migrateIfNeeded(context: context)
+        if LibraryScope.shared.active(context: context) == nil {
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "Active",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        }
         let active = LibraryScope.shared.active(context: context)!
         let other = try LibraryScope.shared.create(name: "Other", makeActive: false, context: context)
 
@@ -139,6 +208,15 @@ import SwiftData
         wipe()
         let context = baseContext()
         LibraryScope.shared.migrateIfNeeded(context: context)
+        if LibraryScope.shared.active(context: context) == nil {
+            // Migration no longer synthesizes a default on an empty
+            // registry — these tests exercise multi-library behavior, so
+            // seed the fixed-id default explicitly.
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "First",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        }
         let first = LibraryScope.shared.active(context: context)!
         let second = try LibraryScope.shared.create(name: "Second", makeActive: true, context: context)
 
@@ -169,9 +247,11 @@ import SwiftData
         #expect(visibleAfter.count == 1 && visibleAfter.first?.id == "first-book")
     }
 
-    /// Deleting the LAST library via the Settings flow: a fresh default is
-    /// recreated and active, so the empty-library message shows.
-    @Test func settingsDeleteOfLastLibraryRecreatesDefault() throws {
+    /// Deleting the LAST library via the Settings flow: the registry goes
+    /// EMPTY — no silently recreated "Untitled" default. The no-library
+    /// state is explicit UI (Settings "Create Library", Library page
+    /// no-library prompt); the user creates a library by name.
+    @Test func settingsDeleteOfLastLibraryLeavesNoLibrary() throws {
         wipe()
         let context = baseContext()
         LibraryScope.shared.migrateIfNeeded(context: context)
@@ -187,11 +267,10 @@ import SwiftData
         LibraryScope.shared.delete(second, context: context)
 
         let libraries = LibraryScope.shared.all(context: context)
-        #expect(libraries.count == 1, "exactly the fresh default remains, got \(libraries.count)")
-        #expect(libraries.first?.id == LibraryScope.defaultLibraryID)
-        #expect(libraries.first?.isActive == true)
-        #expect(LibraryScope.shared.activeID(context: context) == LibraryScope.defaultLibraryID)
+        #expect(libraries.isEmpty, "no phantom default after the last delete, got \(libraries.count)")
+        #expect(LibraryScope.shared.active(context: context) == nil)
+        #expect(LibraryScope.shared.activeID(context: context) == nil)
         let visible = try context.fetch(LibraryScope.shared.activeBooksDescriptor(context: context))
-        #expect(visible.isEmpty, "fresh default starts empty — the empty-library message shows")
+        #expect(visible.isEmpty)
     }
 }

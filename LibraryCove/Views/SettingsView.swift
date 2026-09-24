@@ -53,6 +53,16 @@ struct SettingsView: View {
     /// Bumped whenever the library registry changes (switch/rename) so the
     /// name field re-reads the active library.
     @State private var libraryRegistryTick = 0
+    /// The active library, or nil when no library exists (the no-library
+    /// state replaces the rename field with Create Library). Re-read on
+    /// registry changes via libraryRegistryTick.
+    private var activeLibrary: LibraryInfo? {
+        _ = libraryRegistryTick
+        return LibraryScope.shared.active(context: modelContext)
+    }
+    /// Create-library sheet (offered when the registry is empty).
+    @State private var showCreateLibrary = false
+    @State private var newLibraryName = ""
     /// Set when the typed name matches another library's — warns instead of
     /// silently creating a confusing duplicate name.
     @State private var duplicateNameWarning: String?
@@ -159,9 +169,10 @@ struct SettingsView: View {
                 Text("Your library is already empty — there are no books, notes, reading lists, or connections to delete.")
             }
             .sheet(isPresented: $showSharingSheet) {
-                if let share = shareSheetShare {
+                if let share = shareSheetShare,
+                   let libraryID = LibraryScope.shared.activeID(context: modelContext) {
                     CloudSharingSheet(share: share,
-                                      libraryID: LibraryScope.shared.activeID(context: modelContext))
+                                      libraryID: libraryID)
                         .onDisappear {
                             Task { await refreshMembers() }
                         }
@@ -174,6 +185,9 @@ struct SettingsView: View {
                 ) {
                     deleteLibraryData()
                 }
+            }
+            .sheet(isPresented: $showCreateLibrary) {
+                createLibrarySheet
             }
             .task {
                 cloudSyncMonitor.start()
@@ -352,10 +366,11 @@ struct SettingsView: View {
     /// Warns when the active library's (typed) name matches ANOTHER
     /// library's — duplicate names make the Libraries list ambiguous.
     private func checkDuplicateName() {
-        let typed = LibraryScope.shared.activeName(
+        guard let typed = LibraryScope.shared.activeName(
             context: modelContext,
-            memberName: user.displayName)
-        let activeID = LibraryScope.shared.activeID(context: modelContext)
+            memberName: user.displayName),
+              let activeID = LibraryScope.shared.activeID(context: modelContext)
+        else { return }
         if let clash = LibraryScope.shared.all(context: modelContext).first(where: {
             $0.id != activeID
                 && $0.name.compare(typed, options: .caseInsensitive) == .orderedSame
@@ -390,8 +405,9 @@ struct SettingsView: View {
         // Clear first: while the fetch runs, showing the PREVIOUS active
         // library's members would be wrong.
         sharedMembers = []
-        await SharedLibraryEngine.shared.refreshParticipants(
-            libraryID: LibraryScope.shared.activeID(context: modelContext))
+        if let libraryID = LibraryScope.shared.activeID(context: modelContext) {
+            await SharedLibraryEngine.shared.refreshParticipants(libraryID: libraryID)
+        }
         sharedMembers = SharedLibraryEngine.shared.members
     }
     private func switchSyncProvider(to new: LibrarySync) {
@@ -536,42 +552,59 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    HStack {
-                        TextField("Library name",
-                                  text: Binding(get: {
-                                                      _ = libraryRegistryTick
-                                                      return LibraryScope.shared.active(context: modelContext)?.name ?? ""
-                                                  },
-                                                  set: { newValue in
-                                                      // The name names the ACTIVE
-                                                      // library; other libraries keep
-                                                      // theirs. The member display name
-                                                      // (used for "Added by") stays
-                                                      // bound to the library name for
-                                                      // single-library users via
-                                                      // LibraryScope.activeName's
-                                                      // default.
-                                                      LibraryScope.shared.rename(
-                                                          id: LibraryScope.shared.activeID(context: modelContext),
-                                                          to: newValue,
-                                                          context: modelContext)
-                                                  }))
-                            .focused($nameFieldFocused)
-                            .onSubmit {
-                                checkDuplicateName()
+                    if let activeLibrary = activeLibrary {
+                        HStack {
+                            TextField("Library name",
+                                      text: Binding(get: {
+                                          _ = libraryRegistryTick
+                                          return activeLibrary.name
+                                      },
+                                      set: { newValue in
+                                          // The name names the ACTIVE
+                                          // library; other libraries keep
+                                          // theirs. The member display name
+                                          // (used for "Added by") stays
+                                          // bound to the library name for
+                                          // single-library users via
+                                          // LibraryScope.activeName's
+                                          // default.
+                                          LibraryScope.shared.rename(
+                                              id: activeLibrary.id,
+                                              to: newValue,
+                                              context: modelContext)
+                                      }))
+                                .focused($nameFieldFocused)
+                                .onSubmit {
+                                    checkDuplicateName()
+                                }
+                            Button {
+                                nameFieldFocused = true
+                            } label: {
+                                Image(systemName: "pencil")
                             }
-                        Button {
-                            nameFieldFocused = true
-                        } label: {
-                            Image(systemName: "pencil")
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Edit library name")
                         }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel("Edit library name")
+                    } else {
+                        // No library exists (deleted the last one): say so
+                        // and offer creation instead of an orphaned rename
+                        // field over a phantom "Untitled" entry.
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("No library")
+                                .foregroundStyle(.secondary)
+                            Button {
+                                showCreateLibrary = true
+                            } label: {
+                                Label("Create Library", systemImage: "plus")
+                            }
+                        }
                     }
                 } header: {
                     Text("Active Library")
                 } footer: {
-                    Text("Tap the pencil to rename the active library. Use Libraries below to switch between libraries.")
+                    Text(activeLibrary == nil
+                         ? "Create a library to start adding books."
+                         : "Tap the pencil to rename the active library. Use Libraries below to switch between libraries.")
                 }
 
                 Section {
@@ -660,10 +693,52 @@ struct SettingsView: View {
             Text("Shared Library")
         } footer: {
             Text(SharedLibrarySettings.membership(
-                     libraryID: LibraryScope.shared.activeID(context: modelContext)) == .none
+                     libraryID: LibraryScope.shared.activeID(context: modelContext) ?? "") == .none
                  ? "Share this library with other people via iCloud. Everyone with access can add, edit, and remove books — changes sync to all members."
                  : "This library is shared via iCloud. Changes made by any member sync to everyone with access.")
         }
+    }
+
+    /// Create-library sheet (no-library state in Settings, or a fresh
+    /// install): a name field and a Create button. Extracted into its own
+    /// property so the giant body expression type-checks in reasonable
+    /// time.
+    private var createLibrarySheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Library name", text: $newLibraryName)
+                } footer: {
+                    Text("It starts empty and becomes the active library.")
+                }
+                Section {
+                    Button {
+                        let name = newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !name.isEmpty else { return }
+                        _ = try? LibraryScope.shared.create(
+                            name: name, makeActive: true, context: modelContext)
+                        newLibraryName = ""
+                        showCreateLibrary = false
+                    } label: {
+                        Text("Create library")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .navigationTitle("New library")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        newLibraryName = ""
+                        showCreateLibrary = false
+                    }
+                }
+            }
+            .interactiveDismissDisabled(false)
+        }
+        .presentationDetents([.medium])
     }
 
     private var dataSection: some View {
@@ -700,7 +775,7 @@ struct SettingsView: View {
                     // would render blank. Show read-only status and route
                     // any change through the Stop Sharing confirmation.
                     if SharedLibrarySettings.membership(
-                           libraryID: LibraryScope.shared.activeID(context: modelContext)) != .none {
+                           libraryID: LibraryScope.shared.activeID(context: modelContext) ?? "") != .none {
                         LabeledContent("Sync provider", value: "Shared Library")
                         LabeledContent("Status", value: syncStatusText(syncProvider))
                     } else if syncProvider == .iCloud {

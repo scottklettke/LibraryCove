@@ -280,7 +280,7 @@ struct BackupsView: View {
             }
             let count = (try? liveContext.fetchCount(LibraryScope.shared.activeBooksDescriptor(context: liveContext))) ?? 0
             let member = LibraryDataService.activeMemberName(liveContext)
-            let libraryName = LibraryScope.shared.activeName(context: liveContext, memberName: member)
+            let libraryName = LibraryScope.shared.activeName(context: liveContext, memberName: member) ?? "Library"
             do {
                 let name = try BackupStore.save(data: data, bookCount: count, libraryName: libraryName)
                 resultIsBackup = true
@@ -306,7 +306,7 @@ struct BackupsView: View {
             let member = LibraryDataService.activeMemberName(modelContext)
             let filename = LibraryDataService.exportFileName(
                 kind: "Library",
-                libraryName: LibraryScope.shared.activeName(context: modelContext, memberName: member),
+                libraryName: LibraryScope.shared.activeName(context: modelContext, memberName: member) ?? "Library",
                 memberName: member,
                 ext: "zip"
             )
@@ -387,7 +387,7 @@ struct ImportPreviewView: View {
             context: context,
             memberName: ((try? context.fetch(FetchDescriptor<User>(
                 predicate: #Predicate { $0.isActive }
-            ))) ?? []).first?.displayName ?? "")
+            ))) ?? []).first?.displayName ?? "") ?? "Library"
     }
 
     var body: some View {

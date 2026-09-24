@@ -71,11 +71,15 @@ import SwiftData
             let dto = LibraryRegistryDTO(id: "shared-abc", name: "Reading 2026", createdAt: base)
             #expect(LibraryScope.shared.foldRemoteRegistry([(dto, base)]))
             let libs = load()
-            #expect(libs.count == 2)
+            // The locally unnamed default has no remote counterpart: a
+            // populated remote set is authoritative, and the fold no
+            // longer recreates a phantom default afterwards — empty means
+            // empty. Only the appended remote library remains.
+            #expect(libs.count == 1)
             let appended = libs.first { $0.id == "shared-abc" }
             #expect(appended?.name == "Reading 2026")
-            #expect(appended?.isActive == false, "active flag is per-device")
-            #expect(libs.first { $0.id == LibraryScope.defaultLibraryID }?.isActive == true)
+            #expect(appended?.isActive == true,
+                    "sole remaining entry is promoted active (3b)")
         }
     }
 
@@ -115,16 +119,15 @@ import SwiftData
         }
     }
 
-    @Test func wipeOnEmptyRegistryCreatesDefault() throws {
+    @Test func wipeOnEmptyRegistryStaysEmpty() throws {
         try withSandboxedRegistry {
             seed([LibraryInfo(id: "old-1", name: "Stale", isActive: true,
                               createdAt: Date(timeIntervalSinceReferenceDate: 1_000_000),
                               modifiedAt: nil)])
             #expect(LibraryScope.shared.foldRemoteRegistry([], wipedAt: Date()))
-            let libs = load()
-            #expect(libs.count == 1)
-            #expect(libs.first?.id == LibraryScope.defaultLibraryID)
-            #expect(libs.first?.isActive == true)
+            // The fold no longer invents a default: post-wipe emptiness is
+            // the genuine no-library state; the user creates a library.
+            #expect(load().isEmpty)
         }
     }
 

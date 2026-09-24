@@ -25,6 +25,10 @@ struct LibraryListView: View {
     var body: some View {
         Form {
             Section {
+                if libraries.isEmpty {
+                    Text("No libraries yet. Create one below to start adding books.")
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(libraries) { library in
                     let isActive = library.isActive
                     Button {

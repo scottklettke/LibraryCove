@@ -122,19 +122,27 @@ struct WelcomeView: View {
         let user = User(email: "local@librarycove.local",
                         displayName: trimmedName)
         modelContext.insert(user)
-        // The library name chosen here names the DEFAULT library (created
-        // at launch by LibraryScope.migrateIfNeeded).
+        // The library name chosen here names the active library. On a
+        // fresh install there is NO library yet (the registry stays empty
+        // until the user acts) — create one instead of renaming a default
+        // that no longer exists.
         let chosenName = trimmedLibrary.isEmpty
             ? SharedLibrarySettings.defaultShareTitle(for: trimmedName)
             : trimmedLibrary
-        // Only stamp the library name when the user actually typed one, or
-        // the local default has no name yet. Blindly renaming here gives
-        // the default a NOW stamp that outranks a rename the user made on
-        // ANOTHER device — onboarding would silently undo it.
-        let localName = LibraryScope.shared.active(context: modelContext)?.name
-        if libraryNameEdited || (localName ?? "").isEmpty {
-            LibraryScope.shared.rename(id: LibraryScope.defaultLibraryID, to: chosenName,
-                                context: modelContext)
+        if let active = LibraryScope.shared.active(context: modelContext) {
+            let localName = active.name
+            // Only stamp the library name when the user actually typed
+            // one, or the local default has no name yet. Blindly renaming
+            // here gives the library a NOW stamp that outranks a rename
+            // the user made on ANOTHER device — onboarding would silently
+            // undo it.
+            if libraryNameEdited || localName.isEmpty {
+                LibraryScope.shared.rename(id: active.id, to: chosenName,
+                                    context: modelContext)
+            }
+        } else {
+            _ = try? LibraryScope.shared.create(name: chosenName, makeActive: true,
+                                                context: modelContext)
         }
         SharedLibrarySettings.preferredShareTitle = chosenName
         try? modelContext.save()

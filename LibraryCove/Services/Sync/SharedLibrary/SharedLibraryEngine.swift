@@ -304,6 +304,8 @@ enum SharedLibraryError: LocalizedError {
     /// The current user's role does not permit this action (e.g. a guest
     /// attempting to stop sharing).
     case notPermitted
+    /// No library exists to share or leave (user deleted the last one).
+    case noActiveLibrary
 
     var errorDescription: String? {
         switch self {
@@ -312,6 +314,7 @@ enum SharedLibraryError: LocalizedError {
         case .metadataUnavailable: return "Couldn't read the share invitation details."
         case .zoneNotFound: return "The shared library is no longer available."
         case .notPermitted: return "Your role doesn't allow this action."
+        case .noActiveLibrary: return "Create a library first."
         }
     }
 }

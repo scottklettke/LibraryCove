@@ -13,10 +13,29 @@ import SwiftData
         Persistence.inMemory.mainContext
     }
 
+    /// Tests that export/restore target the ACTIVE library; migration no
+    /// longer synthesizes a default on an empty registry, so tests create
+    /// one explicitly with the FIXED default id the row tags use.
+    private func ensureActiveDefaultLibrary(_ context: ModelContext) {
+        LibraryScope.shared.migrateIfNeeded(context: context)
+        if LibraryScope.shared.all(context: context)
+            .first(where: { $0.id == LibraryScope.defaultLibraryID }) == nil {
+            // LibraryInfo with the fixed id; create() mints a UUID, so
+            // build the entry directly and activate it.
+            LibraryScope.shared.activate(
+                LibraryInfo(id: LibraryScope.defaultLibraryID, name: "Test Library",
+                            isActive: true, createdAt: Date(), modifiedAt: Date()),
+                context: context)
+        } else if let defaultLib = LibraryScope.shared.all(context: context)
+            .first(where: { $0.id == LibraryScope.defaultLibraryID }) {
+            LibraryScope.shared.activate(defaultLib, context: context)
+        }
+    }
+
     /// A small but complete library exercising every entity type and every
     /// relationship (note->book, list items->list+book, connection book1/book2).
     private func seed(_ context: ModelContext) {
-        LibraryScope.shared.migrateIfNeeded(context: context)
+        ensureActiveDefaultLibrary(context)
         let user = User(id: "u-1", email: "a@b.c", displayName: "Alex", isActive: true)
         context.insert(user)
 
@@ -116,8 +135,11 @@ import SwiftData
         seed(context)
         let zipData = try await #require(LibraryDataService.export(context: context))
 
-        // Wipe, then restore from the export.
+        // Wipe, then restore from the export. deleteAll clears the registry
+        // too (no active library), so recreate one — importArchive tags
+        // restored rows into the active library.
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
         let summary = try LibraryDataService.importArchive(data: zipData, context: context)
         #expect(summary.books == 2)
         #expect(summary.notes == 1)
@@ -231,6 +253,7 @@ import SwiftData
     @Test func exportBundlesCoversAsJpegFiles() async throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
 
         let remoteURL = "https://covers.openlibrary.org/b/id/123-L.jpg"
         let dataBytes = Data([0xFF, 0xD8, 0xFF, 0xE0, 0x44, 0x22])
@@ -282,6 +305,7 @@ import SwiftData
         // Importing rewrites covers to embedded data URLs (the synced form)
         // while still mirroring a copy into the filesystem store.
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
         _ = try LibraryDataService.importArchive(data: zipData, context: context)
         let restored = try context.fetch(FetchDescriptor<Book>())
         for id in ["b-cover-remote", "b-cover-data", "b-cover-shared"] {
@@ -298,6 +322,7 @@ import SwiftData
     @Test func exportKeepsRemoteURLWhenCoverFetchFails() async throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
         let remoteURL = "https://example.com/missing-cover.jpg"
         let noCoverBook = Book(id: "b-nocover", title: "No cover", coverImageURL: remoteURL,
                                createdAt: Date(timeIntervalSince1970: 100))
@@ -321,6 +346,7 @@ import SwiftData
     @Test func importAcceptsLegacyEmbeddedBase64Covers() throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
         let dataCover = "data:image/jpeg;base64," + Data([0xFF, 0xD8]).base64EncodedString()
         let dto = BookDTO(model: Book(id: "b-legacy", title: "Legacy", coverImageURL: dataCover))
         let envelope = ExportEnvelope(format: LibraryDataService.formatMarker,
@@ -343,6 +369,7 @@ import SwiftData
     @Test func mergeImportAddsOnlyNewBooks() throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
 
         // Existing: one matched by ISBN, one by title+author (no ISBN).
         context.insert(Book(id: "x-1", title: "Dune", authors: ["Frank Herbert"],
@@ -389,6 +416,7 @@ import SwiftData
     @Test func materializeLocalCoversEmbedsBytesForSync() throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
 
         let id = UUID().uuidString
         let bytes = Data([0xFF, 0xD8, 0x01, 0x02, 0x03])
@@ -407,6 +435,7 @@ import SwiftData
     @Test func mergeRecognizesDashEquivalentISBN() throws {
         let context = baseContext()
         LibraryDataService.deleteAll(context: context)
+        ensureActiveDefaultLibrary(context)
         // Stored canonical form (no dashes).
         context.insert(Book(id: "x-1", title: "Dune", authors: ["Frank Herbert"],
                             isbn: "9780441172719", createdAt: Date(timeIntervalSince1970: 1)))

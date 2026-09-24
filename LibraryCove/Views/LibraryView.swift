@@ -115,6 +115,7 @@ private struct ScrollOffsetTracker: View {
 /// Main library screen: all books with cover grid, list, and dashboard views.
 struct LibraryView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.openSettingsTab) private var openSettings
     /// The active member — the greeting reads THIS object (the same
     /// instance Settings renames), not a query result that could resolve to
     /// a different row when duplicate active members exist.
@@ -333,7 +334,8 @@ struct LibraryView: View {
                             }
                         }
                     } label: {
-                        Label(libraryScope.activeName(context: modelContext, memberName: user.displayName),
+                        Label(libraryScope.activeName(context: modelContext, memberName: user.displayName)
+                              ?? "No Library",
                               systemImage: "chevron.down")
                     }
                     .accessibilityIdentifier("librarySwitcher")
@@ -572,7 +574,8 @@ struct LibraryView: View {
             }
             let name = LibraryDataService.exportFileName(
                 kind: "Catalog",
-                libraryName: libraryScope.activeName(context: modelContext, memberName: user.displayName),
+                libraryName: libraryScope.activeName(context: modelContext, memberName: user.displayName)
+                    ?? "Library",
                 memberName: user.displayName,
                 ext: "pdf"
             )
@@ -797,17 +800,22 @@ struct LibraryView: View {
 
     /// Small caption at the top of grid, list, and dashboard naming the
     /// active library, so multi-library users always know which collection
-    /// they are browsing. `activeName` matches the toolbar switcher:
+    /// they are browsing. Hidden when NO library exists (the empty state
+    /// below explains instead). `activeName` matches the toolbar switcher:
     /// "«Member»'s Library" when the library was never named.
+    @ViewBuilder
     private var activeLibraryBanner: some View {
-        Text(libraryScope.activeName(context: modelContext, memberName: user.displayName))
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.vertical, 4)
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
-            .accessibilityLabel("Active library: \(libraryScope.activeName(context: modelContext, memberName: user.displayName))")
-            .accessibilityIdentifier("activeLibraryBanner")
+        if libraryScope.activeName(context: modelContext, memberName: user.displayName) != nil {
+            let name = libraryScope.activeName(context: modelContext, memberName: user.displayName) ?? ""
+            Text(name)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
+                .background(Color(uiColor: .secondarySystemGroupedBackground))
+                .accessibilityLabel("Active library: \(name)")
+                .accessibilityIdentifier("activeLibraryBanner")
+        }
     }
 
     private var libraryContent: some View {
@@ -908,8 +916,20 @@ struct LibraryView: View {
         .overlay {
             // The empty-state overlay applies to the book-browsing modes
             // only — the Dashboard renders stats (zeros when empty) and
-            // must not have text stacked on top of its rows.
-            if visibleBooks.isEmpty && viewMode != .dashboard {
+            // the no-library state replaces it below.
+            if libraryScope.active(context: modelContext) == nil {
+                // No library at all (user deleted the last one): a create
+                // prompt replaces the empty-library state.
+                ContentUnavailableView {
+                    Label("No library", systemImage: "books.vertical")
+                } description: {
+                    Text("Create a library in Settings to start adding books.")
+                } actions: {
+                    Button("Open Settings") {
+                        openSettings()
+                    }
+                }
+            } else if visibleBooks.isEmpty && viewMode != .dashboard {
                 ContentUnavailableView {
                     VStack(spacing: 12) {
                         Image("BrandMark")

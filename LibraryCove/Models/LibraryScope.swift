@@ -203,29 +203,34 @@ final class LibraryScope: ObservableObject {
         return result
     }
 
-    /// The active library, creating the default one when absent.
+    /// The active library, or nil when NO library exists (the user deleted
+    /// every one). Does NOT synthesize a default — Settings and the Library
+    /// page surface the no-library state instead. A dangling activeID
+    /// against a non-empty registry (deleted library was active) promotes
+    /// the oldest remaining entry, like the pre-refactor behavior.
     func active(context: ModelContext) -> LibraryInfo? {
-        if let active = all(context: context).first(where: { $0.id == activeID }) {
+        let registry = all(context: context)
+        if let active = registry.first(where: { $0.id == activeID }) {
             return active
         }
-        return ensureDefault(context: context)
+        guard let oldest = registry.first else { return nil }
+        activate(oldest, context: context)
+        return oldest
     }
 
-    /// Convenience: the active library's id (creates the default if absent).
-    func activeID(context: ModelContext) -> String {
-        if all(context: context).contains(where: { $0.id == activeID }) {
-            return activeID
-        }
-        return ensureDefault(context: context)?.id ?? Self.defaultLibraryID
+    /// The active library's id, or nil when no library exists.
+    func activeID(context: ModelContext) -> String? {
+        active(context: context)?.id
     }
 
-    /// The active library's display name (defaults to the classic
-    /// "<member>'s Library" when the user hasn't named it).
-    func activeName(context: ModelContext, memberName: String) -> String {
-        guard let library = active(context: context), !library.name.isEmpty else {
-            return SharedLibrarySettings.defaultShareTitle(for: memberName)
-        }
-        return library.name
+    /// The active library's display name, or nil when NO library exists
+    /// (callers render the no-library state). Unnamed active library keeps
+    /// the classic "<member>'s Library" fallback.
+    func activeName(context: ModelContext, memberName: String) -> String? {
+        guard let library = active(context: context) else { return nil }
+        return library.name.isEmpty
+            ? SharedLibrarySettings.defaultShareTitle(for: memberName)
+            : library.name
     }
 
     /// Marks `library` as the only active one.
@@ -298,14 +303,21 @@ final class LibraryScope: ObservableObject {
         try? context.save()
 
         if wasActive {
-            let remaining = all(context: context)
-            if let next = remaining.first {
+            if let next = all(context: context).first {
+                // Promote the oldest remaining library; a dangling activeID
+                // would leave no entry marked active.
                 activeID = next.id
                 var registry = loadRegistry()
                 for i in registry.indices { registry[i].isActive = registry[i].id == next.id }
                 saveRegistry(registry)
             } else {
-                _ = ensureDefault(context: context)
+                // No default synthesis: when the LAST library goes, the
+                // device is genuinely library-less (Settings offers Create
+                // Library, the Library page shows the no-library state).
+                // A silently recreated "Untitled" default is the bug this
+                // replaces. Reset activeID so every active(...) lookup is
+                // nil-safe until the user creates a library.
+                activeID = Self.defaultLibraryID
             }
         }
         deleteRegistryRecord(id: id)
@@ -313,28 +325,45 @@ final class LibraryScope: ObservableObject {
         notifyChanged()
     }
 
-    /// One-time launch migration: ensures a default library exists and tags
-    /// every legacy row (libraryID == nil) with it. Idempotent.
+    /// Launch migration: promotes the oldest library when the active one
+    /// is gone, and tags every legacy row (libraryID == nil) into the
+    /// default library when one exists. An empty registry stays empty —
+    /// the no-library state — UNLESS legacy content rows exist (an
+    /// upgrade from a pre-multi-library install, or UI-test seeds): those
+    /// get a default library so the rows are tagged and visible. Idempotent.
     func migrateIfNeeded(context: ModelContext) {
         var registry = loadRegistry()
         if registry.isEmpty {
+            // Legacy upgrade / UI-test seeds: content rows exist with no
+            // registry — synthesize the default so tagLegacyRows has a
+            // target and the rows stay visible. A truly empty store
+            // (post-wipe, post-last-delete) keeps the no-library state.
+            let hasLegacyRows =
+                ((try? context.fetchCount(FetchDescriptor<Book>())) ?? 0) > 0
+                || ((try? context.fetchCount(FetchDescriptor<Note>())) ?? 0) > 0
+                || ((try? context.fetchCount(FetchDescriptor<ReadingList>())) ?? 0) > 0
+                || ((try? context.fetchCount(FetchDescriptor<ReadingListItem>())) ?? 0) > 0
+                || ((try? context.fetchCount(FetchDescriptor<Connection>())) ?? 0) > 0
+            guard hasLegacyRows else {
+                activeID = Self.defaultLibraryID
+                return
+            }
             registry = [LibraryInfo(id: Self.defaultLibraryID, name: "",
-                                    isActive: true, createdAt: Date(timeIntervalSinceReferenceDate: 0),
+                                    isActive: true,
+                                    createdAt: Date(timeIntervalSinceReferenceDate: 0),
                                     modifiedAt: nil)]
             saveRegistry(registry)
         }
-        guard let defaultLibrary = registry.first(where: { $0.id == Self.defaultLibraryID }) else {
-            let oldest = registry.first
-            tagLegacyRows(context: context, libraryID: oldest?.id ?? Self.defaultLibraryID)
-            activeID = oldest?.id ?? Self.defaultLibraryID
-            return
-        }
-        if !registry.contains(where: { $0.isActive }) {
-            for i in registry.indices { registry[i].isActive = registry[i].id == defaultLibrary.id }
+        if let active = registry.first(where: { $0.isActive }) {
+            activeID = active.id
+        } else if let oldest = registry.first {
+            for i in registry.indices { registry[i].isActive = registry[i].id == oldest.id }
             saveRegistry(registry)
+            activeID = oldest.id
         }
-        activeID = registry.first(where: { $0.isActive })?.id ?? defaultLibrary.id
-        tagLegacyRows(context: context, libraryID: defaultLibrary.id)
+        if let defaultLibrary = registry.first(where: { $0.id == Self.defaultLibraryID }) {
+            tagLegacyRows(context: context, libraryID: defaultLibrary.id)
+        }
     }
 
     /// Remove every library (Delete everything) — content rows are cleared
@@ -589,19 +618,35 @@ final class LibraryScope: ObservableObject {
                 }
                 if snapshot.isEmpty {
                     // Registry empty locally and NO wipe pending: the user
-                    // may have deleted every library without the wipe flag
-                    // (single-library delete flow). Publish an empty
-                    // snapshot: the pushed set is authoritative, peers fold
-                    // absence-removal and recreate their own defaults.
-                    // (The wipedAt marker path above owns wipe publishing;
-                    // writing a second marker here would extend the cutoff
-                    // over post-wipe entries.)
-                    let meta = CKRecord(recordType: Self.registryRecordType,
-                                        recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
-                                                              zoneID: zoneID))
-                    meta["wipedAt"] = Date()
-                    _ = try? await database.modifyRecords(saving: [meta], deleting: [],
-                                                          savePolicy: .allKeys)
+                    // deleted their last library on THIS device. Delete any
+                    // stale library records (belt and braces beside
+                    // deleteRegistryRecord) but write NO wipedAt marker —
+                    // the cutoff would erase OTHER devices' libraries on
+                    // their next full pull, including libraries this device
+                    // never touched. Peers learn the deletion via the
+                    // record-delete delta; an empty remote set leaves a
+                    // peer's populated registry intact (absence-removal
+                    // only fires on a populated remote set).
+                    do {
+                        let fetched = try await fetchRegistryZone(previousToken: nil)
+                        let deleting = fetched.entries.map { entry in
+                            CKRecord.ID(recordName: "library-\(entry.dto.id)", zoneID: zoneID)
+                        }
+                        if !deleting.isEmpty {
+                            let result = try await database.modifyRecords(
+                                saving: [], deleting: deleting, savePolicy: .allKeys)
+                            // partialFailure hides per-record deletes that
+                            // failed; surface them like the wipe publish.
+                            let failures = result.deleteResults.values.compactMap {
+                                if case .failure(let e) = $0 { return e } else { return nil }
+                            }
+                            if !failures.isEmpty {
+                                libraryLog.error("Empty-registry push had delete failures: \(String(describing: failures), privacy: .public)")
+                            }
+                        }
+                    } catch {
+                        libraryLog.error("Empty-registry push failed: \(String(describing: error), privacy: .public)")
+                    }
                     return
                 }
                 let records = snapshot.compactMap { info -> CKRecord? in
@@ -994,31 +1039,16 @@ final class LibraryScope: ObservableObject {
             }
         }
 
-        // 3. Everything gone → recreate the default locally; the next push
-        // publishes it as the post-wipe state. Stamped with NOW so a later
-        // wipe cutoff (wipedAt > now) can never mistake it for pre-wipe
-        // state and delete it. FULL fetches only — a delta that happens to
-        // carry no changed records must not invent a phantom default.
-        if fullSnapshot, registry.isEmpty {
-            let library = LibraryInfo(id: Self.defaultLibraryID, name: "",
-                                      isActive: true, createdAt: Date(),
-                                      modifiedAt: Date())
-            registry = [library]
-            activeID = library.id
-            changed = true
-        }
+        // 3. (removed) The fold no longer invents a default when the
+        // merged registry is empty: empty is the genuine no-library state
+        // after a wipe or last-library delete, and the user creates a
+        // library from the UI. FULL fetches only historically — a delta
+        // must never invent entries anyway.
 
-        // 3b. No active library (e.g. deletions removed the active one, or
-        // a rename promoted another device's choice): promote the first
-        // remaining entry. Runs on deltas too — deletions there can strand
-        // the active flag.
-        if !registry.isEmpty, !registry.contains(where: { $0.isActive }) {
-            if let next = registry.first {
-                for i in registry.indices { registry[i].isActive = registry[i].id == next.id }
-                activeID = next.id
-                changed = true
-            }
-        }
+        // 3b. (moved below step 4) The no-active promotion runs AFTER the
+        // fold's append pass: a sole appended remote library would
+        // otherwise sit inactive in an emptied registry until the next
+        // fold.
 
         // 4. Fold eligible remote entries: rename on strictly newer stamp,
         // append on unknown ids. An empty LOCAL name is a recreated default
@@ -1080,6 +1110,19 @@ final class LibraryScope: ObservableObject {
                                             modifiedAt: remoteStamp,
                                             share: dto.share,
                                             shareClearedAt: dto.shareClearedAt))
+                changed = true
+            }
+        }
+
+        // 3b. No active library (deletions removed the active one, a sole
+        // appended remote library, or a rename promoted another device's
+        // choice): promote the first remaining entry. Runs after the fold
+        // loop so appends participate, and on deltas too — deletions there
+        // can strand the active flag.
+        if !registry.isEmpty, !registry.contains(where: { $0.isActive }) {
+            if let next = registry.first {
+                for i in registry.indices { registry[i].isActive = registry[i].id == next.id }
+                activeID = next.id
                 changed = true
             }
         }

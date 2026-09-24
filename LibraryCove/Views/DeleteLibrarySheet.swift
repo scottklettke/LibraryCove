@@ -110,7 +110,7 @@ struct DeleteLibrarySheet: View {
             let member = LibraryDataService.activeMemberName(Persistence.shared.mainContext)
             let filename = LibraryDataService.exportFileName(
                 kind: "Library",
-                libraryName: LibraryScope.shared.activeName(context: Persistence.shared.mainContext, memberName: member),
+                libraryName: LibraryScope.shared.activeName(context: Persistence.shared.mainContext, memberName: member) ?? "Library",
                 memberName: member,
                 ext: "zip"
             )

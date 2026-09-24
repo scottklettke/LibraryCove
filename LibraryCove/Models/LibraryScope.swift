@@ -126,6 +126,19 @@ final class LibraryScope: ObservableObject {
         UserDefaults.standard.set(data, forKey: registryChangeTokenKey)
     }
 
+    /// Set by `deleteAllLibraries()`, cleared ONLY when the wipe publish
+    /// (meta record with wipedAt + stale record deletes) is CONFIRMED
+    /// server-side. Keyed off a re-read snapshot alone is racy: any
+    /// `saveRegistry` between the wipe and the push's re-read (e.g. the
+    /// welcome flow naming the new default) makes the registry non-empty,
+    /// silently skips the wipe branch, and leaves every pre-wipe record
+    /// in the zone for the next full pull to adopt wholesale.
+    private static let registryWipePendingKey = "LibraryCoveRegistryWipePending"
+    private static var wipePending: Bool {
+        get { UserDefaults.standard.bool(forKey: registryWipePendingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: registryWipePendingKey) }
+    }
+
     /// Test seam: read-only view of the active library id for fold tests.
     var activeIDForTesting: String { activeID }
 
@@ -337,6 +350,9 @@ final class LibraryScope: ObservableObject {
         // pre-wipe state, replaying stale changes over the freshly created
         // post-wipe default (renames vanished after "Delete everything").
         Self.saveRegistryChangeToken(nil)
+        // Survives app restarts: the wipe publish must run (and be
+        // CONFIRMED) even if the local registry is re-populated first.
+        Self.wipePending = true
         activeID = Self.defaultLibraryID
         pushRegistryToCloud()
         notifyChanged()
@@ -514,9 +530,10 @@ final class LibraryScope: ObservableObject {
                 // Pull-and-fold FIRST, then publish the MERGED snapshot: a
                 // stale local snapshot pushed blind would clobber a rename
                 // the other device just landed (an empty recreated default
-                // overwriting "My Library"). The wipe branch below is
-                // exempt — a wipe must overwrite everything, fold or not.
-                if !snapshot.isEmpty {
+                // overwriting "My Library"). A pending wipe skips the fold
+                // entirely — folding pre-wipe remote state into a wiped
+                // registry would re-populate it before the wipe publishes.
+                if !Self.wipePending {
                     if await pullAndFoldRegistry() {
                         // The fold may have adopted a remote rename/active
                         // switch before publish; refresh the UI now instead
@@ -525,55 +542,59 @@ final class LibraryScope: ObservableObject {
                     }
                 }
                 let snapshot = loadRegistry()
-                if snapshot.isEmpty {
-                    // Registry wiped locally (delete-everything): publish the
-                    // wipe as a meta record + remove every library record.
-                    // Dropping the whole zone would HIDE the wipe: devices
-                    // pulling later see an absent zone ("never pushed") and
-                    // keep — then re-publish — their stale libraries.
-                    // Enumerate via a one-shot FULL zone-changes fetch (no
-                    // token, no fold, no persistence): same Production-safe
-                    // path as the pull, no queryable indexes required.
+                if Self.wipePending {
+                    // Wipe pending (delete-everything, possibly re-populated
+                    // locally before the publish confirmed): delete every
+                    // library record and save the wipedAt marker in ONE
+                    // atomic modifyRecords — the marker must never land
+                    // without the deletes, and vice versa. Cleared ONLY
+                    // when the server confirms every item; any failure
+                    // leaves the flag set so the next push retries (the
+                    // willEnterForeground handler re-pushes), instead of
+                    // the wipe silently vanishing.
                     do {
                         let fetched = try await fetchRegistryZone(previousToken: nil)
-                        let staleIDs = fetched.entries.map { entry in
+                        var deleting = fetched.entries.map { entry in
                             CKRecord.ID(recordName: "library-\(entry.dto.id)", zoneID: zoneID)
                         }
-                        if !staleIDs.isEmpty || fetched.wipedAt != nil {
-                            var deleting = staleIDs
-                            deleting.append(CKRecord.ID(
-                                recordName: Self.registryMetaRecordName, zoneID: zoneID))
-                            let result = try await database.modifyRecords(
-                                saving: [], deleting: deleting)
-                            // A partialFailure here means stale records
-                            // SURVIVED the delete (resurrection fuel);
-                            // opaque top-level success would hide it.
-                            let partials = (result.deleteResults.values.compactMap {
-                                if case .failure(let e) = $0 { return e } else { return nil }
-                            })
-                            if !partials.isEmpty {
-                                libraryLog.error("Wipe record delete had failures: \(String(describing: partials), privacy: .public)")
-                            }
+                        deleting.append(CKRecord.ID(
+                            recordName: Self.registryMetaRecordName, zoneID: zoneID))
+                        let meta = CKRecord(recordType: Self.registryRecordType,
+                                            recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
+                                                                  zoneID: zoneID))
+                        meta["wipedAt"] = Date()
+                        let result = try await database.modifyRecords(
+                            saving: [meta], deleting: deleting, savePolicy: .allKeys)
+                        var failures: [Error] = result.saveResults.values.compactMap {
+                            if case .failure(let e) = $0 { return e } else { return nil }
+                        } + result.deleteResults.values.compactMap {
+                            if case .failure(let e) = $0 { return e } else { return nil }
+                        }
+                        if failures.isEmpty {
+                            Self.wipePending = false
+                        } else {
+                            libraryLog.error("Wipe publish had failures, will retry: \(String(describing: failures), privacy: .public)")
                         }
                     } catch {
-                        // A failed enumeration leaves the stale records in
-                        // the zone (resurrection fuel for later pulls);
-                        // surface it instead of swallowing.
-                        libraryLog.error("Wipe enumeration failed: \(String(describing: error), privacy: .public)")
+                        libraryLog.error("Wipe publish failed, will retry: \(String(describing: error), privacy: .public)")
                     }
+                    return
+                }
+                if snapshot.isEmpty {
+                    // Registry empty locally and NO wipe pending: the user
+                    // may have deleted every library without the wipe flag
+                    // (single-library delete flow). Publish an empty
+                    // snapshot: the pushed set is authoritative, peers fold
+                    // absence-removal and recreate their own defaults.
+                    // (The wipedAt marker path above owns wipe publishing;
+                    // writing a second marker here would extend the cutoff
+                    // over post-wipe entries.)
                     let meta = CKRecord(recordType: Self.registryRecordType,
                                         recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
                                                               zoneID: zoneID))
                     meta["wipedAt"] = Date()
-                    let metaResult = try await database.modifyRecords(
-                        saving: [meta], deleting: [], savePolicy: .allKeys)
-                    // The wipedAt marker IS the cutoff every later pull
-                    // folds against — a failed save must be loud.
-                    for (_, outcome) in metaResult.saveResults {
-                        if case .failure(let e) = outcome {
-                            libraryLog.error("Wipe meta save failed: \(String(describing: e), privacy: .public)")
-                        }
-                    }
+                    _ = try? await database.modifyRecords(saving: [meta], deleting: [],
+                                                          savePolicy: .allKeys)
                     return
                 }
                 let records = snapshot.compactMap { info -> CKRecord? in

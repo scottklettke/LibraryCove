@@ -17,6 +17,7 @@ struct BackupDetailView: View {
     @State private var loadError: String?
     @State private var showImportPreview = false
     @State private var archiveData: Data?
+    @State private var isRestoring = false
     @State private var showDeleteConfirm = false
 
     var body: some View {
@@ -25,9 +26,15 @@ struct BackupDetailView: View {
                 Button {
                     initiateRestore()
                 } label: {
-                    Label(restoreLabel, systemImage: "clock.arrow.circlepath")
+                    HStack {
+                        Label(restoreLabel, systemImage: "clock.arrow.circlepath")
+                        Spacer()
+                        if isRestoring {
+                            ProgressView()
+                        }
+                    }
                 }
-                .disabled(books == nil)
+                .disabled(isRestoring || books == nil)
 
                 Button(role: .destructive) {
                     showDeleteConfirm = true
@@ -75,7 +82,7 @@ struct BackupDetailView: View {
         }
         .navigationTitle("Backup")
         .navigationBarTitleDisplayMode(.inline)
-        .task { loadBooks() }
+        .task { await loadBooks() }
         .sheet(isPresented: $showImportPreview) {
             if let archiveData {
                 ImportPreviewView(
@@ -126,10 +133,22 @@ struct BackupDetailView: View {
         return parts.joined(separator: " · ")
     }
 
-    private func loadBooks() {
+    private func loadBooks() async {
+        // Ubiquitous backups may still be downloading (metadata stub with
+        // 0 bytes) — poll OFF the main actor until the bytes arrive
+        // instead of failing on a stub zip.
+        isRestoring = true
+        defer { isRestoring = false }
+        let url = backup.url
+        let data = await Task.detached {
+            await BackupStore.waitForDownloadedData(at: url)
+        }.value
+        guard let data else {
+            loadError = "This backup hasn't finished downloading from iCloud. Check your connection and try again."
+            return
+        }
+        archiveData = data
         do {
-            let data = try Data(contentsOf: backup.url)
-            archiveData = data
             books = try LibraryDataService.archiveBooks(data: data)
         } catch {
             loadError = (error as? LibraryDataError)?.errorDescription
@@ -139,7 +158,10 @@ struct BackupDetailView: View {
     }
 
     private func loadAndPresentImport() {
-        guard archiveData != nil else { loadBooks(); return }
+        guard archiveData != nil else {
+            Task { await loadBooks() }
+            return
+        }
         showImportPreview = true
     }
 
@@ -147,7 +169,10 @@ struct BackupDetailView: View {
     /// provider — backups are one synced set, so there is no per-provider
     /// origin to switch to anymore.
     private func initiateRestore() {
-        guard archiveData != nil else { loadBooks(); return }
+        guard archiveData != nil else {
+            Task { await loadBooks() }
+            return
+        }
         showImportPreview = true
     }
 }

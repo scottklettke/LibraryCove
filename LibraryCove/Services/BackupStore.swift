@@ -50,14 +50,24 @@ enum BackupStore {
     }
 
     /// Backups, newest first. One synced set — no per-provider companions.
+    ///
+    /// Ubiquitous files are metadata stubs until downloaded: size reads 0
+    /// and the item may not be readable yet. Each listed zip gets
+    /// `startDownloadingUbiquitousItem` kicked so macOS/iOS fetch it in
+    /// the background; the UI shows the (eventually correct) size, and
+    /// BackupDetailView polls for a readable body before restoring.
+    /// No-op for the local fallback directory.
     static func list() -> [Item] {
         let fm = FileManager.default
         let dir = directory
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        let contents = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
+        let contents = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey, .isUbiquitousItemKey])) ?? []
         return contents
             .filter { $0.pathExtension == "zip" }
             .map { url in
+                // Kick a background download; harmless (no-op) for plain
+                // local files in the fallback directory.
+                try? fm.startDownloadingUbiquitousItem(at: url)
                 let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
                 return Item(url: url,
                             name: url.deletingPathExtension().lastPathComponent,
@@ -65,6 +75,23 @@ enum BackupStore {
                             date: values?.contentModificationDate ?? Date.distantPast)
             }
             .sorted { $0.date > $1.date }
+    }
+
+    /// Async variant of the download wait: polls OFF the main actor so a
+    /// slow ubiquitous download never freezes the UI. Returns the loaded
+    /// bytes, or nil when the file never became readable within
+    /// `timeout`.
+    static func waitForDownloadedData(at url: URL, timeout: TimeInterval = 10) async -> Data? {
+        let fm = FileManager.default
+        try? fm.startDownloadingUbiquitousItem(at: url)
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let data = try? Data(contentsOf: url), !data.isEmpty {
+                return data
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return (try? Data(contentsOf: url)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// Alias kept for call sites that want the "everything" semantics;

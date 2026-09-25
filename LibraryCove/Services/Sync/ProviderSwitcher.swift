@@ -86,9 +86,9 @@ enum ProviderSwitcher {
                 try? targetContext.save()
             }
         }
-        // 4) Commit: backups move with the library, the choice persists, the
-        // app hot-swaps onto the new store (root re-injects via notification).
-        BackupStore.mirrorForProviderSwitch(to: new)
+        // 4) Commit: the choice persists, the app hot-swaps onto the new
+        // store (root re-injects via notification). Backups live in the
+        // iCloud container and need no per-provider mirroring.
         SyncSettings.selectedProvider = new
         SyncSettings.markBulkChange()
         Persistence.swapShared(to: targetContainer)

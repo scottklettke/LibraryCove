@@ -3,10 +3,8 @@ import SwiftData
 
 /// Detail page for one backup: lists every book it contains (newest added
 /// first) and offers to restore it — with the same add-new-only /
-/// replace-whole-library choice as a zip-file import. Restoring a backup
-/// that was made under the other provider also switches the sync method to
-/// that provider (silently), unless a shared library is active — shares
-/// never switch silently.
+/// replace-whole-library choice as a zip-file import. Backups are one
+/// synced iCloud set; no per-provider switching is involved.
 struct BackupDetailView: View {
     let backup: BackupStore.Item
     /// Called after a restore completes so the presenter refreshes its list.
@@ -19,12 +17,7 @@ struct BackupDetailView: View {
     @State private var loadError: String?
     @State private var showImportPreview = false
     @State private var archiveData: Data?
-    @State private var isRestoring = false
     @State private var showDeleteConfirm = false
-    /// Set when the pre-restore provider switch was deferred (iCloud still
-    /// converging after a bulk change) — surfaced so the restore doesn't
-    /// silently land on a different provider than the button promised.
-    @State private var switchDeferredMessage: String?
 
     var body: some View {
         Form {
@@ -32,15 +25,9 @@ struct BackupDetailView: View {
                 Button {
                     initiateRestore()
                 } label: {
-                    HStack {
-                        Label(restoreLabel, systemImage: "clock.arrow.circlepath")
-                        Spacer()
-                        if isRestoring {
-                            ProgressView()
-                        }
-                    }
+                    Label(restoreLabel, systemImage: "clock.arrow.circlepath")
                 }
-                .disabled(isRestoring || books == nil)
+                .disabled(books == nil)
 
                 Button(role: .destructive) {
                     showDeleteConfirm = true
@@ -95,20 +82,10 @@ struct BackupDetailView: View {
                     archiveData: archiveData,
                     sourceName: backup.name
                 ) { _ in
-                    // The provider switch (if any) already happened before
-                    // the sheet opened — see initiateRestore.
                     onRestored()
                     openLibraryTab()
                 }
             }
-        }
-        .alert("Switch deferred", isPresented: Binding(
-            get: { switchDeferredMessage != nil },
-            set: { if !$0 { switchDeferredMessage = nil } }
-        )) {
-            Button("Continue", role: .cancel) {}
-        } message: {
-            Text(switchDeferredMessage ?? "")
         }
         .confirmationDialog(
             "Delete this backup?",
@@ -126,31 +103,16 @@ struct BackupDetailView: View {
         }
     }
 
-    /// True when this backup belongs to the other switchable provider
-    /// (iCloud only — Local Only is retired) and the app isn't sharing —
-    /// restoring it should switch the sync method back.
-    private var shouldSwitchOnRestore: Bool {
-        backup.origin == .iCloud
-            && backup.origin != SyncSettings.selectedProvider
-            && backup.origin.isAvailableNow
-            && SharedLibraryMembershipGate.membership == .none
-    }
-
     private var restoreLabel: String {
         if SharedLibraryMembershipGate.membership != .none {
             return "Restore this backup"
         }
-        return shouldSwitchOnRestore
-            ? "Restore & switch to \(backup.origin.displayName)"
-            : "Restore this backup"
+        return "Restore this backup"
     }
 
     private var restoreFooter: String {
         if SharedLibraryMembershipGate.membership != .none {
             return "A shared library is active, so restoring stays on the shared mirror — your sync method doesn't change. Restoring offers the same choice as importing a file: add only books you don't have, or replace the whole library with this backup."
-        }
-        if shouldSwitchOnRestore {
-            return "This backup was made under \(backup.origin.displayName). Restoring it switches your sync method to \(backup.origin.displayName) first — the current library moves there — and then replaces it with this backup's contents."
         }
         return "Restoring offers the same choice as importing a file: add only books you don't have, or replace the whole library with this backup."
     }
@@ -181,31 +143,11 @@ struct BackupDetailView: View {
         showImportPreview = true
     }
 
-    /// Restoring a backup from the other provider switches the sync method
-    /// to that provider FIRST (silently), so the backup's contents replace
-    /// into the store the user will actually be on. Switching after the
-    /// restore would instead merge the restored library into the other
-    /// store's stale set — old books would resurface.
+    /// Restoring replaces the ACTIVE library's content on the CURRENT
+    /// provider — backups are one synced set, so there is no per-provider
+    /// origin to switch to anymore.
     private func initiateRestore() {
         guard archiveData != nil else { loadBooks(); return }
-        guard shouldSwitchOnRestore else {
-            showImportPreview = true
-            return
-        }
-        isRestoring = true
-        Task { @MainActor in
-            do {
-                try await ProviderSwitcher.perform(to: backup.origin)
-            } catch let error as LibrarySyncError where error == .iCloudStillSyncing {
-                // The switch was refused (iCloud still converging after a
-                // bulk change). Restore anyway on the current provider, but
-                // SAY so — the button promised a switch.
-                switchDeferredMessage = "iCloud is still syncing a recent change, so your sync method wasn't switched — the restore will land on \(SyncSettings.selectedProvider.displayName). Retry in a couple of minutes, or switch via Settings > Sync afterwards."
-            } catch {
-                switchDeferredMessage = "The switch to \(backup.origin.displayName) failed (\(error.localizedDescription)). The restore will land on \(SyncSettings.selectedProvider.displayName)."
-            }
-            isRestoring = false
-            showImportPreview = true
-        }
+        showImportPreview = true
     }
 }

@@ -2,19 +2,37 @@ import Foundation
 import SwiftData
 
 /// Manages named library backups: zipped `LibraryDataService.export`
-/// archives stored under Application Support/Backups. Files are named
+/// archives stored in the app's iCloud Drive container
+/// (`iCloud.com.librarycove.app`, Documents/Backups). Files are named
 /// `<library> yyyy-MM-dd (<bookCount> books) <n>.zip` where `<library>` is
 /// the active library's display name and `<n>` is a same-day sequence
 /// number starting at 1 (omitted for the first backup of a day). The
 /// library name tells the user which library a backup came from when
 /// several exist.
 ///
-/// Backups live on-device only. The "moved between local and iCloud like
-/// the library" behavior comes from BackupStore mirroring the backup
-/// directory between `default.store`'s and `default-cloud.store`'s
-/// companion folders whenever the provider switches.
+/// Backups sync between the account's devices: the container is an iCloud
+/// Drive (ubiquity) container, so macOS/iOS propagate new, renamed, and
+/// deleted files automatically. Locally the files appear under the
+/// same-named folder in Files → iCloud Drive → LibraryCove.
 enum BackupStore {
+    /// The iCloud Drive container root. Nil when iCloud Drive is
+    /// unavailable (no account, or the container hasn't materialized yet).
+    static var ubiquityRoot: URL? {
+        FileManager.default.url(forUbiquityContainerIdentifier:
+            SwiftDataiCloudSync.containerIdentifier)?
+            .appendingPathComponent("Documents", isDirectory: true)
+    }
+
+    /// Where backups live: the container's Documents/Backups. Falls back
+    /// to a local Application Support folder ONLY when the ubiquity
+    /// container is unavailable (offline/no account) so a backup is never
+    /// lost — the next successful container probe still lists those files
+    /// once the folder is re-pointed there is NOT attempted; the local
+    /// fallback keeps this session's saves browsable.
     static var directory: URL {
+        if let root = ubiquityRoot {
+            return root.appendingPathComponent("Backups", isDirectory: true)
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask).first!
         return base.appendingPathComponent("Backups", isDirectory: true)
@@ -25,20 +43,16 @@ enum BackupStore {
         let name: String
         let size: Int64
         let date: Date
-        /// The provider this backup set lives under: the live folder's
-        /// contents belong to the current provider; the parked companions
-        /// hold the other provider's set. Drives "Restore & switch" — a
-        /// backup made under iCloud can carry the user back to iCloud Sync.
-        let origin: LibrarySync
-        var id: String { origin.rawValue + "/" + name }
+        var id: String { name }
         var sizeText: String {
             ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         }
     }
 
-    /// Backups in one directory, newest first.
-    private static func list(_ dir: URL, origin: LibrarySync) -> [Item] {
+    /// Backups, newest first. One synced set — no per-provider companions.
+    static func list() -> [Item] {
         let fm = FileManager.default
+        let dir = directory
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let contents = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
         return contents
@@ -48,34 +62,15 @@ enum BackupStore {
                 return Item(url: url,
                             name: url.deletingPathExtension().lastPathComponent,
                             size: Int64(values?.fileSize ?? 0),
-                            date: values?.contentModificationDate ?? Date.distantPast,
-                            origin: origin)
+                            date: values?.contentModificationDate ?? Date.distantPast)
             }
             .sorted { $0.date > $1.date }
     }
 
-    /// The provider KIND the live backup set belongs to. While a shared
-    /// library is active the live set belongs to the shared mirror (not a
-    /// switchable provider), so it's tagged under the user's local/iCloud
-    /// kind — restore-with-switch must never route through the shared state.
-    private static var liveOrigin: LibrarySync {
-        SyncSettings.selectedProvider == .iCloud ? .iCloud : .localOnly
-    }
-
-    /// Backups of the CURRENT provider's set (the live `Backups` folder),
-    /// newest first.
-    static func list() -> [Item] {
-        list(directory, origin: liveOrigin)
-    }
-
-    /// Every backup on the device across all backup sets: the current
-    /// provider's live folder plus both parked companions (Local only /
-    /// iCloud Sync), each tagged with its origin, newest first overall.
+    /// Alias kept for call sites that want the "everything" semantics;
+    /// there is exactly one (synced) set now.
     static func listAll() -> [Item] {
-        var items = list(directory, origin: liveOrigin)
-        items += list(localBackupDirectory, origin: .localOnly)
-        items += list(cloudBackupDirectory, origin: .iCloud)
-        return items.sorted { $0.date > $1.date }
+        list()
     }
 
     /// Saves `data` as a backup named by the library it came from, today's
@@ -137,65 +132,36 @@ enum BackupStore {
     }
 
     static func deleteAll() {
-        // Remove the live folder AND both parked companions so a provider
-        // switch can't resurrect "deleted" backups from Backups-local or
-        // Backups-cloud.
-        for url in [directory, localBackupDirectory, cloudBackupDirectory] {
-            try? FileManager.default.removeItem(at: url)
-        }
+        // Backups sync via the iCloud container; removing the folder
+        // propagates the deletions to the account's other devices.
+        try? FileManager.default.removeItem(at: directory)
     }
 
-    // MARK: - Provider-switch mirroring
-
-    /// Companion backup directories for the local and iCloud stores. On a
-    /// provider switch the whole `Backups` folder is MOVED (renamed) between
-    /// these two, mirroring how the library itself travels between
-    /// `default.store` and `default-cloud.store` — so backups follow the
-    /// library wherever it lives.
-    static var localBackupDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory,
-                                            in: .userDomainMask).first!
-        return base.appendingPathComponent("Backups-local", isDirectory: true)
-    }
-
-    static var cloudBackupDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory,
-                                            in: .userDomainMask).first!
-        return base.appendingPathComponent("Backups-cloud", isDirectory: true)
-    }
-
-    /// Called BEFORE a provider switch snapshot is poured into the target
-    /// store: carries the backups along with the library. The live
-    /// `directory` moves to the destination provider's companion folder, and
-    /// the destination's companion (if any) becomes the live one — so
-    /// switching to iCloud shows the backups last seen under iCloud, and
-    /// switching back to Local restores the local set. Nothing is deleted.
-    @MainActor
-    static func mirrorForProviderSwitch(to newProvider: LibrarySync) {
+    /// Legacy cleanup: the retired per-provider companion folders
+    /// (Backups-local / Backups-cloud). Their contents predate iCloud
+    /// syncing — merge them into the synced folder once, so nothing a user
+    /// made under the old two-folder model is stranded on-device.
+    static func migrateLegacyCompanionsIfNeeded() {
         let fm = FileManager.default
-        guard directoryExists(at: directory) else { return }
-        let target: URL = newProvider == .iCloud ? cloudBackupDirectory : localBackupDirectory
-        // Park the current set under the outgoing provider's companion.
-        let outgoing: URL = newProvider == .iCloud ? localBackupDirectory : cloudBackupDirectory
-        try? fm.createDirectory(at: outgoing, withIntermediateDirectories: true)
-        // Move current contents into the outgoing companion (merge; skip name clashes).
-        if let files = try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
-            for file in files {
-                let dest = outgoing.appendingPathComponent(file.lastPathComponent)
-                if !fm.fileExists(atPath: dest.path) {
-                    try? fm.moveItem(at: file, to: dest)
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first!
+        let legacy = [
+            base.appendingPathComponent("Backups-local", isDirectory: true),
+            base.appendingPathComponent("Backups-cloud", isDirectory: true),
+        ]
+        let dest = directory
+        try? fm.createDirectory(at: dest, withIntermediateDirectories: true)
+        for folder in legacy {
+            guard directoryExists(at: folder) else { continue }
+            if let files = try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) {
+                for file in files where file.pathExtension == "zip" {
+                    let target = dest.appendingPathComponent(file.lastPathComponent)
+                    if !fm.fileExists(atPath: target.path) {
+                        try? fm.moveItem(at: file, to: target)
+                    }
                 }
             }
-        }
-        // Bring the destination companion's contents into the live folder.
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        if let files = try? fm.contentsOfDirectory(at: target, includingPropertiesForKeys: nil) {
-            for file in files {
-                let dest = directory.appendingPathComponent(file.lastPathComponent)
-                if !fm.fileExists(atPath: dest.path) {
-                    try? fm.moveItem(at: file, to: dest)
-                }
-            }
+            try? FileManager.default.removeItem(at: folder)
         }
     }
 

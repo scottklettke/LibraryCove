@@ -118,7 +118,7 @@ struct BackupsView: View {
         } header: {
             Text("Backup")
         } footer: {
-            Text("Saves a zip of your whole library (books, notes, reading lists, covers) under its date and book count. Backups stay on this device and follow the library when you switch between Local only and iCloud Sync.")
+            Text("Saves a zip of your whole library (books, notes, reading lists, covers) under its date and book count. Backups sync via iCloud, so they appear on every device signed into the same account.")
         }
     }
 
@@ -192,16 +192,10 @@ struct BackupsView: View {
         }
     }
 
-    /// Inline provider tag after a backup's name — the user's wording:
-    /// "(Local)" rather than the picker's "Local only".
-    private func originTag(_ origin: LibrarySync) -> String {
-        origin == .localOnly ? "Local" : origin.displayName
-    }
-
     private func backupRowLabel(_ backup: BackupStore.Item) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(backup.name) (\(originTag(backup.origin)))")
+                Text(backup.name)
                     .font(.body)
                     .lineLimit(2)
                 Text("\(libraryCaption(backup)) · \(backup.sizeText)")
@@ -262,6 +256,7 @@ struct BackupsView: View {
     // MARK: - Actions
 
     private func reload() {
+        BackupStore.migrateLegacyCompanionsIfNeeded()
         backups = BackupStore.listAll()
     }
 

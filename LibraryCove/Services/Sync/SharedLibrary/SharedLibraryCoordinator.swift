@@ -150,19 +150,12 @@ enum SharedLibraryCoordinator {
             throw SharedLibraryError.noActiveLibrary
         }
         // Only admins may stop sharing (owner or promoted admin): editors
-        // can edit and share links but cannot turn the share off. Reads the
-        // PER-LIBRARY record name — the legacy global key is nil under the
-        // per-library model and would silently fall back to "owner",
-        // letting any participant through. An owner has no participant
-        // record of their own and passes via membership.
-        let selfRecordName = SharedLibrarySettings.currentUserRecordName(libraryID: libraryID)
-        if SharedLibrarySettings.membership(libraryID: libraryID) != .owner {
-            guard let selfRecordName,
-                  ShareRoleStore.role(libraryID: libraryID,
-                                      participantRecordName: selfRecordName) == .admin
-            else {
-                throw SharedLibraryError.notPermitted
-            }
+        // can edit and share links but cannot turn the share off. myRole
+        // reads the PER-LIBRARY record name and maps owner => admin — the
+        // legacy global key is nil under the per-library model and its
+        // "owner" fallback would let any participant through.
+        guard SharedLibraryEngine.shared.myRole(libraryID: libraryID) == .admin else {
+            throw SharedLibraryError.notPermitted
         }
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: true)
         // Per-library shares: the GLOBAL stopSharingAsOwner reads the legacy

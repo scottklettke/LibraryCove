@@ -46,7 +46,8 @@ enum SharedLibraryCoordinator {
     /// its own namespace (zone, share record, membership state). The
     /// snapshot-pour + provider flip still applies to the ACTIVE library —
     /// sharing a library makes it the active one so its content syncs.
-    static func beginShare(currentTitle: String, libraryID: String) async throws -> CKShare {
+    static func beginShare(currentTitle: String, libraryID: String,
+                           linkRole: ShareParticipantRole = .editor) async throws -> CKShare {
         // Guests are view-only: they cannot create the share or its links.
         // Editors and admins can. (Owner passes: membership .owner => admin.)
         guard SharedLibraryEngine.shared.myRole(libraryID: libraryID) != .guest else {
@@ -67,7 +68,8 @@ enum SharedLibraryCoordinator {
             }
             guard SyncSettings.writeSnapshot(snapshot) else { throw FlowError.snapshotFailed }
 
-            let share = try await engine.makeShare(title: currentTitle, libraryID: libraryID)
+            let share = try await engine.makeShare(title: currentTitle, libraryID: libraryID,
+                                                   linkRole: linkRole)
             SyncSettings.selectedProvider = .sharedLibrary
             return share
         } catch {

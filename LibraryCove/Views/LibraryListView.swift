@@ -21,6 +21,10 @@ struct LibraryListView: View {
     @State private var shareActionError: String?
     @State private var leaveConfirmLibrary: LibraryInfo?
     @State private var stopConfirmLibrary: LibraryInfo?
+    /// First-share role picker: what the LINK grants (admin/editor/guest),
+    /// shown before the system sharing sheet on this path too.
+    @State private var showLinkRolePicker = false
+    @State private var pendingLinkRole: ShareParticipantRole = .editor
 
     var body: some View {
         Form {
@@ -199,6 +203,41 @@ struct LibraryListView: View {
         } message: {
             Text(shareActionError ?? "")
         }
+        .sheet(isPresented: $showLinkRolePicker) {
+            NavigationStack {
+                Form {
+                    Section {
+                        Picker("Link access", selection: $pendingLinkRole) {
+                            Text("Admin — full control").tag(ShareParticipantRole.admin)
+                            Text("Editor — can edit").tag(ShareParticipantRole.editor)
+                            Text("Guest — view only").tag(ShareParticipantRole.guest)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    } header: {
+                        Text("Who can use this link?")
+                    } footer: {
+                        Text("Anyone who joins through this link gets this role. You can change each member's role later in Members.")
+                    }
+                    Section {
+                        Button {
+                            Task { await createShareWithPickedRole() }
+                        } label: {
+                            Text("Continue").frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+                .navigationTitle("Share Library")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showLinkRolePicker = false }
+                    }
+                }
+                .interactiveDismissDisabled(false)
+            }
+            .presentationDetents([.medium])
+        }
         .sheet(isPresented: $showCreate) {
             NavigationStack {
                 Form {
@@ -351,13 +390,39 @@ struct LibraryListView: View {
                 shareSheetShare = share
                 shareSheetLibrary = library
             } else {
-                let share = try await SharedLibraryCoordinator.beginShare(
-                    currentTitle: library.name, libraryID: library.id)
-                shareSheetShare = share
-                shareSheetLibrary = library
+                // First share from the list: same role pre-picker as
+                // Settings (the link's default role must be chosen before
+                // the system sheet opens). The active library IS this one
+                // (activate above), and createShareWithPickedRole finishes
+                // the flow.
+                pendingLinkRole = SharedLibrarySettings.linkDefaultRole(libraryID: library.id)
+                showLinkRolePicker = true
             }
         } catch {
             shareActionError = error.localizedDescription
+        }
+    }
+
+    /// Role pre-sheet's Continue: create the share with the picked link
+    /// role and present the system sharing sheet for the (now active)
+    /// library.
+    private func createShareWithPickedRole() async {
+        guard let library = LibraryScope.shared.active(context: modelContext) else {
+            showLinkRolePicker = false
+            return
+        }
+        do {
+            SharedLibrarySettings.setLinkDefaultRole(pendingLinkRole, libraryID: library.id)
+            let share = try await SharedLibraryCoordinator.beginShare(
+                currentTitle: library.name,
+                libraryID: library.id,
+                linkRole: pendingLinkRole)
+            shareSheetShare = share
+            shareSheetLibrary = library
+            showLinkRolePicker = false
+        } catch {
+            shareActionError = error.localizedDescription
+            showLinkRolePicker = false
         }
     }
 

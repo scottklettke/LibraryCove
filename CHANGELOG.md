@@ -59,6 +59,11 @@ deleting libraries:
   anything and share links, but cannot stop sharing), **guest** (view only —
   no edits, no sharing). Only admins can stop sharing or assign roles
   (including new admins), changeable on the fly from the Members sheet.
+- **First share asks who the link is for**: before the system share sheet,
+  you pick what the link grants — Admin, Editor, or Guest. The choice
+  travels with the share, so people joining from any device get that role
+  automatically, and role changes made later reach every member's device on
+  the next sync.
 - The Libraries list long-press menu now shows role-aware controls for a
   shared library: Members, Share library (editors/admins), Stop sharing and
   Leave shared library (admins; Leave for participants).

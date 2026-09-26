@@ -30,6 +30,33 @@ enum SharedLibraryRecord {
         }
     }
 
+    /// Fixed-name record carrying the share LINK's default role ("what you
+    /// get when you open the link"): recordName "roles", one JSON payload
+    /// `{"role": "admin|editor|guest"}`. Written by the owner at
+    /// makeShare/beginShare and updated by admins via setRole; fetched by
+    /// the joiner in finishJoin/sync so roles travel to devices that never
+    /// saw the assigning session (both admin and editor map to .readWrite
+    /// on the CKShare, so the share permission alone cannot distinguish
+    /// them).
+    static let rolesRecordName = "roles"
+
+    static func encodeLinkRole(_ role: ShareParticipantRole, inZoneWith zoneID: CKRecordZone.ID) -> CKRecord {
+        let record = CKRecord(recordType: "BNRoles",
+                              recordID: CKRecord.ID(recordName: rolesRecordName, zoneID: zoneID))
+        let payload = try! JSONEncoder().encode(["role": role.rawValue])
+        record[Field.payload] = payload
+        record[Field.schema] = schemaVersion
+        return record
+    }
+
+    static func decodeLinkRole(from record: CKRecord) -> ShareParticipantRole? {
+        guard let data = record[Field.payload] as? Data,
+              let json = try? JSONDecoder().decode([String: String].self, from: data),
+              let raw = json["role"]
+        else { return nil }
+        return ShareParticipantRole(rawValue: raw)
+    }
+
     enum Field {
         static let payload = "payload"        // JSON Data of the Shared* DTO
         static let schema = "schemaVersion"   // Int64, for forward compatibility

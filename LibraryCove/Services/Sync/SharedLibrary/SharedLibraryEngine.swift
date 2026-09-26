@@ -113,6 +113,18 @@ enum SharedLibrarySettings {
         d.string(forKey: "sharedLibrary.\(libraryID).currentUserRecordName")
     }
 
+    /// The default role the owner assigned to the share LINK (what a new
+    /// link joiner gets). Stored per library so the Members sheet can
+    /// display and admins can change it.
+    static func linkDefaultRole(libraryID: String) -> ShareParticipantRole {
+        ShareParticipantRole(rawValue: d.string(
+            forKey: "sharedLibrary.\(libraryID).linkDefaultRole") ?? "") ?? .editor
+    }
+
+    static func setLinkDefaultRole(_ role: ShareParticipantRole, libraryID: String) {
+        d.set(role.rawValue, forKey: "sharedLibrary.\(libraryID).linkDefaultRole")
+    }
+
     static var sharedLibraryIDs: [String] {
         let prefix = "sharedLibrary."
         let suffixes: Set<String> = [".membership"]
@@ -393,7 +405,7 @@ final class SharedLibraryEngine: ObservableObject {
     /// Per-library variant: each library gets its OWN zone + share, so
     /// different libraries can be shared with different people
     /// independently. Zone name is derived from the library id.
-    func makeShare(title: String, libraryID: String) async throws -> CKShare {
+    func makeShare(title: String, libraryID: String, linkRole: ShareParticipantRole = .editor) async throws -> CKShare {
         guard await hasICloudAccount() else { throw SharedLibraryError.noICloudAccount }
 
         let zoneName = Self.zoneName + "-" + String(abs(libraryID.hashValue))
@@ -410,8 +422,13 @@ final class SharedLibraryEngine: ObservableObject {
         let share = CKShare(recordZoneID: zoneID)
         share[CKShare.SystemFieldKey.title] = title as NSString
 
+        // The link's default role travels in a fixed-name record in the
+        // zone: both admin and editor map to .readWrite on the CKShare, so
+        // the share permission alone cannot tell the joiner which role the
+        // owner picked for this link.
+        let rolesRecord = SharedLibraryRecord.encodeLinkRole(linkRole, inZoneWith: zoneID)
         let result = try await container.privateCloudDatabase
-            .modifyRecords(saving: [share], deleting: [],
+            .modifyRecords(saving: [share, rolesRecord], deleting: [],
                            savePolicy: .ifServerRecordUnchanged)
         for (_, outcome) in result.saveResults {
             if case .failure(let error) = outcome { throw error }
@@ -514,8 +531,10 @@ final class SharedLibraryEngine: ObservableObject {
 
     /// Admin-only: changes a participant's role. Updates the CloudKit share
     /// permission (guest → read-only, admin/editor → read-write) and the
-    /// local role store. The other device picks the role up via the
-    /// modified share.
+    /// local role store. If the target IS the link-default participant
+    /// slot, the zone's roles record is updated so FUTURE link joiners get
+    /// the new role. Already-joined devices adopt the role via the share
+    /// permission + roles-record pull in runSync.
     func setRole(_ role: ShareParticipantRole,
                  participantRecordName: String,
                  libraryID: String) async throws {
@@ -529,8 +548,52 @@ final class SharedLibraryEngine: ObservableObject {
             $0.userIdentity.userRecordID?.recordName == participantRecordName
         }) {
             participant.permission = role.ckPermission
-            let results = try await db(libraryID: libraryID).modifyRecords(
-                saving: [share], deleting: [], savePolicy: .ifServerRecordUnchanged)
+        }
+        // Persist the role where EVERY device can read it: the zone's
+        // roles record carries both the link default (what new joiners
+        // get) and a per-participant map (assigned roles). The share
+        // permission alone cannot distinguish admin from editor — both
+        // are .readWrite — so this record is the only cross-device
+        // transport for role changes.
+        let rolesID = CKRecord.ID(recordName: SharedLibraryRecord.rolesRecordName,
+                                  zoneID: share.recordID.zoneID)
+        let db = self.db(libraryID: libraryID)
+        var userRoles: [String: String] = [:]
+        if let existing = try? await db.record(for: rolesID) {
+            var linkRole = SharedLibrarySettings.linkDefaultRole(libraryID: libraryID)
+            if let data = existing[SharedLibraryRecord.Field.payload] as? Data,
+               let json = try? JSONDecoder().decode([String: String].self, from: data),
+               let raw = json["role"],
+               let parsed = ShareParticipantRole(rawValue: raw) {
+                linkRole = parsed
+            }
+            if participantRecordName == "link-default" {
+                linkRole = role
+            }
+            let rolesRecord = SharedLibraryRecord.encodeLinkRole(linkRole, inZoneWith: share.recordID.zoneID)
+            if let data = existing[SharedLibraryRecord.Field.payload] as? Data,
+               let map = try? JSONDecoder().decode([String: String].self, from: data) {
+                userRoles = map
+            }
+            if participantRecordName != "link-default" {
+                userRoles[participantRecordName] = role.rawValue
+            }
+            rolesRecord["userRoles"] = try? JSONEncoder().encode(userRoles)
+            let results = try await db.modifyRecords(
+                saving: [share, rolesRecord], deleting: [],
+                savePolicy: .ifServerRecordUnchanged)
+            for (_, outcome) in results.saveResults {
+                if case .failure(let error) = outcome { throw error }
+            }
+        } else {
+            // No roles record yet (pre-roles share): write it fresh.
+            let rolesRecord = SharedLibraryRecord.encodeLinkRole(
+                SharedLibrarySettings.linkDefaultRole(libraryID: libraryID),
+                inZoneWith: share.recordID.zoneID)
+            rolesRecord["userRoles"] = try? JSONEncoder().encode([participantRecordName: role.rawValue])
+            let results = try await db.modifyRecords(
+                saving: [share, rolesRecord], deleting: [],
+                savePolicy: .ifServerRecordUnchanged)
             for (_, outcome) in results.saveResults {
                 if case .failure(let error) = outcome { throw error }
             }
@@ -662,6 +725,33 @@ final class SharedLibraryEngine: ObservableObject {
         SharedLibrarySettings.shareTitle = title
         SharedLibrarySettings.setMembership(.participant, libraryID: joinerLibraryID)
         SharedLibrarySettings.setChangeTokenData(nil, libraryID: joinerLibraryID)
+        // The owner picked a default role for this link (admin/editor/
+        // guest) — it travels in a fixed-name record in the zone because
+        // the CKShare permission cannot distinguish admin from editor
+        // (both .readWrite). Seed the local role store with it; the sync's
+        // roles pull keeps it current if the owner changes roles later.
+        let myRecordName = share.currentUserParticipant?.userIdentity.userRecordID?.recordName
+        let db = container.sharedCloudDatabase
+        let rolesID = CKRecord.ID(recordName: SharedLibraryRecord.rolesRecordName,
+                                  zoneID: zone.zoneID)
+        if let record = try? await db.record(for: rolesID),
+           let linkRole = SharedLibraryRecord.decodeLinkRole(from: record) {
+            // A per-participant assignment from the owner wins over the
+            // link default.
+            var adopted = linkRole
+            if let myRecordName,
+               let mine = record["userRoles"] as? Data,
+               let map = try? JSONDecoder().decode([String: String].self, from: mine),
+               let raw = map[myRecordName],
+               let role = ShareParticipantRole(rawValue: raw) {
+                adopted = role
+            }
+            if let myRecordName {
+                ShareRoleStore.setRole(adopted, libraryID: joinerLibraryID,
+                                       participantRecordName: myRecordName)
+            }
+            SharedLibrarySettings.setLinkDefaultRole(linkRole, libraryID: joinerLibraryID)
+        }
         // Create the joiner's library entry (inactive — switching to it is
         // the user's choice).
         if !LibraryScope.shared.all(context: Persistence.shared.mainContext).contains(where: { $0.id == joinerLibraryID }) {
@@ -732,12 +822,57 @@ final class SharedLibraryEngine: ObservableObject {
             }
             try await pullRemoteChanges(context: context, zoneID: zoneID)
             try await pushLocalChanges(context: context, zoneID: zoneID)
+            // The library this zone belongs to: participant joins derive
+            // their id from the zone name; owners hold the zone in
+            // ownerZoneName.
+            let libraryID = SharedLibrarySettings.membership == .owner
+                ? SharedLibrarySettings.sharedLibraryIDs.first {
+                    SharedLibrarySettings.ownerZoneName(libraryID: $0) == zoneID.zoneName
+                }
+                : SharedLibrarySettings.sharedLibraryIDs.first {
+                    SharedLibrarySettings.acceptedZoneName(libraryID: $0) == zoneID.zoneName
+                }
+            if let libraryID {
+                await refreshRolesIfNeeded(zoneID: zoneID, libraryID: libraryID)
+            }
             SharedLibrarySettings.lastSyncAt = Date()
             lastError = nil
         } catch is CancellationError {
             // Coalesced-out sync — not an error.
         } catch {
             lastError = error.localizedDescription
+        }
+    }
+
+    /// Pulls the zone's fixed-name roles record and refreshes the local
+    /// role cache. For participants: their OWN role (the owner may have
+    /// changed it on another device — the CKShare permission cannot
+    /// distinguish admin from editor, so the record's per-participant map
+    /// is the transport; its absence falls back to the link default). For
+    /// owners: the link default they manage from any device. Failures are
+    /// silent — the cached roles remain, next sync retries.
+    private func refreshRolesIfNeeded(zoneID: CKRecordZone.ID, libraryID: String) async {
+        let db = self.db(libraryID: libraryID)
+        let rolesID = CKRecord.ID(recordName: SharedLibraryRecord.rolesRecordName,
+                                  zoneID: zoneID)
+        guard let record = try? await db.record(for: rolesID),
+              let linkRole = SharedLibraryRecord.decodeLinkRole(from: record)
+        else { return }
+        SharedLibrarySettings.setLinkDefaultRole(linkRole, libraryID: libraryID)
+        if SharedLibrarySettings.membership(libraryID: libraryID) == .participant,
+           let myRecordName = SharedLibrarySettings.currentUserRecordName(libraryID: libraryID) {
+            // The owner's per-participant assignment wins over the link
+            // default; no entry (or no record) means "as the link grants".
+            if let mine = record["userRoles"] as? Data,
+               let map = try? JSONDecoder().decode([String: String].self, from: mine),
+               let raw = map[myRecordName],
+               let role = ShareParticipantRole(rawValue: raw) {
+                ShareRoleStore.setRole(role, libraryID: libraryID,
+                                       participantRecordName: myRecordName)
+            } else {
+                ShareRoleStore.setRole(linkRole, libraryID: libraryID,
+                                       participantRecordName: myRecordName)
+            }
         }
     }
 

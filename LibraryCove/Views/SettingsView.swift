@@ -27,6 +27,10 @@ struct SettingsView: View {
     @State private var isPreparingShare = false
     @State private var showSharingSheet = false
     @State private var shareSheetShare: CKShare?
+    /// First-share role picker: what the LINK grants (admin/editor/guest).
+    @State private var showLinkRolePicker = false
+    @State private var pendingLinkRole: ShareParticipantRole = .editor
+    @State private var pendingShareLibraryID: String?
 
     // AI
     @State private var aiEngine: AIEngine = AIConfig.selectedEngine
@@ -170,6 +174,46 @@ struct SettingsView: View {
                             Task { await refreshMembers() }
                         }
                 }
+            }
+            .sheet(isPresented: $showLinkRolePicker) {
+                NavigationStack {
+                    Form {
+                        Section {
+                            Picker("Link access", selection: $pendingLinkRole) {
+                                Text("Admin — full control").tag(ShareParticipantRole.admin)
+                                Text("Editor — can edit").tag(ShareParticipantRole.editor)
+                                Text("Guest — view only").tag(ShareParticipantRole.guest)
+                            }
+                            .pickerStyle(.inline)
+                            .labelsHidden()
+                        } header: {
+                            Text("Who can use this link?")
+                        } footer: {
+                            Text("Anyone who joins through this link gets this role. You can change each member's role later in Members.")
+                        }
+                        Section {
+                            Button {
+                                Task { await createShareWithRole() }
+                            } label: {
+                                if isPreparingShare {
+                                    HStack { Spacer(); ProgressView() }
+                                } else {
+                                    Text("Continue").frame(maxWidth: .infinity)
+                                }
+                            }
+                            .disabled(isPreparingShare)
+                        }
+                    }
+                    .navigationTitle("Share Library")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { showLinkRolePicker = false }
+                        }
+                    }
+                    .interactiveDismissDisabled(isPreparingShare)
+                }
+                .presentationDetents([.medium])
             }
             .sheet(isPresented: $showDeleteLibraryConfirm) {
                 DeleteLibrarySheet(
@@ -361,15 +405,38 @@ struct SettingsView: View {
     /// creating it when absent, and present the sharing sheet.
     private func shareOrManageActive() async {
         guard let active = LibraryScope.shared.active(context: modelContext) else { return }
-        isPreparingShare = true
-        defer { isPreparingShare = false }
         do {
             if let share = try await SharedLibraryEngine.shared.currentShare(libraryID: active.id) {
                 shareSheetShare = share
+                showSharingSheet = true
             } else {
-                shareSheetShare = try await SharedLibraryCoordinator.beginShare(
-                    currentTitle: active.name, libraryID: active.id)
+                // First share: let the owner pick what the LINK grants
+                // (admin/editor/guest) before the system sheet offers the
+                // contact/link options. The choice is written into the
+                // zone's roles record by makeShare, so joiners adopt it.
+                pendingLinkRole = SharedLibrarySettings.linkDefaultRole(libraryID: active.id)
+                pendingShareLibraryID = active.id
+                showLinkRolePicker = true
             }
+        } catch {
+            lastError = error.localizedDescription
+            showError = true
+        }
+    }
+
+    /// Called from the role pre-sheet's Continue: creates the share with
+    /// the picked link role and presents the system sharing sheet.
+    private func createShareWithRole() async {
+        guard let libraryID = pendingShareLibraryID else { return }
+        isPreparingShare = true
+        defer { isPreparingShare = false }
+        do {
+            SharedLibrarySettings.setLinkDefaultRole(pendingLinkRole, libraryID: libraryID)
+            shareSheetShare = try await SharedLibraryCoordinator.beginShare(
+                currentTitle: LibraryScope.shared.active(context: modelContext)?.name ?? "Library",
+                libraryID: libraryID,
+                linkRole: pendingLinkRole)
+            showLinkRolePicker = false
             showSharingSheet = true
         } catch {
             lastError = error.localizedDescription

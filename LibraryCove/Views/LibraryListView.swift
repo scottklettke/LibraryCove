@@ -59,16 +59,48 @@ struct LibraryListView: View {
                         } label: {
                             Label("Rename library", systemImage: "pencil")
                         }
-                        Button {
-                            Task { await shareOrMembers(library) }
-                        } label: {
-                            Label("Share library", systemImage: "person.crop.square.badge.plus")
-                        }
                         if !isActive {
                             Button(role: .destructive) {
                                 libraryToDelete = library
                             } label: {
                                 Label("Delete library", systemImage: "trash")
+                            }
+                        }
+                        // Shared-library controls (role-dependent):
+                        // guests view only, editors share links, admins
+                        // also manage members and stop sharing.
+                        if isShared(library) {
+                            Button {
+                                Task { await shareOrMembers(library) }
+                            } label: {
+                                Label("Members", systemImage: "person.2")
+                            }
+                            if myRole(in: library) != .guest {
+                                Button {
+                                    Task { await shareOrMembers(library) }
+                                } label: {
+                                    Label("Share library", systemImage: "person.crop.square.badge.plus")
+                                }
+                            }
+                            if myRole(in: library) == .admin {
+                                Button(role: .destructive) {
+                                    stopConfirmLibrary = library
+                                } label: {
+                                    Label("Stop sharing", systemImage: "person.crop.square.badge.minus")
+                                }
+                            }
+                            if SharedLibrarySettings.membership(libraryID: library.id) == .participant {
+                                Button(role: .destructive) {
+                                    leaveConfirmLibrary = library
+                                } label: {
+                                    Label("Leave shared library", systemImage: "figure.walk.arrow.right")
+                                }
+                            }
+                        } else {
+                            Button {
+                                Task { await shareOrMembers(library) }
+                            } label: {
+                                Label("Share library", systemImage: "person.crop.square.badge.plus")
                             }
                         }
                     }
@@ -294,6 +326,18 @@ struct LibraryListView: View {
 
     private func reload() {
         libraries = LibraryScope.shared.all(context: modelContext)
+    }
+
+    /// True when this library currently participates in a share (either
+    /// side) — controls which context-menu items render.
+    private func isShared(_ library: LibraryInfo) -> Bool {
+        SharedLibrarySettings.sharedLibraryIDs.contains(library.id)
+            && SharedLibrarySettings.membership(libraryID: library.id) != .none
+    }
+
+    /// This device's role in `library` (owner => admin).
+    private func myRole(in library: LibraryInfo) -> ShareParticipantRole {
+        SharedLibraryEngine.shared.myRole(libraryID: library.id)
     }
 
     /// Sharing a library: fetch its share (creating it on first share for

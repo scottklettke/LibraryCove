@@ -47,6 +47,11 @@ enum SharedLibraryCoordinator {
     /// snapshot-pour + provider flip still applies to the ACTIVE library —
     /// sharing a library makes it the active one so its content syncs.
     static func beginShare(currentTitle: String, libraryID: String) async throws -> CKShare {
+        // Guests are view-only: they cannot create the share or its links.
+        // Editors and admins can. (Owner passes: membership .owner => admin.)
+        guard SharedLibraryEngine.shared.myRole(libraryID: libraryID) != .guest else {
+            throw SharedLibraryError.notPermitted
+        }
         let engine = SharedLibraryEngine.shared
         guard await engine.hasICloudAccount() else { throw SharedLibraryError.noICloudAccount }
 
@@ -144,10 +149,20 @@ enum SharedLibraryCoordinator {
         guard let libraryID = LibraryScope.shared.activeID(context: Persistence.shared.mainContext) else {
             throw SharedLibraryError.noActiveLibrary
         }
-        // Only admins may stop sharing (owner or promoted admin).
-        guard ShareRoleStore.role(libraryID: libraryID,
-                                  participantRecordName: SharedLibrarySettings.currentUserRecordName ?? "owner") != .guest else {
-            throw SharedLibraryError.notPermitted
+        // Only admins may stop sharing (owner or promoted admin): editors
+        // can edit and share links but cannot turn the share off. Reads the
+        // PER-LIBRARY record name — the legacy global key is nil under the
+        // per-library model and would silently fall back to "owner",
+        // letting any participant through. An owner has no participant
+        // record of their own and passes via membership.
+        let selfRecordName = SharedLibrarySettings.currentUserRecordName(libraryID: libraryID)
+        if SharedLibrarySettings.membership(libraryID: libraryID) != .owner {
+            guard let selfRecordName,
+                  ShareRoleStore.role(libraryID: libraryID,
+                                      participantRecordName: selfRecordName) == .admin
+            else {
+                throw SharedLibraryError.notPermitted
+            }
         }
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: true)
         // Per-library shares: the GLOBAL stopSharingAsOwner reads the legacy

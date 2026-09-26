@@ -52,6 +52,18 @@ deleting libraries:
   your devices again, share events can no longer ping-pong across devices,
   and switching libraries preserves share state.
 
+### Changed — shared library roles
+
+- **Roles are enforced consistently**: **admin** (full control — edit,
+  share links, manage members' roles, stop sharing), **editor** (edit
+  anything and share links, but cannot stop sharing), **guest** (view only —
+  no edits, no sharing). Only admins can stop sharing or assign roles
+  (including new admins), changeable on the fly from the Members sheet.
+- The Libraries list long-press menu now shows role-aware controls for a
+  shared library: Members, Share library (editors/admins), Stop sharing and
+  Leave shared library (admins; Leave for participants).
+- **Export PDF is available to every role**, including guests.
+
 ### Attribution
 
 - Added a "Data sources" section to About & Feedback crediting Open Library

@@ -11,8 +11,6 @@ struct SettingsView: View {
     @Environment(\.openLibraryTab) private var openLibraryTab
     // Delete
     @State private var showDeleteLibraryConfirm = false
-    /// Shown when Delete Library is tapped with nothing to delete.
-    @State private var showLibraryAlreadyEmpty = false
     @State private var isDeleting = false
 
     @FocusState private var nameFieldFocused: Bool
@@ -163,11 +161,6 @@ struct SettingsView: View {
 
             }
             .navigationTitle("Settings")
-            .alert("Nothing to delete", isPresented: $showLibraryAlreadyEmpty) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text("Your library is already empty — there are no books, notes, reading lists, or connections to delete.")
-            }
             .sheet(isPresented: $showSharingSheet) {
                 if let share = shareSheetShare,
                    let libraryID = LibraryScope.shared.activeID(context: modelContext) {
@@ -344,23 +337,6 @@ struct SettingsView: View {
         case .sharedLibrary: return "Sharing via iCloud"
         case .dropbox, .box, .nextcloud: return "Not connected"
         }
-    }
-
-    /// Content of the ACTIVE library only: "Delete Library" removes that
-    /// library itself, so the gate must not be blocked by other
-    /// libraries' content.
-    private var libraryContentCount: Int {
-        let id = LibraryScope.shared.activeID(context: modelContext)
-        return ((try? modelContext.fetchCount(FetchDescriptor<Book>(
-                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<Note>(
-                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingList>(
-                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<ReadingListItem>(
-                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
-            + ((try? modelContext.fetchCount(FetchDescriptor<Connection>(
-                    predicate: #Predicate { $0.libraryID == id }))) ?? 0)
     }
 
     /// Warns when the active library's (typed) name matches ANOTHER
@@ -744,17 +720,11 @@ struct SettingsView: View {
     private var dataSection: some View {
                 Section {
                     Button(role: .destructive) {
-                        // Nothing to delete: say so instead of showing a
-                        // destructive dialog for content that doesn't exist.
-                        if libraryContentCount == 0 {
-                            showLibraryAlreadyEmpty = true
-                        } else {
-                            showDeleteLibraryConfirm = true
-                        }
+                        showDeleteLibraryConfirm = true
                     } label: {
                         Label("Delete Library", systemImage: "trash")
                     }
-                    .disabled(isDeleting)
+                    .disabled(isDeleting || activeLibrary == nil)
 
                     NavigationLink {
                         BackupsView()
@@ -764,7 +734,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Data")
                 } footer: {
-                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes this library — every book (with notes and lists) in it — and takes it off your Libraries list. Your member profile is kept.")
+                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes this library — every book (with notes and lists) in it — and takes it off your Libraries list. Your member profile is kept. An empty library is removed too, leaving the Libraries list without it.")
                 }
     }
 
@@ -983,7 +953,7 @@ struct SettingsView: View {
                 }
                 // Remove the library itself so it disappears from the
                 // Libraries list; the oldest remaining library becomes
-                // active (or a fresh default is created when none remain).
+                // active, or the no-library state when none remain.
                 if let doomed {
                     LibraryScope.shared.delete(doomed, context: modelContext)
                 }

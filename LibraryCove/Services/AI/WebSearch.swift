@@ -19,7 +19,7 @@ enum WebSearch {
 
     private static let ddgEndpoint = "https://html.duckduckgo.com/html/"
     private static let wikipediaAPI = "https://en.wikipedia.org/w/api.php"
-    private static let userAgent = "LibraryCove/0.4 (Ask AI grounding)"
+    private static let userAgent = "LibraryCove/0.5 (Ask AI grounding)"
 
     /// Gathers grounding sources for a plain-language query: the best
     /// Wikipedia article first (when one matches), then DuckDuckGo results.

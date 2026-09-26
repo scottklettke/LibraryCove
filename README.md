@@ -134,4 +134,8 @@ Found a bug or want a feature? Open an issue:
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for every notable change, newest first.
+Current TestFlight version: **0.5**. See [CHANGELOG.md](CHANGELOG.md) for
+every notable change, newest first — 0.5 fixes the iCloud sync failures
+around wiping devices and deleting libraries, and makes "Back up library
+now" sync backups through iCloud Drive so they appear on every device on
+the account.

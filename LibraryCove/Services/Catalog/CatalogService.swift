@@ -170,7 +170,7 @@ final class OpenLibraryService: CatalogService {
         // Open Library API etiquette asks automated clients to identify
         // themselves; a descriptive UA earns saner rate-limit treatment.
         config.httpAdditionalHeaders = [
-            "User-Agent": "LibraryCove/0.4 (iOS; personal library app; https://github.com/aoeu10/LibraryCove)"
+            "User-Agent": "LibraryCove/0.5 (iOS; personal library app; https://github.com/aoeu10/LibraryCove)"
         ]
         return URLSession(configuration: config)
     }

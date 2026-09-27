@@ -5,6 +5,16 @@ Notable user-facing changes, newest first. The same file ships in the app
 
 ## 0.5.2 (2026-09-27)
 
+### Fixed — Cover quality
+
+- **The first cover is no longer the low-resolution one.** Scan and search
+  results used to offer Open Library's tiny thumbnail (~75px) as the default
+  cover. Covers now arrive largest-first — the biggest image is the default
+  selection — sub-100px thumbnails are never offered, and Google Books cover
+  URLs are upgraded to their highest-resolution variant automatically.
+  "Retrieve additional covers" still finds alternatives; you can always pick
+  a different one or use a photo.
+
 ### Fixed — Scanning ISBNs
 
 - **Scanning finds books again.** Open Library retired the ISBN lookup

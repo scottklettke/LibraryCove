@@ -408,12 +408,11 @@ final class OpenLibraryService: CatalogService {
                 if let links = item["volumeInfo"] as? [String: Any],
                    let imageLinks = links["imageLinks"] as? [String: Any],
                    let coverURL = imageLinks["large"] as? String ?? imageLinks["thumbnail"] as? String {
-                    covers.append(coverURL)
+                    covers.append(Self.upgradedGoogleCover(coverURL))
                 }
             }
         }
-        var seen = Set<String>()
-        return covers.filter { seen.insert($0).inserted }
+        return Self.dedupeUpgraded(covers)
     }
 
     /// Fetch a book description from the preferred source, falling back through
@@ -581,7 +580,7 @@ final class OpenLibraryService: CatalogService {
     }
 
 
-    private func mapGoogleInfo(_ info: [String: Any]) -> [String: Any] {
+    func mapGoogleInfo(_ info: [String: Any]) -> [String: Any] {
         var mapped: [String: Any] = [:]
         mapped["title"] = info["title"] as? String
         mapped["authors"] = info["authors"] as? [String]
@@ -601,13 +600,39 @@ final class OpenLibraryService: CatalogService {
         if let images = info["imageLinks"] as? [String: Any] {
             mapped["thumbnail"] = images["thumbnail"] as? String
             mapped["large"] = images["large"] as? String
+            // Largest-first; smallThumbnail (~56px) is dropped entirely so
+            // neither the default selection nor the picker offers it.
             var covers: [String] = []
-            for key in ["smallThumbnail", "thumbnail", "small", "medium", "large", "extraLarge"] {
+            for key in ["extraLarge", "large", "medium", "small", "thumbnail"] {
                 if let url = images[key] as? String { covers.append(url) }
             }
-            mapped["covers"] = covers
+            mapped["covers"] = Self.dedupeUpgraded(covers.map(Self.upgradedGoogleCover))
         }
         return mapped
+    }
+
+    /// Upgrades Google Books cover URLs to their highest-resolution form:
+    /// drops the `&edge=curl` border and rewrites `zoom=1` to `zoom=2`,
+    /// which serves the ~2× "large" image for the same volume (verified
+    /// live: 1.3KB thumbnail → 9.1KB image). Never lowers an existing
+    /// zoom level; no-ops on non-Google URLs.
+    static func upgradedGoogleCover(_ url: String) -> String {
+        guard url.contains("books.google.com") else { return url }
+        var out = url.replacingOccurrences(of: "&edge=curl", with: "")
+        if out.contains("zoom=1") {
+            out = out.replacingOccurrences(of: "zoom=1", with: "zoom=2")
+        } else if !out.contains("zoom=") {
+            out += (out.contains("?") ? "&" : "?") + "zoom=2"
+        }
+        return out
+    }
+
+    /// De-duplicates an ordered (largest-first) cover list. Call AFTER
+    /// `upgradedGoogleCover` so an upgraded thumbnail that now equals the
+    /// volume's large URL doesn't appear twice in the picker.
+    static func dedupeUpgraded(_ urls: [String]) -> [String] {
+        var seen = Set<String>()
+        return urls.filter { seen.insert($0).inserted }
     }
 
     /// Maps a `search.json` doc to a CatalogBook. Shared by the title search
@@ -631,11 +656,14 @@ final class OpenLibraryService: CatalogService {
         let isbnList = doc["isbn"] as? [String] ?? []
         let isbn = isbnOverride ?? isbnList.first
         let coverID = doc["cover_i"] as? Int
+        // Largest-first and no tiny variants: the first URL becomes the
+        // form's default selection (primaryCoverURL), and Open Library's
+        // -S variant is a ~75px thumbnail — always the "low resolution"
+        // cover the user complained about. -M and -L are the usable sizes.
         var coverURLs: [String] = []
         if let coverID {
-            coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-S.jpg")
-            coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-M.jpg")
             coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-L.jpg")
+            coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-M.jpg")
         }
         let tags = doc["subject"] as? [String] ?? []
         let publishers = doc["publisher"] as? [String] ?? []

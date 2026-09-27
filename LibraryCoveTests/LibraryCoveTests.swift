@@ -512,3 +512,70 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
         #expect(book.source == "googlebooks")
     }
 }
+
+@Suite struct CoverQualityTests {
+    /// The user-reported issue: the first cover a scan finds was always the
+    /// low-res one. Open Library's -S variant is a ~75px thumbnail (measured
+    /// 77×58 for cover 14844874) — the doc mapping must offer -L first (it
+    /// becomes primaryCoverURL, the form's default selection) and never
+    /// offer -S at all.
+    @Test func openLibraryDocCoversAreLargestFirstWithoutTinyVariants() {
+        let doc: [String: Any] = ["key": "/works/OL42423728W", "title": "Your Forest",
+                                  "cover_i": 14844874]
+        let book = OpenLibraryService.catalogBook(fromSearchDoc: doc)
+        #expect(book.coverURLs == [
+            "https://covers.openlibrary.org/b/id/14844874-L.jpg",
+            "https://covers.openlibrary.org/b/id/14844874-M.jpg",
+        ])
+        #expect(book.coverURLs.allSatisfy { !$0.contains("-S.jpg") })
+    }
+
+    /// Google URLs are upgraded to zoom=2 (measured: zoom=1 thumbnail 1.3KB
+    /// vs zoom=2 large 9.1KB for the same volume) and lose the border.
+    /// zoom=1 → zoom=2; an existing zoom ≥ 2 is never lowered; non-Google
+    /// URLs pass through untouched.
+    @Test func googleCoversUpgradeAndNeverDowngrade() {
+        let thumb = "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=1&edge=curl&source=gbs_api"
+        #expect(OpenLibraryService.upgradedGoogleCover(thumb)
+                == "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=2&source=gbs_api")
+        let large = "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=2&source=gbs_api"
+        #expect(OpenLibraryService.upgradedGoogleCover(large) == large)
+        let extra = "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=3&source=gbs_api"
+        #expect(OpenLibraryService.upgradedGoogleCover(extra) == extra)
+        let bare = "https://books.google.com/books/content?id=X&printsec=frontcover&img=1"
+        #expect(OpenLibraryService.upgradedGoogleCover(bare)
+                == bare + "&zoom=2", "URL already has a query string, so append with &")
+        let ol = "https://covers.openlibrary.org/b/id/1-L.jpg"
+        #expect(OpenLibraryService.upgradedGoogleCover(ol) == ol)
+    }
+
+    /// After upgrading, a thumbnail that became the volume's large URL must
+    /// not appear twice — the picker would show identical twins.
+    @Test func upgradedDuplicatesCollapse() {
+        let large = "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=2&source=gbs_api"
+        let thumb = "https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        let upgraded = [large, thumb].map(OpenLibraryService.upgradedGoogleCover)
+        #expect(OpenLibraryService.dedupeUpgraded(upgraded).count == 1)
+        // Order and distinct entries survive.
+        let distinct = ["https://a/1.jpg", "https://a/1.jpg", "https://b/2.jpg"]
+        #expect(OpenLibraryService.dedupeUpgraded(distinct) == ["https://a/1.jpg", "https://b/2.jpg"])
+    }
+
+    /// The volume-info mapping serves the largest links first with
+    /// smallThumbnail (~56px) absent, and every Google URL comes out
+    /// upgraded + deduped. For a single volume all Google sizes upgrade to
+    /// the same zoom=2 URL (edge stripped), so one volume yields one entry.
+    @Test func mapGoogleInfoCoversAreLargestFirstUpgradedDeduped() {
+        let info: [String: Any] = ["imageLinks": [
+            "smallThumbnail": "https://books.google.com/books/content?id=X&zoom=1&edge=curl&img=1",
+            "thumbnail": "https://books.google.com/books/content?id=X&zoom=1&img=1",
+            "large": "https://books.google.com/books/content?id=X&zoom=2&img=1",
+        ]]
+        let mapped = OpenLibraryService().mapGoogleInfo(info)
+        let covers = mapped["covers"] as? [String] ?? []
+        #expect(covers == ["https://books.google.com/books/content?id=X&zoom=2&img=1"],
+                "all sizes of one volume collapse to the upgraded large URL")
+        // smallThumbnail's URL never leaks through, border or not.
+        #expect(!covers.contains { $0.contains("edge=curl") })
+    }
+}

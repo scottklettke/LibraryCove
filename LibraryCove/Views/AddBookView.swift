@@ -327,6 +327,9 @@ private struct ScannerFlow: View {
     @State private var flashISBN: String?
     @State private var flash = false
     @State private var flashPulse = false
+    /// Pending hide for the found-indication; cancelled/re-armed on every
+    /// detection so repeat reads of the same code never clip it short.
+    @State private var flashHideWork: DispatchWorkItem?
     @State private var duplicateScan: DuplicateScan?
     @State private var importQueue: [CatalogBook] = []
     @State private var isImporting = false
@@ -579,17 +582,28 @@ private struct ScannerFlow: View {
             queue.enqueue(isbn: code)
         }
         let flashCode = Book.normalizedISBN(code) ?? code
-        flashISBN = flashCode
-        withAnimation(.easeOut(duration: 0.2)) {
-            flash = true
+        // Repeat reads of the code still in frame must not restart the
+        // found-indication (the stutter) — keep it solid and just extend the
+        // hide window. A genuinely new code restarts the indication.
+        let isNewCode = flashISBN != flashCode
+        if isNewCode {
+            flashISBN = flashCode
+            withAnimation(.easeOut(duration: 0.2)) {
+                flash = true
+            }
         }
         // Re-arm the camera instantly — scanning never waits on a lookup.
         rescanKey += 1
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+        // Hide 1.2s after the LAST read of the code, replacing any pending
+        // hide so holding the phone on the book never blinks the indication.
+        flashHideWork?.cancel()
+        let hide = DispatchWorkItem {
             withAnimation(.easeOut(duration: 0.25)) {
                 flash = false
             }
         }
+        flashHideWork = hide
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2, execute: hide)
     }
 }
 

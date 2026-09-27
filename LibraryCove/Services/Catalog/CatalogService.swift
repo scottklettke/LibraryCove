@@ -196,45 +196,19 @@ final class OpenLibraryService: CatalogService {
 
         var books: [CatalogBook] = []
         for doc in docs {
-            let title = doc["title"] as? String ?? ""
-            if title.isEmpty { continue }
-            let authors = doc["author_name"] as? [String] ?? []
-            let isbnList = doc["isbn"] as? [String] ?? []
-            let isbn = isbnList.first
-            let coverID = doc["cover_i"] as? Int
-            var coverURLs: [String] = []
-            if let coverID {
-                coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-S.jpg")
-                coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-M.jpg")
-                coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-L.jpg")
-            }
-            let tags = doc["subject"] as? [String] ?? []
-            let publishers = doc["publisher"] as? [String] ?? []
-            let languageList = doc["language"] as? [String] ?? []
-            let key = doc["key"] as? String ?? UUID().uuidString
-
-            books.append(CatalogBook(
-                id: key,
-                title: title,
-                authors: Array(authors.prefix(10)),
-                isbn: isbn,
-                publicationYear: doc["first_publish_year"] as? Int,
-                tags: Array(tags.prefix(10)),
-                publisher: publishers.first,
-                pageCount: doc["number_of_pages_median"] as? Int,
-                description: nil,
-                language: languageList.first,
-                coverURLs: coverURLs,
-                descriptionSource: nil,
-                source: "openlibrary",
-                olWorkKey: key
-            ))
+            let book = Self.catalogBook(fromSearchDoc: doc)
+            if book.title.isEmpty { continue }
+            books.append(book)
         }
 
         return books
     }
 
-    /// Look up a book by ISBN via OpenLibrary, then enrich with Google Books.
+    /// Look up a book by ISBN. OpenLibrary's `/api/books` endpoint was
+    /// retired (it now answers 404 with an empty body), so ISBN resolution
+    /// goes through `search.json?q=isbn:` — the same index the title search
+    /// uses, which matches ISBN-10 and ISBN-13 forms — with Google Books as
+    /// the fallback for ISBNs Open Library doesn't know.
     func lookup(isbn: String, preferred: DescriptionSource = .wikipedia) async throws -> CatalogBook? {
         // UI-test seam: force a "not found" for listed ISBNs so tests can
         // exercise the empty-result path deterministically — live catalog
@@ -244,46 +218,32 @@ final class OpenLibraryService: CatalogService {
             return nil
         }
         guard let cleaned = Book.normalizedISBN(isbn) else { return nil }
-        var components = URLComponents(string: "https://openlibrary.org/api/books")!
+        var catalog: CatalogBook?
+
+        var components = URLComponents(string: "https://openlibrary.org/search.json")!
         components.queryItems = [
-            URLQueryItem(name: "bibkeys", value: "ISBN:\(cleaned)"),
-            URLQueryItem(name: "format", value: "json"),
-            URLQueryItem(name: "jscmd", value: "data"),
+            URLQueryItem(name: "q", value: "isbn:\(cleaned)"),
+            URLQueryItem(name: "limit", value: "1"),
+            URLQueryItem(name: "fields", value: "key,title,author_name,isbn,cover_i,subject,publisher,first_publish_year,language,number_of_pages_median"),
         ]
-        guard let url = components.url else { return nil }
-        let (data, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let book = json?["ISBN:\(cleaned)"] as? [String: Any]
+        if let url = components.url {
+            // Parsing is non-throwing by design: a dead or malformed endpoint
+            // (empty body, HTML error page — exactly how /api/books failed)
+            // must degrade to "no OpenLibrary record" and let Google answer,
+            // never throw the whole lookup.
+            if let (data, response) = try? await session.data(from: url),
+               let http = response as? HTTPURLResponse, http.statusCode == 200,
+               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+               let doc = (json["docs"] as? [[String: Any]] ?? []).first {
+                let mapped = Self.catalogBook(fromSearchDoc: doc, isbnOverride: cleaned)
+                // search() skips empty-title docs as unusable; a lookup must
+                // treat them as a miss so the Google fallback still answers.
+                catalog = mapped.title.isEmpty ? nil : mapped
+            }
+        }
 
-        let title = book?["title"] as? String ?? ""
-        let authors = (book?["authors"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
-        let coverOptions = book?["cover"] as? [String: Any]
-        let coverURL = coverOptions?["large"] as? String ?? coverOptions?["medium"] as? String
-        let publishers = book?["publishers"] as? [[String: Any]] ?? []
-        let subjects = book?["subjects"] as? [[String: Any]] ?? []
-        let publishDate = book?["publish_date"] as? String ?? ""
-
-        var catalog = CatalogBook(
-            id: "isbn-\(cleaned)",
-            title: title,
-            authors: authors,
-            isbn: cleaned,
-            publicationYear: Self.year(from: publishDate),
-            tags: subjects.compactMap { $0["name"] as? String }.prefix(10).map { $0 },
-            publisher: publishers.first?["name"] as? String,
-            pageCount: book?["number_of_pages"] as? Int,
-            description: book?["description"] as? String,
-            language: nil,
-            coverURLs: [coverURL].compactMap { $0 },
-            descriptionSource: "openlibrary",
-            source: "openlibrary"
-        )
-
-        if title.isEmpty {
-            // Fallback straight to Google Books by ISBN.
-            let gb = await googleResult(isbn: cleaned)
-            if let gb, let t = gb["title"] as? String, !t.isEmpty {
+        if catalog == nil, let gb = await googleResult(isbn: cleaned) {
+            if let t = gb["title"] as? String, !t.isEmpty {
                 catalog = CatalogBook(
                     id: "isbn-\(cleaned)",
                     title: t,
@@ -295,12 +255,20 @@ final class OpenLibraryService: CatalogService {
                     pageCount: gb["pageCount"] as? Int,
                     description: gb["description"] as? String,
                     language: nil,
-                     coverURLs: (gb["covers"] as? [String]) ?? [],
+                    coverURLs: (gb["covers"] as? [String]) ?? [],
                     descriptionSource: "googlebooks",
-                source: "googlebooks"
+                    source: "googlebooks"
                 )
             }
-        } else if let gb = await googleResult(isbn: cleaned) {
+        }
+
+        guard var catalog else { return nil }
+
+        // Google Books enrichment. When Open Library supplied the record,
+        // Google fills the gaps — description language, publisher, page
+        // count, year, extra covers. A record that already came from Google
+        // (Open Library didn't know the ISBN) needs no further enrichment.
+        if catalog.source == "openlibrary", let gb = await googleResult(isbn: cleaned) {
             var covers = catalog.coverURLs
             if let gcovers = gb["covers"] as? [String] { covers.append(contentsOf: gcovers) }
             // English by default: Open Library work/edition descriptions are
@@ -640,6 +608,56 @@ final class OpenLibraryService: CatalogService {
             mapped["covers"] = covers
         }
         return mapped
+    }
+
+    /// Maps a `search.json` doc to a CatalogBook. Shared by the title search
+    /// and the ISBN lookup so both resolve books identically. `isbnOverride`
+    /// pins the scanned ISBN: the doc's first `isbn` array entry is arbitrary
+    /// among the edition's forms, and the queue/duplicate logic keys on the
+    /// normalized scanned code.
+    static func catalogBook(fromSearchDoc doc: [String: Any], isbnOverride: String? = nil) -> CatalogBook {
+        let title = doc["title"] as? String ?? ""
+        if title.isEmpty {
+            // Mirrors search(): empty-title docs are unusable placeholders.
+            return CatalogBook(
+                id: (doc["key"] as? String) ?? UUID().uuidString,
+                title: "", authors: [], isbn: isbnOverride,
+                publicationYear: nil, tags: [], publisher: nil, pageCount: nil,
+                description: nil, language: nil, coverURLs: [],
+                descriptionSource: nil, source: "openlibrary"
+            )
+        }
+        let authors = doc["author_name"] as? [String] ?? []
+        let isbnList = doc["isbn"] as? [String] ?? []
+        let isbn = isbnOverride ?? isbnList.first
+        let coverID = doc["cover_i"] as? Int
+        var coverURLs: [String] = []
+        if let coverID {
+            coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-S.jpg")
+            coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-M.jpg")
+            coverURLs.append("https://covers.openlibrary.org/b/id/\(coverID)-L.jpg")
+        }
+        let tags = doc["subject"] as? [String] ?? []
+        let publishers = doc["publisher"] as? [String] ?? []
+        let languageList = doc["language"] as? [String] ?? []
+        let key = doc["key"] as? String ?? UUID().uuidString
+
+        return CatalogBook(
+            id: key,
+            title: title,
+            authors: Array(authors.prefix(10)),
+            isbn: isbn,
+            publicationYear: doc["first_publish_year"] as? Int,
+            tags: Array(tags.prefix(10)),
+            publisher: publishers.first,
+            pageCount: doc["number_of_pages_median"] as? Int,
+            description: nil,
+            language: languageList.first,
+            coverURLs: coverURLs,
+            descriptionSource: nil,
+            source: "openlibrary",
+            olWorkKey: key
+        )
     }
 
     static func year(from date: String) -> Int? {

@@ -261,43 +261,42 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
 
 @Suite struct DescriptionCandidateTests {
     /// The candidate collector dedupes identical texts across sources and
-    /// labels each result with its origin. The stub returns the SAME blurb
-    /// from the ISBN record and from Google-by-ISBN, plus distinct Wikipedia
-    /// and OpenLibrary texts — the picker must show three rows, not four.
+    /// labels each result with its origin. ISBN lookups resolve through
+    /// `search.json?q=isbn:` (the retired `/api/books` endpoint answers 404),
+    /// and the record's description comes from its work record. The stub
+    /// returns the SAME blurb from that work record and from Google-by-ISBN,
+    /// plus a distinct Google title-search text — the picker must show two
+    /// rows, with the shared blurb labelled by the union of its sources.
     @Test func candidatesDedupeIdenticalTextsAndLabelSources() async throws {
         let shared = "A publisher blurb."
-        let wiki = "Wikipedia article extract."
-        let ol = "OpenLibrary work description."
+        let googleTitle = "Google title blurb."
         CatalogStubProtocol.handler = { request in
             let path = request.url?.path ?? ""
             let query = request.url?.query ?? ""
-            // OpenLibrary ISBN record: description = shared blurb.
-            if path.contains("/api/books") {
-                let body: [String: Any] = ["ISBN:9780306406157": [
-                    "title": "A Book", "authors": [["name": "An Author"]],
-                    "description": shared,
-                ]]
-                return catalogJSON(body, request: request)
-            }
-            // Wikipedia search then extract — the extract request also
-            // carries action=query, so discriminate on list=search. The
-            // service reads pages as an object keyed by page id.
-            if path.contains("/w/api.php") {
-                if query.contains("list=search") {
-                    return catalogJSON(["query": ["search": [["title": "A Book (novel)"]]]], request: request)
-                }
-                return catalogJSON(["query": ["pages": ["123": ["extract": wiki]]]], request: request)
-            }
+            // OpenLibrary ISBN search: a titled doc → the record row. The
+            // separate work-key search (no "isbn" in the query) stays key-only.
             if path.contains("/search.json") {
-                // OpenLibrary work search → key; then the work record.
+                if query.contains("isbn:") {
+                    return catalogJSON(["docs": [["key": "/works/OL1", "title": "A Book",
+                                                  "author_name": ["An Author"]]]], request: request)
+                }
                 return catalogJSON(["docs": [["key": "/works/OL1"]]], request: request)
             }
             if path.hasSuffix("/works/OL1.json") {
-                return catalogJSON(["description": ["value": ol]], request: request)
+                return catalogJSON(["description": ["value": shared]], request: request)
             }
-            // Google Books volumes API (host is not part of url.path).
+            // Wikipedia: no article → the record's description comes from the
+            // OpenLibrary work record (source label "openlibrary").
+            if path.contains("/w/api.php") {
+                return catalogJSON(["query": ["search": []]], request: request)
+            }
+            // Google Books volumes API (host is not part of url.path): the
+            // ISBN query repeats the shared blurb, the title query differs.
             if path.contains("/books/v1/volumes") {
-                return catalogJSON(["items": [["volumeInfo": ["description": shared]]]], request: request)
+                if query.contains("isbn:") {
+                    return catalogJSON(["items": [["volumeInfo": ["description": shared]]]], request: request)
+                }
+                return catalogJSON(["items": [["volumeInfo": ["description": googleTitle]]]], request: request)
             }
             return catalogJSON([:], request: request)
         }
@@ -311,16 +310,18 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
             current: nil)
 
         let sources = candidates.flatMap { $0.sources.compactMap { $0 } }
-        #expect(sources.contains("wikipedia"))
         #expect(sources.contains("openlibrary"))
         #expect(sources.contains("googlebooks"))
         #expect(candidates.filter { $0.text == shared }.count == 1,
-                "identical texts from ISBN record and Google must dedupe to one row")
-        #expect(candidates.count == 3)
-        // The shared blurb arrives from both the ISBN record (OpenLibrary)
-        // and Google-by-ISBN — its label must carry the union.
+                "identical texts from the work record and Google-by-ISBN must dedupe to one row")
+        #expect(candidates.count == 2)
+        // The shared blurb arrives via the ISBN record (whose description
+        // text Google supplied — the record row is labelled "googlebooks")
+        // and the OpenLibrary work search — the label must carry the union.
         let sharedRow = try #require(candidates.first { $0.text == shared })
-        #expect(sharedRow.sources.compactMap { $0 } == ["openlibrary", "googlebooks"])
+        #expect(sharedRow.sources.compactMap { $0 } == ["googlebooks", "openlibrary"])
+        let googleRow = try #require(candidates.first { $0.text == googleTitle })
+        #expect(googleRow.sources.compactMap { $0 } == ["googlebooks"])
     }
 
     /// The book's current text is always offered as a candidate even when no
@@ -341,7 +342,6 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
         #expect(candidates.first?.text == "My own description.")
         #expect(candidates.first?.sources == [nil])
     }
-
     /// When the current text matches a fetched description, the row dedupes
     /// to the fetched source instead of showing "Current text" + the source
     /// as two identical rows (the Wikipedia-shown-twice bug).
@@ -424,5 +424,91 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
 
         // Missing authors still searches on the title alone.
         #expect(WebSearchEngine.bookDescriptionURL(title: "Dune", authors: []) != nil)
+    }
+}
+
+@Suite struct ISBNLookupTests {
+    private func makeService() -> OpenLibraryService {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CatalogStubProtocol.self]
+        return OpenLibraryService(session: URLSession(configuration: config))
+    }
+
+    /// The scanned-ISBN failure the user hit: OpenLibrary retired
+    /// `/api/books`, and ISBN resolution must flow through
+    /// `search.json?q=isbn:` instead. The stub answers that query with a
+    /// titled doc; the lookup must map it (with the scanned ISBN pinned,
+    /// not the doc's arbitrary first entry) instead of returning nil.
+    @Test func lookupResolvesViaSearchJSONIsbnQuery() async throws {
+        CatalogStubProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            let query = request.url?.query ?? ""
+            if path.contains("/search.json") {
+                if query.contains("isbn:") {
+                    return catalogJSON(["docs": [["key": "/works/OL77",
+                                                  "title": "Testament of Youth",
+                                                  "author_name": ["Vera Brittain"],
+                                                  "first_publish_year": 1933]]], request: request)
+                }
+                return catalogJSON(["docs": []], request: request)
+            }
+            return catalogJSON([:], request: request)
+        }
+
+        let service = makeService()
+        let book = try await #require(service.lookup(isbn: "9780860688134"))
+        #expect(book.title == "Testament of Youth")
+        #expect(book.authors == ["Vera Brittain"])
+        #expect(book.isbn == "9780860688134", "the scanned ISBN must be pinned, not the doc's first entry")
+        #expect(book.olWorkKey == "/works/OL77")
+        #expect(book.source == "openlibrary")
+    }
+
+    /// A malformed OpenLibrary answer (empty body / HTML error page — how
+    /// `/api/books` failed) must degrade to "no record" and let Google
+    /// answer, never throw the whole lookup.
+    @Test func malformedOpenLibraryAnswerFallsBackToGoogle() async throws {
+        CatalogStubProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.contains("/search.json") {
+                // Raw HTML error page — not JSON at all.
+                let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                               httpVersion: "HTTP/1.1",
+                                               headerFields: ["Content-Type": "text/html"])!
+                return (response, Data("<html><body>503</body></html>".utf8))
+            }
+            if path.contains("/books/v1/volumes") {
+                return catalogJSON(["items": [["volumeInfo": [
+                    "title": "Google Title", "authors": ["G. Author"]]]]], request: request)
+            }
+            return catalogJSON([:], request: request)
+        }
+
+        let service = makeService()
+        let book = try await #require(service.lookup(isbn: "9780000000001"))
+        #expect(book.title == "Google Title")
+        #expect(book.source == "googlebooks")
+    }
+
+    /// An OpenLibrary miss (numFound 0 — the ISBN isn't in the index) must
+    /// likewise fall through to Google.
+    @Test func emptySearchJSONFallsBackToGoogle() async throws {
+        CatalogStubProtocol.handler = { request in
+            let path = request.url?.path ?? ""
+            if path.contains("/search.json") {
+                return catalogJSON(["numFound": 0, "docs": []], request: request)
+            }
+            if path.contains("/books/v1/volumes") {
+                return catalogJSON(["items": [["volumeInfo": [
+                    "title": "Only Google Knows", "publishedDate": "1999-05-01"]]]], request: request)
+            }
+            return catalogJSON([:], request: request)
+        }
+
+        let service = makeService()
+        let book = try await #require(service.lookup(isbn: "9780596520873"))
+        #expect(book.title == "Only Google Knows")
+        #expect(book.publicationYear == 1999)
+        #expect(book.source == "googlebooks")
     }
 }

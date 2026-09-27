@@ -31,8 +31,8 @@ targets:
     info:
       path: LibraryCove/Info.plist
       properties:
-        CFBundleShortVersionString: "0.5.1"
-        CFBundleVersion: "6"
+        CFBundleShortVersionString: "0.5.2"
+        CFBundleVersion: "7"
         UIApplicationSupportsIndirectInputEvents: true
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:

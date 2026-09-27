@@ -3,6 +3,19 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
+## 0.5.2 (2026-09-27)
+
+### Fixed — Scanning ISBNs
+
+- **Scanning finds books again.** Open Library retired the ISBN lookup
+  endpoint LibraryCove used (`/api/books` now answers 404), which broke every
+  scan. Lookups now use the same working search index as the title search and
+  still fall back to Google Books for ISBNs Open Library doesn't know. A dead
+  or malformed catalog response can no longer abort a scan lookup outright.
+- **Holding the phone on a barcode no longer stutters.** The green
+  "ISBN detected" indication used to restart with every re-read of the same
+  code; it now stays solid until you move away from the book.
+
 ## 0.5.1 (2026-09-26)
 
 ### Changed — Add a book screen

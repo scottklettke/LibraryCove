@@ -8,7 +8,7 @@ struct AboutView: View {
     @Environment(\.dismiss) private var dismiss
 
     /// Central place for the project's public URL (kept in sync with README).
-    static let githubURL = URL(string: "https://github.com/aoeu10/LibraryCove")!
+    static let githubURL = URL(string: "https://github.com/scottklettke/LibraryCove")!
 
     private let roadmap = [
         "Additional AI providers and multi-model selection",

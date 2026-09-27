@@ -130,7 +130,7 @@ version is shown in the app under Settings → About & Feedback.
 
 Found a bug or want a feature? Open an issue:
 
-<https://github.com/aoeu10/LibraryCove/issues/new>
+<https://github.com/scottklettke/LibraryCove/issues/new>
 
 ## Changelog
 

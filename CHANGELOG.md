@@ -3,7 +3,7 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
-## Unreleased
+## 0.5.1 (2026-09-26)
 
 ### Changed — Add a book screen
 

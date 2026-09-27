@@ -167,6 +167,7 @@ struct AddBookView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("Search by title or author…", text: $searchText)
+                .accessibilityIdentifier("addBookSearchField")
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .onSubmit { Task { await performSearch() } }

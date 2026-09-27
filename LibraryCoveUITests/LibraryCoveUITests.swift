@@ -637,6 +637,35 @@ final class LibraryCoveUITests: XCTestCase {
                        "lookup still spinning after 45s — background processor never resolved it")
     }
 
+    /// The user-reported scan failure: an ISBN that title search resolves
+    /// fine must resolve when scanned, too — the queued item must become
+    /// READY (the row flips from "Review ISBN …" to the book's title), not
+    /// land failed/unavailable. Uses a live Open Library–indexed ISBN
+    /// (Your Forest, Jon Klassen) through the real network path.
+    func testScannedISBNBecomesReadyWithTitle() throws {
+        let app = baseApp()
+        app.launchEnvironment["UI_TEST_LIVE_LOOKUP_ISBNS"] = "9781536230833"
+        app.launch()
+        enterLibraryIfNeeded(app)
+        openAddSheet(app)
+
+        let link = app.buttons.matching(NSPredicate(format: "label CONTAINS 'not yet added'")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 10), "pending scan link missing")
+        link.tap()
+        XCTAssertTrue(app.navigationBars["Pending scans"].waitForExistence(timeout: 10),
+                      "pending-scan review did not open")
+
+        // READY means the row is labeled with the resolved title. Anything
+        // else (failed, unavailable, still "Review ISBN …") is a regression.
+        let readyRow = app.buttons["Review Your Forest"]
+        let deadline = Date().addingTimeInterval(60)
+        while !readyRow.exists && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+        }
+        XCTAssertTrue(readyRow.exists,
+                      "scanned ISBN never became ready — lookup path is broken again")
+    }
+
     /// Backups must carry the library they came from: the filename embeds
     /// the active library's name, and the row caption surfaces it — so a
     /// user with several libraries (or parked Local/iCloud sets) can tell

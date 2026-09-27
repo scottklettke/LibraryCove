@@ -77,6 +77,18 @@ struct AddBookView: View {
                     .padding(.top, 10)
                 }
                 searchBar
+                Button {
+                    showScanner = true
+                } label: {
+                    Label("Scan ISBN", systemImage: "barcode.viewfinder")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.horizontal)
+                .padding(.top, 10)
+                .accessibilityIdentifier("scanISBNButton")
                 if let errorMessage {
                     Text(errorMessage)
                         .font(.footnote)
@@ -90,22 +102,8 @@ struct AddBookView: View {
             .navigationTitle("Add a book")
             .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        showScanner = true
-                    } label: {
-                        Label("Scan ISBN", systemImage: "barcode.viewfinder")
-                    }
-                    Button {
-                        manualEntry = CatalogBook.manualEntry()
-                    } label: {
-                        Label("Add manually", systemImage: "square.and.pencil")
-                    }
-                } label: {
-                    Label("Add", systemImage: "plus.circle")
-                }
-                if !selectedIDs.isEmpty {
+            if !selectedIDs.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
                     Button("Add selected (\(selectedIDs.count))") {
                         startImportFlow()
                     }
@@ -168,7 +166,7 @@ struct AddBookView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Title or author…", text: $searchText)
+            TextField("Search by title or author…", text: $searchText)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
                 .onSubmit { Task { await performSearch() } }
@@ -247,8 +245,6 @@ struct AddBookView: View {
                                 Spacer()
                             }
                         }
-                    } footer: {
-                        Text("Add a book by typing its details yourself — no ISBN or catalog search needed.")
                     }
                 } else {
                     ForEach(results) { result in

@@ -3,6 +3,16 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
+## Unreleased
+
+### Changed — Add a book screen
+
+- **The Add screen has a big Scan ISBN button.** The plus menu in the top-right
+  is gone; scanning — the primary way to add books — is a prominent button
+  right under the search bar. The three ways to add are now labeled directly on
+  the page: Search (search bar), Scan ISBN (big button), and Add manually (list
+  row, whose explanatory footer was removed).
+
 ## 0.5 (2026-09-25)
 
 ### Fixed — iCloud sync reliability

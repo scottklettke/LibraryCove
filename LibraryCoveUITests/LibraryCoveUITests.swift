@@ -90,15 +90,8 @@ final class LibraryCoveUITests: XCTestCase {
     }
 
     private func openScanner(_ app: XCUIApplication) {
-        // "Scan ISBN" may be in the toolbar directly or folded into the
-        // "More" overflow on narrow screens.
-        let scan = app.buttons["Scan ISBN"]
-        if !scan.waitForExistence(timeout: 5) {
-            let more = app.buttons["More"]
-            XCTAssertTrue(more.waitForExistence(timeout: 3), "could not find Scan ISBN")
-            more.tap()
-            XCTAssertTrue(scan.waitForExistence(timeout: 3), "Scan ISBN not in overflow menu")
-        }
+        let scan = app.buttons["scanISBNButton"]
+        XCTAssertTrue(scan.waitForExistence(timeout: 10), "scan ISBN button missing")
         scan.tap()
     }
 

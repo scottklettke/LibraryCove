@@ -579,3 +579,52 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
         #expect(!covers.contains { $0.contains("edge=curl") })
     }
 }
+
+/// The app's About screen renders the CHANGELOG.md bundled into the .app,
+/// whose newest `## <version> (<date>)` section must name the same version
+/// the build itself carries (`project.yml` → xcodegen → Info.plist). This
+/// test runs on every cmd+U / CI invocation and fails the moment the two
+/// drift — the fix is to bump CHANGELOG.md's top section, or project.yml +
+/// `xcodegen`, so they agree again.
+@Suite struct ChangelogVersionTests {
+    /// First `## ` heading of the bundled changelog, e.g. "0.5.2" from
+    /// `## 0.5.2 (2026-09-27)`. nil when the file is missing or has no
+    /// version section at all.
+    private var bundledChangelogVersion: String? {
+        guard let url = Bundle.main.url(forResource: "CHANGELOG", withExtension: "md"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        // Plain parsing, not a regex literal: SWIFT_VERSION is 5.9, where
+        // bare /…/ literals don't compile (the whole file drops from the
+        // bundle when it fails).
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard line.hasPrefix("## ") else { continue }
+            let rest = line.dropFirst(3)
+            // "0.5.2 (2026-09-27)" → "0.5.2": version is the run of digits
+            // and dots before the space/open-paren.
+            let version = rest.prefix { $0.isNumber || $0 == "." }
+            if !version.isEmpty, version.allSatisfy({ $0.isNumber || $0 == "." }) {
+                return String(version)
+            }
+        }
+        return nil
+    }
+
+    @Test func bundledChangelogTopSectionMatchesAppVersion() {
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let changelog = bundledChangelogVersion
+        #expect(changelog != nil,
+                "bundled CHANGELOG.md has no '## <version>' section — the in-app changelog would show nothing current")
+        #expect(appVersion != nil, "app bundle carries no CFBundleShortVersionString")
+        #expect(changelog == appVersion,
+                "version drift: CHANGELOG.md's newest section is '\(changelog ?? "nil")' but the app is '\(appVersion ?? "nil")'. Bump CHANGELOG.md's top section, or project.yml + xcodegen — they must name the same release.")
+    }
+
+    @Test func bundledChangelogTopSectionBuildNumberMatches() {
+        // Loose pin on the build number: the changelog text doesn't carry
+        // it, so assert only that the app HAS one (regression guard against
+        // a regen dropping CFBundleVersion).
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        #expect(build?.isEmpty == false,
+                "app bundle carries no CFBundleVersion — check project.yml + xcodegen")
+    }
+}

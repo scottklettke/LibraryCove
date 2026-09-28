@@ -511,6 +511,14 @@ extension SharedLibraryCoordinator {
             )) {
                 for note in notes { note.userID = LibraryScope.primaryMemberID }
             }
+            // ReadingList.ownerID is a non-optional String ("" = unset).
+            if let lists = try? context.fetch(FetchDescriptor<ReadingList>(
+                predicate: #Predicate { legacyIDs.contains($0.ownerID) }
+            )) {
+                for list in lists where !list.ownerID.isEmpty {
+                    list.ownerID = LibraryScope.primaryMemberID
+                }
+            }
             for stale in legacy { context.delete(stale) }
             try? context.save()
         } else if all.count > 1 {
@@ -533,6 +541,13 @@ extension SharedLibraryCoordinator {
             )) {
                 for note in notes { note.userID = winnerID }
             }
+            if let lists = try? context.fetch(FetchDescriptor<ReadingList>(
+                predicate: #Predicate { legacyIDs.contains($0.ownerID) }
+            )) {
+                for list in lists where !list.ownerID.isEmpty {
+                    list.ownerID = winnerID
+                }
+            }
             for stale in sorted.dropFirst() { context.delete(stale) }
             winner.id = LibraryScope.primaryMemberID
             try? context.save()
@@ -550,6 +565,13 @@ extension SharedLibraryCoordinator {
                 predicate: #Predicate { $0.userID == oldID }
             )) {
                 for note in notes { note.userID = LibraryScope.primaryMemberID }
+            }
+            if let lists = try? context.fetch(FetchDescriptor<ReadingList>(
+                predicate: #Predicate { $0.ownerID == oldID }
+            )) {
+                for list in lists where !list.ownerID.isEmpty {
+                    list.ownerID = LibraryScope.primaryMemberID
+                }
             }
             row.id = LibraryScope.primaryMemberID
             try? context.save()

@@ -139,13 +139,16 @@ struct RootView: View {
 
     /// Shared-library mirror stores start empty (participants pull everything
     /// from the cloud). Without a User row the login gate would cover the
-    /// shared library with LoginView — seed a placeholder identity.
+    /// shared library with LoginView — seed a placeholder identity (via the
+    /// adopt-or-create helper, so a synced primary row is adopted rather
+    /// than a divergent duplicate minted).
     private func ensureActiveUser(context: ModelContext) {
         let users = (try? context.fetch(FetchDescriptor<User>())) ?? []
         guard !users.contains(where: \.isActive) else { return }
-        context.insert(User(email: "shared@librarycove.local",
-                            displayName: SharedLibrarySettings.shareTitle ?? "Shared Library"))
-        try? context.save()
+        _ = SharedLibraryCoordinator.createPrimaryMember(
+            displayName: SharedLibrarySettings.shareTitle ?? "Shared Library",
+            email: "shared@librarycove.local",
+            context: context)
     }
 
 

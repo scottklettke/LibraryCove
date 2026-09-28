@@ -151,6 +151,22 @@ func withDeadline<T: Sendable>(
     }
 }
 
+/// Serializes Open Library requests, enforcing a ≥0.4s gap (≤2.5 req/s —
+/// under the identified 3/s ceiling even with jitter).
+actor OpenLibraryRateGate {
+    private var lastRequestAt = Date.distantPast
+    private let minimumInterval: TimeInterval = 0.4
+
+    func wait() async {
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastRequestAt)
+        if elapsed < minimumInterval {
+            try? await Task.sleep(nanoseconds: UInt64((minimumInterval - elapsed) * 1_000_000_000))
+        }
+        lastRequestAt = Date()
+    }
+}
+
 /// OpenLibrary search + Google Books cover enrichment.
 final class OpenLibraryService: CatalogService {
     private let openLibraryURL = URL(string: "https://openlibrary.org")!
@@ -168,15 +184,28 @@ final class OpenLibraryService: CatalogService {
         config.timeoutIntervalForResource = 25
         config.waitsForConnectivity = false
         // Open Library API etiquette asks automated clients to identify
-        // themselves; a descriptive UA earns saner rate-limit treatment.
+        // themselves with an app name AND contact email — identified
+        // requests get 3x the rate limit (3 req/s vs 1).
         config.httpAdditionalHeaders = [
-            "User-Agent": "LibraryCove/0.5 (iOS; personal library app; https://github.com/scottklettke/LibraryCove)"
+            "User-Agent": "LibraryCove/0.5 (https://github.com/scottklettke/LibraryCove; librarycove@fastmail.com)"
         ]
         return URLSession(configuration: config)
     }
 
     init(session: URLSession = OpenLibraryService.boundedSession()) {
         self.session = session
+    }
+
+    /// Open Library rate-limit compliance: identified clients get 3
+    /// requests/second. Every OL request funnels through `gatedData()`,
+    /// which serializes on an actor and spaces requests ≥ 0.4s apart —
+    /// a scan burst (3 concurrent lookups × several calls each) can
+    /// otherwise momentarily exceed the limit and earn 429s/blocks.
+    private static let gate = OpenLibraryRateGate()
+
+    func gatedData(from url: URL) async throws -> (Data, URLResponse) {
+        await Self.gate.wait()
+        return try await session.data(from: url)
     }
 
     /// Search by title/author. Combines OpenLibrary results with Google Books covers.
@@ -189,7 +218,7 @@ final class OpenLibraryService: CatalogService {
         ]
         guard let url = components.url else { return [] }
 
-        let (data, response) = try await session.data(from: url)
+        let (data, response) = try await gatedData(from: url)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return [] }
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let docs = json?["docs"] as? [[String: Any]] ?? []
@@ -231,7 +260,7 @@ final class OpenLibraryService: CatalogService {
             // (empty body, HTML error page — exactly how /api/books failed)
             // must degrade to "no OpenLibrary record" and let Google answer,
             // never throw the whole lookup.
-            if let (data, response) = try? await session.data(from: url),
+            if let (data, response) = try? await gatedData(from: url),
                let http = response as? HTTPURLResponse, http.statusCode == 200,
                let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                let doc = (json["docs"] as? [[String: Any]] ?? []).first {
@@ -359,7 +388,7 @@ final class OpenLibraryService: CatalogService {
 
         // 1) Edition record: read the covers array (cover IDs).
         if let editionURL = URL(string: "https://openlibrary.org/isbn/\(isbn).json"),
-           let (data, response) = try? await session.data(from: editionURL),
+           let (data, response) = try? await gatedData(from: editionURL),
            let http = response as? HTTPURLResponse, http.statusCode == 200,
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
@@ -375,7 +404,7 @@ final class OpenLibraryService: CatalogService {
             let works = json["works"] as? [[String: Any]] ?? []
             workKey = works.first?["key"] as? String
             if let workKey, let editionsURL = URL(string: "https://openlibrary.org\(workKey)/editions.json"),
-               let (edata, eresponse) = try? await session.data(from: editionsURL),
+               let (edata, eresponse) = try? await gatedData(from: editionsURL),
                let ehttp = eresponse as? HTTPURLResponse, ehttp.statusCode == 200,
                let ejson = try? JSONSerialization.jsonObject(with: edata) as? [String: Any],
                let entries = ejson["entries"] as? [[String: Any]] {
@@ -497,14 +526,14 @@ final class OpenLibraryService: CatalogService {
         guard let searchURL = searchComponents.url else { return nil }
 
         do {
-            let (data, response) = try await session.data(from: searchURL)
+            let (data, response) = try await gatedData(from: searchURL)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200,
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let docs = json["docs"] as? [[String: Any]],
                   let key = docs.first?["key"] as? String else { return nil }
 
             let workURL = URL(string: "https://openlibrary.org\(key).json")!
-            let (workData, workResponse) = try await session.data(from: workURL)
+            let (workData, workResponse) = try await gatedData(from: workURL)
             guard let workHTTP = workResponse as? HTTPURLResponse, workHTTP.statusCode == 200,
                   let workJSON = try? JSONSerialization.jsonObject(with: workData) as? [String: Any],
                   let rawDesc = workJSON["description"] else { return nil }

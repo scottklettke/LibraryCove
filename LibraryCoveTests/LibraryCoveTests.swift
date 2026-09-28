@@ -628,3 +628,172 @@ private func catalogJSON(_ body: [String: Any], request: URLRequest) -> (HTTPURL
                 "app bundle carries no CFBundleVersion — check project.yml + xcodegen")
     }
 }
+
+@Suite struct HardcoverServiceTests {
+    /// Fixture: what a real EnrichByISBN round-trip returns for a book with
+    /// genres/tags/series — the shape observed from the live API (cached_tags
+    /// as {category: [tag…]}), wrapped in the GraphQL envelope.
+    private static func enrichedResponse() -> String {
+        """
+        {"data":{"editions":[{"id":22212198,"pages":416,
+          "language":{"code2":"en"},
+          "image":{"url":"https://covers.openlibrary.org/b/id/14844874-L.jpg"},
+          "book":{"id":192946,"description":"A desert regex.",
+            "cached_tags":{"Genre":["Fantasy","Dark Fantasy"],"Mood":["Dark"],"Format":["Hardcover"]},
+            "book_series":[{"position":3,"series":{"name":"The Stormlight Archive"}}]}}]}}
+        """
+    }
+
+    private func makeService() -> HardcoverService {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CatalogStubProtocol.self]
+        return HardcoverService(session: URLSession(configuration: config))
+    }
+
+    /// The full path: token set → GraphQL query → edition parsed into
+    /// metadata (genres from the Genre category, all tags flattened, series
+    /// name + position, pages/language/cover/description).
+    @Test func enrichesFromEditionPayload() async throws {
+        CatalogStubProtocol.handler = { request in
+            #expect(request.url?.host == "api.hardcover.app")
+            #expect(request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true)
+            return try! Self.graphql(Self.enrichedResponse(), request: request)
+        }
+        HardcoverConfig.token = "test-token"
+        defer { HardcoverConfig.token = nil }
+
+        let metadata = try await #require(makeService().metadata(isbn: "9781536230833"))
+        #expect(metadata.pageCount == 416)
+        #expect(metadata.language == "en")
+        #expect(metadata.seriesName == "The Stormlight Archive")
+        #expect(metadata.seriesPosition == "3")
+        #expect(metadata.description == "A desert regex.")
+        #expect(metadata.coverImageURL?.contains("14844874-L") == true)
+        #expect(metadata.tags.contains("Fantasy") && metadata.tags.contains("Dark") && metadata.tags.contains("Hardcover"))
+        #expect(metadata.genres == ["Fantasy", "Dark Fantasy"], "only Genre-category tags become genres")
+    }
+
+    /// Spoiler-marked tags are dropped; unknown payload shapes degrade to
+    /// empty rather than crash.
+    @Test func spoilerTagsDroppedAndWeirdShapesTolerated() {
+        let edition: [String: Any] = [
+            "book": [
+                "cached_tags": [["tag": "Plot Twist", "spoiler": true, "category": "Mood"],
+                                ["tag": "Cozy", "spoiler": false, "category": "Mood"],
+                                "garbage-string"] as [Any]
+            ]
+        ]
+        let metadata = HardcoverService.parse(edition: edition)
+        #expect(metadata.tags == ["Cozy"])
+        #expect(metadata.genres.isEmpty)
+        #expect(HardcoverService.parse(edition: [:]).tags.isEmpty)
+        #expect(HardcoverService.parse(edition: ["book": ["cached_tags": 42]]).tags.isEmpty)
+    }
+
+    /// No token (or disabled) → no network, nil result. The service is inert
+    /// by design when unconfigured.
+    @Test func unconfiguredServiceNeverTouchesNetwork() async {
+        var hitNetwork = false
+        CatalogStubProtocol.handler = { request in
+            hitNetwork = true
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data())
+        }
+        HardcoverConfig.token = nil
+        HardcoverConfig.isEnabled = false
+        let metadata = await makeService().metadata(isbn: "9781536230833")
+        #expect(metadata == nil)
+        #expect(!hitNetwork)
+    }
+
+    /// GraphQL-level errors (invalid token, query problems) come back with
+    /// HTTP 200 + "errors" — must degrade to nil, not crash or throw.
+    @Test func graphQLErrorsDegradeToNil() async throws {
+        CatalogStubProtocol.handler = { request in
+            return try! Self.graphql(#"{"errors":[{"message":"invalid token"}]}"#, request: request)
+        }
+        HardcoverConfig.token = "test-token"
+        defer { HardcoverConfig.token = nil }
+        let metadata = await makeService().metadata(isbn: "9781536230833")
+        #expect(metadata == nil)
+    }
+
+    /// An ISBN-10 input normalizes to its ISBN-13 form (Book.normalizedISBN
+    /// converts), so the query filters on isbn_13 with the converted value —
+    /// Hardcover indexes both forms on editions either way.
+    @Test func isbn10InputQueriesConvertedIsbn13() async throws {
+        var seenQuery: String?
+        CatalogStubProtocol.handler = { request in
+            // URLSession hands URLProtocol the body on httpBodyStream, not
+            // httpBody — read the stream (same pattern as AITests.bodyObject).
+            if let stream = request.httpBodyStream {
+                stream.open()
+                defer { stream.close() }
+                var data = Data()
+                let bufferSize = 4096
+                let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+                defer { buffer.deallocate() }
+                while stream.hasBytesAvailable {
+                    let read = stream.read(buffer, maxLength: bufferSize)
+                    if read <= 0 { break }
+                    data.append(buffer, count: read)
+                }
+                if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    seenQuery = obj["query"] as? String
+                }
+            }
+            return try! Self.graphql(Self.enrichedResponse(), request: request)
+        }
+        HardcoverConfig.token = "test-token"
+        HardcoverConfig.isEnabled = true
+        defer {
+            HardcoverConfig.token = nil
+            HardcoverConfig.isEnabled = false
+        }
+        // 0553803700 (I, Robot) → 9780553803709
+        _ = await makeService().metadata(isbn: "0553803700")
+        #expect(seenQuery?.contains("isbn_13") == true)
+        #expect(seenQuery?.contains("9780553803709") == true)
+    }
+}
+
+extension HardcoverServiceTests {
+    /// Wraps a GraphQL JSON body in the (HTTPURLResponse, Data) tuple the
+    /// stub protocol expects.
+    static func graphql(_ body: String, request: URLRequest) throws -> (HTTPURLResponse, Data) {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                       httpVersion: "HTTP/1.1",
+                                       headerFields: ["Content-Type": "application/json"])!
+        return (response, Data(body.utf8))
+    }
+}
+
+@Suite struct OpenLibraryRateGateTests {
+    /// Two back-to-back waits must be spaced ≥ the minimum interval —
+    /// this is the 3-req/s compliance guarantee.
+    @Test func enforcesMinimumInterval() async {
+        let gate = OpenLibraryRateGate()
+        let start = Date()
+        await gate.wait()
+        await gate.wait()
+        let elapsed = Date().timeIntervalSince(start)
+        #expect(elapsed >= 0.35, "second request must be spaced ~0.4s; got \(elapsed)s")
+        #expect(elapsed < 2.0, "gate must not over-wait; got \(elapsed)s")
+    }
+}
+
+@Suite struct GenreMappingTests {
+    /// Hardcover genre vocabulary → the app's curated taxonomy.
+    @Test func mapsCommonCatalogGenres() {
+        #expect(BookGenre.matching(name: "Fantasy") == .fantasy)
+        #expect(BookGenre.matching(name: "Mystery") == .mysteryThriller)
+        #expect(BookGenre.matching(name: "Crime") == .mysteryThriller)
+        #expect(BookGenre.matching(name: "Sci-Fi") == .scienceFiction)
+        #expect(BookGenre.matching(name: "Memoir") == .biographyMemoir)
+        #expect(BookGenre.matching(name: "Self Help") == .selfHelp)
+        #expect(BookGenre.matching(name: "Science Fiction") == .scienceFiction)
+        #expect(BookGenre.matching(name: "Dark Fantasy") == .fantasy, "substring fallback")
+        #expect(BookGenre.matching(name: "Micropaleontology") == nil, "no forced match")
+        #expect(BookGenre.matching(name: "  ") == nil)
+    }
+}

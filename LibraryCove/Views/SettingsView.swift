@@ -44,6 +44,11 @@ struct SettingsView: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testResultIsError = false
+    // Hardcover enrichment
+    @State private var hardcoverToken: String = HardcoverConfig.token ?? ""
+    @State private var isTestingHardcover = false
+    @State private var hardcoverTestResult: String?
+    @State private var hardcoverTestIsError = false
 
     // Description lookup
     @State private var searchEngine: WebSearchEngine = WebSearchEngine.selected
@@ -160,6 +165,8 @@ struct SettingsView: View {
                 syncSection
 
                 aiEngineSection
+
+                hardcoverSection
 
                 trailingSections
 
@@ -307,10 +314,19 @@ struct SettingsView: View {
         }
     }
 
-    /// Fires one real request through the selected engine so the user gets
-    /// immediate "did my endpoint actually work" feedback, and so the
-    /// connection log below it captures the exact outcome/error.
+    /// Persists the pasted Hardcover PAT to the Keychain, then verifies it
+    /// with the cheapest possible read-catalog query.
     @MainActor
+    private func testHardcoverConnection() async {
+        let token = hardcoverToken.trimmingCharacters(in: .whitespaces)
+        HardcoverConfig.token = token.isEmpty ? nil : token
+        isTestingHardcover = true
+        defer { isTestingHardcover = false }
+        let error = await HardcoverService().testConnection()
+        hardcoverTestIsError = error != nil
+        hardcoverTestResult = error ?? "Connected — Hardcover enrichment active."
+    }
+
     private func testConnection() async {
         isTesting = true
         testResult = nil
@@ -951,6 +967,43 @@ struct SettingsView: View {
                     Text("Multi-model gateways like OpenRouter report each model's context, so the app sizes requests to the real window automatically once the model list loads. For servers that don't declare a window, set the context window below to match your model's limit — a larger window lets the AI search more of your library. Ground answers with web search is keyless: Ask AI looks up a Wikipedia article and DuckDuckGo results and cites their URLs; it adds a short fetch per question when enabled and stays off unless you turn it on.")
                 }
 
+    }
+
+    /// Optional enrichment source: Hardcover's public catalog (genres, tags,
+    /// series) layered on top of OpenLibrary/Google lookups. Off until the
+    /// user supplies their own PAT — the API has no shared app key.
+    private var hardcoverSection: some View {
+        Section {
+            Toggle("Use Hardcover for book details", isOn: Binding(
+                get: { HardcoverConfig.isEnabled },
+                set: { HardcoverConfig.isEnabled = $0 }
+            ))
+            if HardcoverConfig.isEnabled {
+                SecureField("API key", text: $hardcoverToken, prompt: Text("Paste your Hardcover key"))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .accessibilityIdentifier("hardcoverTokenField")
+                Button {
+                    Task { await testHardcoverConnection() }
+                } label: {
+                    Label(isTestingHardcover ? "Testing…" : "Test connection",
+                          systemImage: isTestingHardcover ? "arrow.triangle.2.circlepath" : "bolt.fill")
+                }
+                .disabled(isTestingHardcover || hardcoverToken.trimmingCharacters(in: .whitespaces).isEmpty)
+                if let hardcoverTestResult {
+                    LabeledContent(hardcoverTestIsError ? "Test failed" : "Test result") {
+                        Text(hardcoverTestResult)
+                            .font(.caption)
+                            .foregroundStyle(hardcoverTestIsError ? Color.red : Color.green)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+        } header: {
+            Text("Hardcover")
+        } footer: {
+            Text("Enriches scanned and imported books with Hardcover's curated genres, tags, series, and extra details. Create a free API key at hardcover.app → Account → API (New API Key) and paste it here; the key is stored in your device's Keychain and only public book data is read — never your Hardcover ratings or reviews.")
+        }
     }
 
     /// Removes AI remnants and search history so "the entire library is

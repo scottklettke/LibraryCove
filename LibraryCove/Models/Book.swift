@@ -311,6 +311,42 @@ enum BookGenre: String, CaseIterable, Identifiable {
     static func all(inFiction: Bool) -> [BookGenre] {
         allCases.filter { $0.isFiction == inFiction }
     }
+
+    /// Maps an external genre name (Hardcover, OpenLibrary subjects) to the
+    /// app's curated taxonomy. Matches display names case-insensitively plus
+    /// common catalog synonyms; nil when nothing fits.
+    static func matching(name: String) -> BookGenre? {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleaned.isEmpty else { return nil }
+        if let exact = allCases.first(where: { $0.displayName.lowercased() == cleaned || $0.rawValue == cleaned }) {
+            return exact
+        }
+        // Common Hardcover/OL synonyms → curated genre.
+        let synonyms: [String: BookGenre] = [
+            "mystery": .mysteryThriller, "thriller": .mysteryThriller, "crime": .mysteryThriller,
+            "detective": .mysteryThriller, "suspense": .mysteryThriller,
+            "sci-fi": .scienceFiction, "science fiction & fantasy": .scienceFiction,
+            "speculative fiction": .scienceFiction,
+            "historical": .historicalFiction,
+            "adventure": .actionAdventure,
+            "biography": .biographyMemoir, "memoir": .biographyMemoir, "autobiography": .biographyMemoir,
+            "self help": .selfHelp, "self-help": .selfHelp, "personal development": .selfHelp,
+            "health": .healthWellness, "fitness": .healthWellness,
+            "business": .businessMoney, "economics": .businessMoney, "finance": .businessMoney, "money": .businessMoney,
+            "cookbooks": .cookingFood, "cooking": .cookingFood, "food": .cookingFood, "food & wine": .cookingFood,
+            "art": .artsPhotography, "photography": .artsPhotography, "music": .artsPhotography, "design": .artsPhotography,
+            "education": .referenceEducation, "reference": .referenceEducation, "textbooks": .referenceEducation,
+            "young adult": .literaryFiction, "classics": .literaryFiction, "fiction": .literaryFiction,
+            "contemporary": .literaryFiction, "adult": .literaryFiction, "adult fiction": .literaryFiction,
+            "history": .history, "historical fiction": .historicalFiction,
+            "science": .scienceMath, "mathematics": .scienceMath, "technology": .scienceMath,
+            "religion": .history, "philosophy": .history, "politics": .history,
+        ]
+        // Synonym table first, then "the tag names one of our genres" (e.g.
+        // "Dark Fantasy" contains "fantasy").
+        if let hit = synonyms[cleaned] { return hit }
+        return allCases.first { cleaned.contains($0.rawValue.replacingOccurrences(of: "-", with: " ")) || cleaned.contains($0.displayName.lowercased()) }
+    }
 }
 
 /// Fiction / non-fiction classification of a book. Stored on the Book; set

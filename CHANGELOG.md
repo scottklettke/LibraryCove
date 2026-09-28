@@ -5,6 +5,25 @@ Notable user-facing changes, newest first. The same file ships in the app
 
 ## 0.5.2 (2026-09-27)
 
+### Added — Hardcover enrichment (optional)
+
+- **Optional Hardcover integration.** Turn it on in Settings → Hardcover:
+  paste your free API key from hardcover.app (Account → API → New API Key)
+  and scanned/imported books gain Hardcover's curated genres, tags, series
+  name & number, extra details, and another cover option. It fills gaps
+  only — never overwrites what OpenLibrary or Google found — and reads
+  exclusively public catalog data (no ratings, reviews, or anything from
+  your Hardcover account). The key is stored in your device's Keychain.
+
+### Improved — OpenLibrary etiquette
+
+- **Identified API traffic.** Requests now carry a contact email alongside
+  the app name, which Open Library's guidelines reward with a higher rate
+  limit (3 requests/second instead of 1).
+- **Rate-limit compliance built in.** All Open Library requests are
+  automatically spaced out so a burst of scans can never exceed the
+  documented limit — fewer 429s, fewer "couldn't reach the catalog" items.
+
 ### Fixed — Cover quality
 
 - **The first cover is no longer the low-resolution one.** Scan and search

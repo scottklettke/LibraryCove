@@ -259,10 +259,12 @@ struct BookFormView: View {
             // — skip the network entirely.
             if catalog != nil, !(catalog?.title.isEmpty ?? true) || catalog?.isbn?.isEmpty == false {
                 await fetchDescription()
+                await applyHardcoverEnrichment()
             } else if let existing,
                       (existing.bookDescription?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
                 // Editing a book with no description: auto-fill from the catalog.
                 await fetchDescription()
+                await applyHardcoverEnrichment()
             }
         }
         .sheet(isPresented: $showCamera) {
@@ -875,6 +877,62 @@ struct BookFormView: View {
 
     private var trimmedTitleEmpty: Bool {
         title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Layer Hardcover's curated metadata onto the form, filling ONLY gaps —
+    /// never overwriting what OpenLibrary/Google found or what the user has
+    /// typed. Runs after the catalog fetch so its data loses every tie.
+    /// Inert unless the user enabled Hardcover and stored a key (Settings).
+    private func applyHardcoverEnrichment() async {
+        guard HardcoverConfig.isConfigured else { return }
+        let isbn = catalogISBN ?? (existing?.isbn).flatMap { Book.normalizedISBN($0) } ?? nil
+        guard let isbn else { return }
+        let metadata = await HardcoverService().metadata(isbn: isbn)
+        guard let metadata, metadata.hasEnrichment else { return }
+
+        // Genre: first Hardcover genre that maps to the app's taxonomy, and
+        // only when the form doesn't already carry one.
+        if genreRaw.isEmpty, let matched = metadata.genres.lazy.compactMap({ BookGenre.matching(name: $0) }).first {
+            genreRaw = matched.rawValue
+        }
+
+        // Tags: append Hardcover tags that aren't already present.
+        if !metadata.tags.isEmpty {
+            var existing = Set(tagsText.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }.filter { !$0.isEmpty })
+            var additions: [String] = []
+            for tag in metadata.tags where existing.insert(tag.lowercased()).inserted {
+                additions.append(tag)
+            }
+            if !additions.isEmpty {
+                let base = tagsText.trimmingCharacters(in: .whitespaces)
+                tagsText = base.isEmpty ? additions.joined(separator: ", ") : base + ", " + additions.joined(separator: ", ")
+            }
+        }
+
+        // Series: "Name (#N)" when the book is numbered.
+        if seriesText.isEmpty, let name = metadata.seriesName {
+            if let position = metadata.seriesPosition, position != "0" {
+                seriesText = "\(name) #\(position)"
+            } else {
+                seriesText = name
+            }
+        }
+
+        // Details gaps.
+        if pageCountText.trimmingCharacters(in: .whitespaces).isEmpty, let pages = metadata.pageCount { pageCountText = String(pages) }
+        if languageText.trimmingCharacters(in: .whitespaces).isEmpty, let code = metadata.language { languageText = code }
+
+        // Description: only when the catalog chain found nothing.
+        if (description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty),
+           let desc = metadata.description?.trimmingCharacters(in: .whitespacesAndNewlines), !desc.isEmpty {
+            description = desc
+            activeDescriptionSource = "hardcover"
+        }
+
+        // Cover candidate: appended to the strip; the user picks.
+        if let url = metadata.coverImageURL, !coverURLs.contains(url) {
+            coverURLs.append(url)
+        }
     }
 
     /// "Retrieve additional covers": looks up cover candidates on demand —

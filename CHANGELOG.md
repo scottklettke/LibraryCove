@@ -3,6 +3,18 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
+## 0.5.3 (2026-09-28)
+
+### Fixed — Member name sync
+
+- **"Your name" now stays the same on every device.** Setting up a second
+  device used to create its own member row, so the name you typed there
+  ("Test") could diverge from your other device ("Scott") and never
+  converge. All devices now share one member identity: existing duplicate
+  rows merge automatically on the next launch (newest name wins, book
+  attributions follow), and second-device setup adopts your synced
+  identity instead of creating a new one.
+
 ## 0.5.2 (2026-09-27)
 
 ### Added — Hardcover enrichment (optional)

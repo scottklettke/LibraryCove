@@ -53,8 +53,6 @@ struct SettingsView: View {
     @State private var testResult: String?
     @State private var testResultIsError = false
     // Hardcover enrichment
-    @State private var hardcoverToken: String = HardcoverConfig.token ?? ""
-    @State private var isTestingHardcover = false
     @State private var hardcoverTestResult: String?
     @State private var hardcoverTestIsError = false
     @State private var isConnectingHardcover = false
@@ -349,23 +347,9 @@ struct SettingsView: View {
         isDisconnectingHardcover = true
         defer { isDisconnectingHardcover = false }
         await HardcoverOAuth.disconnect()
-        hardcoverToken = ""
         hardcoverTestResult = nil
         hardcoverTestIsError = false
         hardcoverError = nil
-    }
-
-    /// Persists the pasted Hardcover PAT to the Keychain, then verifies it
-    /// with the cheapest possible read-catalog query.
-    @MainActor
-    private func testHardcoverConnection() async {
-        let token = hardcoverToken.trimmingCharacters(in: .whitespaces)
-        HardcoverConfig.token = token.isEmpty ? nil : token
-        isTestingHardcover = true
-        defer { isTestingHardcover = false }
-        let error = await HardcoverService().testConnection()
-        hardcoverTestIsError = error != nil
-        hardcoverTestResult = error ?? "Connected — Hardcover enrichment active."
     }
 
     private func testConnection() async {
@@ -1044,21 +1028,6 @@ struct SettingsView: View {
                     Text(hardcoverError)
                         .font(.caption)
                         .foregroundStyle(.red)
-                }
-                if !HardcoverOAuth.clientID.isEmpty { EmptyView() }
-                else {
-                    // OAuth client not yet registered: manual PAT entry.
-                    SecureField("API key", text: $hardcoverToken, prompt: Text("Paste your Hardcover key"))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("hardcoverTokenField")
-                    Button {
-                        Task { await testHardcoverConnection() }
-                    } label: {
-                        Label(isTestingHardcover ? "Testing…" : "Use key",
-                              systemImage: isTestingHardcover ? "arrow.triangle.2.circlepath" : "bolt.fill")
-                    }
-                    .disabled(isTestingHardcover || hardcoverToken.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
             if let hardcoverTestResult, HardcoverConfig.token != nil {

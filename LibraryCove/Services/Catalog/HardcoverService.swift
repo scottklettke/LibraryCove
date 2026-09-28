@@ -424,7 +424,14 @@ final class HardcoverOAuth: NSObject {
     /// Registered client id. Embedded in the binary by design (public
     /// client); empty until the developer app is registered.
     static var clientID: String {
-        get { UserDefaults.standard.string(forKey: "HardcoverOAuthClientID") ?? "" }
+        get {
+            // The registered LibraryCove app; a user override in UserDefaults
+            // (e.g. for testing a staging app) takes precedence.
+            if let override = UserDefaults.standard.string(forKey: "HardcoverOAuthClientID"), !override.isEmpty {
+                return override
+            }
+            return "c18c1e07-8998-45ac-9a99-7a3a922f86ca"
+        }
         set { UserDefaults.standard.set(newValue, forKey: "HardcoverOAuthClientID") }
     }
 

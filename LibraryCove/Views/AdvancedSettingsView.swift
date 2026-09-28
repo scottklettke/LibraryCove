@@ -218,6 +218,11 @@ struct AdvancedSettingsView: View {
         // choice returns to the default (.iCloud) on next launch.
         SyncSettings.resetProvider()
         wipeAIRemnantsAndSearchHistory()
+        // Same for Hardcover: the OAuth refresh token (or pasted PAT) must
+        // not survive a factory reset in the Keychain. Revoking server-side
+        // would need a live session a reset shouldn't depend on — dropping
+        // the local tokens is the correct brand-new-install behavior.
+        HardcoverConfig.clearAllTokens()
     }
 
     /// Removes AI remnants and search history so "the entire library is

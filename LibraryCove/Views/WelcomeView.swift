@@ -119,9 +119,14 @@ struct WelcomeView: View {
     private func finish() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLibrary = libraryName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let user = User(email: "local@librarycove.local",
-                        displayName: trimmedName)
-        modelContext.insert(user)
+        // Adopt-or-create the shared member row: a second device on the
+        // same iCloud account reuses the synced identity instead of minting
+        // a diverging duplicate (the root cause of names disagreeing
+        // between devices).
+        _ = SharedLibraryCoordinator.createPrimaryMember(
+            displayName: trimmedName,
+            email: "local@librarycove.local",
+            context: modelContext)
         // The library name chosen here names the active library. On a
         // fresh install there is NO library yet (the registry stays empty
         // until the user acts) — create one instead of renaming a default

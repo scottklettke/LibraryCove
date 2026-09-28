@@ -92,6 +92,14 @@ final class LibraryScope: ObservableObject {
     /// (they migrate into the first/default library, which keeps this id).
     static let defaultLibraryID = "library-default"
 
+    /// The member identity's deterministic id. Every device on the iCloud
+    /// account shares ONE member row: onboarding adopts a synced row with
+    /// this id instead of minting a UUID — that's what keeps "Your name"
+    /// identical across devices (the old UUID-per-onboarding scheme let a
+    /// second device create its own row, whose locally-typed name then
+    /// diverged from the first device's and never converged).
+    static let primaryMemberID = "member-primary"
+
     /// The ACTIVE library's id — @Published so observing views (library
     /// grid, settings) re-render the moment it changes.
     @Published private(set) var activeID: String = defaultLibraryID

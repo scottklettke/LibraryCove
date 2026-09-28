@@ -237,10 +237,10 @@ struct LoginView: View {
                 TextField("Display name", text: $displayName)
             }
             Button("Enter library") {
-                let user = User(email: email.isEmpty ? "local@librarycove.local" : email,
-                                displayName: displayName.isEmpty ? "Family member" : displayName)
-                modelContext.insert(user)
-                try? modelContext.save()
+                _ = SharedLibraryCoordinator.createPrimaryMember(
+                    displayName: displayName.isEmpty ? "Family member" : displayName,
+                    email: email.isEmpty ? "local@librarycove.local" : email,
+                    context: modelContext)
             }
             .disabled(!isRegistering == false && email.isEmpty && displayName.isEmpty)
         }

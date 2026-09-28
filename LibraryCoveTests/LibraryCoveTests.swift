@@ -799,6 +799,128 @@ extension HardcoverServiceTests {
     }
 }
 
+@Suite struct MemberConvergenceTests {
+    @MainActor
+    private func makeContext() -> ModelContext {
+        let context = Persistence.inMemory.mainContext
+        try? context.delete(model: User.self)
+        try? context.delete(model: Book.self)
+        try? context.delete(model: Note.self)
+        return context
+    }
+
+    /// The user's exact device scenario: two devices each minted their own
+    /// UUID-keyed member row at onboarding ("Test" locally, "Scott" synced
+    /// in later), both marked active. The repair must converge them onto
+    /// the canonical primary row, keep the newest name, and leave exactly
+    /// one active member.
+    @MainActor @Test func convergesTwoLegacyRowsOntoPrimary() throws {
+        let context = makeContext()
+        let iPad = User(id: "uuid-ipad", email: "local@librarycove.local",
+                        displayName: "Test", isActive: true,
+                        createdAt: Date(timeIntervalSince1970: 1000))
+        let iPhone = User(id: "uuid-iphone", email: "local@librarycove.local",
+                          displayName: "Scott", isActive: true,
+                          createdAt: Date(timeIntervalSince1970: 500))
+        context.insert(iPad)
+        context.insert(iPhone)
+        try context.save()
+
+        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+
+        let users = try context.fetch(FetchDescriptor<User>())
+        #expect(users.count == 1, "legacy rows must be deleted, not just deactivated")
+        let member = try #require(users.first)
+        #expect(member.id == LibraryScope.primaryMemberID)
+        #expect(member.displayName == "Test", "the newest row's name wins the merge")
+        #expect(member.isActive)
+    }
+
+    /// A device whose row was renamed on ANOTHER device (rename-all-rows
+    /// arrives via sync) must show the new name after convergence — the
+    /// primary row adopts the newest name, whichever row carried it.
+    @MainActor @Test func convergesWhenPrimaryAlreadyExists() throws {
+        let context = makeContext()
+        let primary = User(id: LibraryScope.primaryMemberID,
+                           email: "local@librarycove.local",
+                           displayName: "Old Name", isActive: true,
+                           createdAt: Date(timeIntervalSince1970: 500))
+        let legacy = User(id: "uuid-iphone", email: "local@librarycove.local",
+                          displayName: "Scott", isActive: false,
+                          createdAt: Date(timeIntervalSince1970: 2000))
+        context.insert(primary)
+        context.insert(legacy)
+        try context.save()
+
+        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+
+        let users = try context.fetch(FetchDescriptor<User>())
+        #expect(users.count == 1)
+        #expect(users.first?.displayName == "Scott", "newest row's name is adopted")
+        #expect(users.first?.id == LibraryScope.primaryMemberID)
+    }
+
+    /// Owner references ride along: books/notes attributed to a legacy id
+    /// are re-pointed at the primary row so "Added by" doesn't break.
+    @MainActor @Test func repointsOwnerReferences() throws {
+        let context = makeContext()
+        let iPad = User(id: "uuid-ipad", email: "x", displayName: "Test",
+                        isActive: true, createdAt: Date(timeIntervalSince1970: 1000))
+        context.insert(iPad)
+        let book = Book(title: "Dune")
+        book.ownerID = "uuid-ipad"
+        context.insert(book)
+        let note = Note(userID: "uuid-ipad", content: "hello")
+        context.insert(note)
+        try context.save()
+
+        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+
+        let fetchedBook = try #require(try context.fetch(FetchDescriptor<Book>()).first)
+        #expect(fetchedBook.ownerID == LibraryScope.primaryMemberID)
+        let fetchedNote = try #require(try context.fetch(FetchDescriptor<Note>()).first)
+        #expect(fetchedNote.userID == LibraryScope.primaryMemberID)
+    }
+
+    /// Second-device onboarding adopts the synced primary row (renaming it)
+    /// instead of minting a diverging duplicate — the actual sync bug.
+    @MainActor @Test func onboardingAdoptsSyncedPrimaryRow() throws {
+        let context = makeContext()
+        context.insert(User(id: LibraryScope.primaryMemberID,
+                            email: "local@librarycove.local",
+                            displayName: "Scott", isActive: true,
+                            createdAt: Date(timeIntervalSince1970: 500)))
+        try context.save()
+
+        // The second device's welcome flow typed "Test".
+        let member = SharedLibraryCoordinator.createPrimaryMember(
+            displayName: "Test", email: "local@librarycove.local", context: context)
+
+        #expect(member.id == LibraryScope.primaryMemberID)
+        #expect(member.displayName == "Test", "the typed name wins — one shared row, not a duplicate")
+        let users = try context.fetch(FetchDescriptor<User>())
+        #expect(users.count == 1, "no duplicate row minted")
+    }
+
+    /// A single legacy row is re-keyed in place (no merge needed) so both
+    /// devices land on the same identity even when only one row exists.
+    @MainActor @Test func singleLegacyRowIsRekeyed() throws {
+        let context = makeContext()
+        let legacy = User(id: "uuid-only", email: "local@librarycove.local",
+                          displayName: "Scott", isActive: true,
+                          createdAt: Date(timeIntervalSince1970: 1000))
+        context.insert(legacy)
+        try context.save()
+
+        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+
+        let users = try context.fetch(FetchDescriptor<User>())
+        #expect(users.count == 1)
+        #expect(users.first?.id == LibraryScope.primaryMemberID)
+        #expect(users.first?.displayName == "Scott")
+    }
+}
+
 @Suite struct HardcoverOAuthTests {
     /// PKCE verifier: 32 random bytes → 43 unreserved base64url chars, no
     /// padding, URL-safe alphabet only (RFC 7636 §4.1).

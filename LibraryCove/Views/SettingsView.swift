@@ -1,9 +1,17 @@
 import SwiftUI
 import SwiftData
 import CloudKit
+import AuthenticationServices
 
 /// Settings screen: profile, library data (export/import/delete), sync and AI.
 struct SettingsView: View {
+    /// Presents the OAuth consent sheet from the active scene's window.
+    private final class OAuthAnchor: NSObject, ASWebAuthenticationPresentationContextProviding {
+        func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+            ASPresentationAnchor()
+        }
+    }
+    private let oauthAnchor = OAuthAnchor()
     let user: User
     @Environment(\.modelContext) private var modelContext
     /// Switches the root TabView to the Library tab (used after Delete
@@ -49,6 +57,9 @@ struct SettingsView: View {
     @State private var isTestingHardcover = false
     @State private var hardcoverTestResult: String?
     @State private var hardcoverTestIsError = false
+    @State private var isConnectingHardcover = false
+    @State private var isDisconnectingHardcover = false
+    @State private var hardcoverError: String?
 
     // Description lookup
     @State private var searchEngine: WebSearchEngine = WebSearchEngine.selected
@@ -312,6 +323,36 @@ struct SettingsView: View {
             let detail = (error as? AIError)?.errorDescription ?? "network error"
             modelListNote = "Couldn't read the model list from this endpoint (\(detail)). It may not support GET /v1/models — pin a model above or check the URL."
         }
+    }
+
+    /// Runs the OAuth authorization-code flow (PKCE, custom-scheme callback)
+    /// and adopts the resulting tokens.
+    @MainActor
+    private func connectHardcover() async {
+        isConnectingHardcover = true
+        hardcoverError = nil
+        defer { isConnectingHardcover = false }
+        do {
+            try await HardcoverOAuth.shared.authorize(presentationAnchor: oauthAnchor)
+            // Verify immediately so the user learns of a bad connection now.
+            let error = await HardcoverService().testConnection()
+            hardcoverTestIsError = error != nil
+            hardcoverTestResult = error ?? "Connected — Hardcover enrichment active."
+        } catch {
+            hardcoverError = error.localizedDescription
+        }
+    }
+
+    /// Revokes the tokens server-side and clears local credentials.
+    @MainActor
+    private func disconnectHardcover() async {
+        isDisconnectingHardcover = true
+        defer { isDisconnectingHardcover = false }
+        await HardcoverOAuth.disconnect()
+        hardcoverToken = ""
+        hardcoverTestResult = nil
+        hardcoverTestIsError = false
+        hardcoverError = nil
     }
 
     /// Persists the pasted Hardcover PAT to the Keychain, then verifies it
@@ -970,39 +1011,68 @@ struct SettingsView: View {
     }
 
     /// Optional enrichment source: Hardcover's public catalog (genres, tags,
-    /// series) layered on top of OpenLibrary/Google lookups. Off until the
-    /// user supplies their own PAT — the API has no shared app key.
+    /// series) layered on top of OpenLibrary/Google lookups. Connects via
+    /// OAuth — one consent screen, no key pasting. Falls back to manual PAT
+    /// entry when the OAuth client isn't registered.
     private var hardcoverSection: some View {
         Section {
-            Toggle("Use Hardcover for book details", isOn: Binding(
-                get: { HardcoverConfig.isEnabled },
-                set: { HardcoverConfig.isEnabled = $0 }
-            ))
-            if HardcoverConfig.isEnabled {
-                SecureField("API key", text: $hardcoverToken, prompt: Text("Paste your Hardcover key"))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .accessibilityIdentifier("hardcoverTokenField")
-                Button {
-                    Task { await testHardcoverConnection() }
-                } label: {
-                    Label(isTestingHardcover ? "Testing…" : "Test connection",
-                          systemImage: isTestingHardcover ? "arrow.triangle.2.circlepath" : "bolt.fill")
+            if HardcoverConfig.token != nil {
+                Toggle("Use Hardcover for book details", isOn: Binding(
+                    get: { HardcoverConfig.isEnabled },
+                    set: { HardcoverConfig.isEnabled = $0 }
+                ))
+                LabeledContent("Connected") {
+                    Text("✓")
+                        .foregroundStyle(.green)
                 }
-                .disabled(isTestingHardcover || hardcoverToken.trimmingCharacters(in: .whitespaces).isEmpty)
-                if let hardcoverTestResult {
-                    LabeledContent(hardcoverTestIsError ? "Test failed" : "Test result") {
-                        Text(hardcoverTestResult)
-                            .font(.caption)
-                            .foregroundStyle(hardcoverTestIsError ? Color.red : Color.green)
-                            .multilineTextAlignment(.trailing)
+                Button(role: .destructive) {
+                    Task { await disconnectHardcover() }
+                } label: {
+                    Label(isDisconnectingHardcover ? "Disconnecting…" : "Disconnect",
+                          systemImage: isDisconnectingHardcover ? "hourglass" : "xmark.circle")
+                }
+                .disabled(isDisconnectingHardcover)
+            } else {
+                Button {
+                    Task { await connectHardcover() }
+                } label: {
+                    Label(isConnectingHardcover ? "Connecting…" : "Connect Hardcover",
+                          systemImage: isConnectingHardcover ? "hourglass" : "link.badge.plus")
+                }
+                .disabled(isConnectingHardcover)
+                if let hardcoverError {
+                    Text(hardcoverError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                if !HardcoverOAuth.clientID.isEmpty { EmptyView() }
+                else {
+                    // OAuth client not yet registered: manual PAT entry.
+                    SecureField("API key", text: $hardcoverToken, prompt: Text("Paste your Hardcover key"))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .accessibilityIdentifier("hardcoverTokenField")
+                    Button {
+                        Task { await testHardcoverConnection() }
+                    } label: {
+                        Label(isTestingHardcover ? "Testing…" : "Use key",
+                              systemImage: isTestingHardcover ? "arrow.triangle.2.circlepath" : "bolt.fill")
                     }
+                    .disabled(isTestingHardcover || hardcoverToken.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            if let hardcoverTestResult, HardcoverConfig.token != nil {
+                LabeledContent(hardcoverTestIsError ? "Test failed" : "Test result") {
+                    Text(hardcoverTestResult)
+                        .font(.caption)
+                        .foregroundStyle(hardcoverTestIsError ? Color.red : Color.green)
+                        .multilineTextAlignment(.trailing)
                 }
             }
         } header: {
             Text("Hardcover")
         } footer: {
-            Text("Enriches scanned and imported books with Hardcover's curated genres, tags, series, and extra details. Create a free API key at hardcover.app → Account → API (New API Key) and paste it here; the key is stored in your device's Keychain and only public book data is read — never your Hardcover ratings or reviews.")
+            Text("Enriches scanned and imported books with Hardcover's curated genres, tags, series, and extra details. Connecting opens a one-time Hardcover consent screen — no key to copy or paste. Only public book data is read; never your Hardcover ratings, reviews, or library. You can revoke access anytime at hardcover.app → Account → Authorized Apps.")
         }
     }
 

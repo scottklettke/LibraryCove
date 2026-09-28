@@ -51,6 +51,11 @@ targets:
         # Share-link invitations (Notes-style library sharing): lets the app
         # open CloudKit share URLs from other users.
         CKSharingSupported: true
+        # Hardcover OAuth callback: the consent flow redirects back to
+        # librarycove://oauth2/hardcover, caught by ASWebAuthenticationSession.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.librarycove.oauth
+            CFBundleURLSchemes: [librarycove]
         # Barcode scanning opens the camera (ISBNScannerView). iOS requires
         # this description or the app crashes when the session starts.
         NSCameraUsageDescription: "LibraryCove uses the camera to scan book barcodes so you can add books to your library."

@@ -41,6 +41,7 @@
 		4B9516D72CF280A4ED8C4696 /* BackupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9A9AD04A8389EB7D1C1C30 /* BackupStore.swift */; };
 		582A2CD27D76F6494B202BEA /* WebSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C867BC5A92C34F8C7107E9BC /* WebSearchTests.swift */; };
 		59AD650EB81B3D08B3486871 /* AddBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FD65D90180DE8F7F0C0C6E /* AddBookView.swift */; };
+		59B9A453268C8B6042902097 /* HardcoverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B65B7E70D54CFB4A58B1C8 /* HardcoverService.swift */; };
 		5F14895C0AEC0944D2B0D132 /* LibrarySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71D73D6B03EFC6FD3FA58B0 /* LibrarySync.swift */; };
 		6232AFFCDC756947FC756F94 /* BackupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44869DF584EC707A877F252 /* BackupsView.swift */; };
 		62F278C766B0837F09ED8660 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8DFA70E147182B2DF5B70B /* AIService.swift */; };
@@ -176,6 +177,7 @@
 		93F50C84CAADE351A33A75EA /* LibraryDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataServiceTests.swift; sourceTree = "<group>"; };
 		9485B6DD41D29D7D9B96C8EE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9B8DFA70E147182B2DF5B70B /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
+		A1B65B7E70D54CFB4A58B1C8 /* HardcoverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardcoverService.swift; sourceTree = "<group>"; };
 		A29DC06FD5BA7010411123D2 /* PhotoCropView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCropView.swift; sourceTree = "<group>"; };
 		A38C4C27CCDAE0A942651A19 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FictionClassifier.swift; sourceTree = "<group>"; };
@@ -261,6 +263,7 @@
 			children = (
 				474C8AAAAA2E23371D030C8D /* CatalogService.swift */,
 				1BB0D4B843CB0997D5F3BB94 /* GenreStore.swift */,
+				A1B65B7E70D54CFB4A58B1C8 /* HardcoverService.swift */,
 				631B01076AF533DED7FBA13A /* LocationStore.swift */,
 			);
 			path = Catalog;
@@ -650,6 +653,7 @@
 				AB4DFB776DC440C18A4B5EB3 /* GenreCleanup.swift in Sources */,
 				63C01F8E41EEC314F6D23D87 /* GenreCleanupView.swift in Sources */,
 				CDF419E694EF0BE0D1385A02 /* GenreStore.swift in Sources */,
+				59B9A453268C8B6042902097 /* HardcoverService.swift in Sources */,
 				A2CFEE49C97A1B58B5056225 /* ISBNScannerView.swift in Sources */,
 				154AC76B4EF91DB6A7EAC5F3 /* LibraryContext.swift in Sources */,
 				67374DB984295CE6881B89EE /* LibraryCoveApp.swift in Sources */,

@@ -1,4 +1,5 @@
 import Testing
+import CryptoKit
 import SwiftData
 import UIKit
 @testable import LibraryCove
@@ -795,5 +796,107 @@ extension HardcoverServiceTests {
         #expect(BookGenre.matching(name: "Dark Fantasy") == .fantasy, "substring fallback")
         #expect(BookGenre.matching(name: "Micropaleontology") == nil, "no forced match")
         #expect(BookGenre.matching(name: "  ") == nil)
+    }
+}
+
+@Suite struct HardcoverOAuthTests {
+    /// PKCE verifier: 32 random bytes → 43 unreserved base64url chars, no
+    /// padding, URL-safe alphabet only (RFC 7636 §4.1).
+    @Test func verifierMeetsRFC7636Shape() {
+        let verifier = HardcoverOAuth.randomURLSafeBase64(byteCount: 32)
+        #expect(verifier.count == 43)
+        #expect(verifier.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
+        #expect(!verifier.contains("="))
+        #expect(!verifier.contains("+") && !verifier.contains("/"))
+        // Two draws never collide.
+        #expect(HardcoverOAuth.randomURLSafeBase64(byteCount: 32) != verifier)
+    }
+
+    /// The challenge is SHA256(verifier), base64url-encoded — the exact
+    /// transform the server must reproduce (S256 method).
+    @Test func challengeIsSHA256OfVerifier() throws {
+        let verifier = HardcoverOAuth.randomURLSafeBase64(byteCount: 32)
+        let challenge = HardcoverOAuth.base64URLSHA256(verifier)
+        #expect(challenge.count == 43)
+        // Independent recomputation via CryptoKit directly:
+        let digest = Data(SHA256.hash(data: Data(verifier.utf8)))
+        let expected = digest.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        #expect(challenge == expected)
+        // And the canonical test vector from the PKCE spec (RFC 7636 B):
+        #expect(HardcoverOAuth.base64URLSHA256("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+                == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+    }
+
+    /// The expiry gate: not-needed when no token or no expiry recorded;
+    /// true when expired (60s safety margin), false when comfortably valid.
+    @Test func expiryGateLogic() {
+        HardcoverConfig.oauthAccessToken = "at"
+        defer { HardcoverConfig.clearAllTokens() }
+        // No expiry recorded → treated as still valid (a PAT has no expiry).
+        HardcoverConfig.oauthAccessTokenExpiry = nil
+        #expect(!HardcoverConfig.oauthAccessTokenNeedsRefresh)
+        // Expired 5 minutes ago → refresh.
+        HardcoverConfig.oauthAccessTokenExpiry = Date().addingTimeInterval(-300)
+        #expect(HardcoverConfig.oauthAccessTokenNeedsRefresh)
+        // Valid for another hour → no refresh.
+        HardcoverConfig.oauthAccessTokenExpiry = Date().addingTimeInterval(3600)
+        #expect(!HardcoverConfig.oauthAccessTokenNeedsRefresh)
+        // Inside the 60s margin → refresh proactively.
+        HardcoverConfig.oauthAccessTokenExpiry = Date().addingTimeInterval(30)
+        #expect(HardcoverConfig.oauthAccessTokenNeedsRefresh)
+    }
+
+    /// adoptOAuthTokens stores the pair, marks the app enabled, and the
+    /// generic `token` accessor serves the OAuth access token.
+    @Test func adoptTokensWiresEverythingUp() {
+        defer { HardcoverConfig.clearAllTokens() }
+        HardcoverConfig.adoptOAuthTokens(access: "hc_at_test",
+                                         refresh: "hc_rt_test",
+                                         expiresInSeconds: 3600)
+        #expect(HardcoverConfig.oauthAccessToken == "hc_at_test")
+        #expect(HardcoverConfig.oauthRefreshToken == "hc_rt_test")
+        #expect(HardcoverConfig.token == "hc_at_test")
+        #expect(HardcoverConfig.isEnabled)
+        #expect(HardcoverConfig.isConfigured)
+        #expect(HardcoverConfig.oauthAccessTokenExpiry != nil)
+    }
+
+    /// Refresh: a token endpoint that answers 200 with a new access token
+    /// rotates the stored pair; an error response clears everything so the
+    /// UI returns to "Connect".
+    @Test func refreshRotatesOrClears() async {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [CatalogStubProtocol.self]
+        let stubbedSession = URLSession(configuration: config)
+
+        // Success path.
+        CatalogStubProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: "HTTP/1.1",
+                                           headerFields: ["Content-Type": "application/json"])!
+            return (response, Data(#"{"access_token":"hc_at_new","refresh_token":"hc_rt_new","expires_in":3600}"#.utf8))
+        }
+        HardcoverConfig.adoptOAuthTokens(access: "hc_at_old", refresh: "hc_rt_old",
+                                         expiresInSeconds: -100) // already expired
+        await HardcoverOAuth.refreshTokensIfNeeded(session: stubbedSession)
+        #expect(HardcoverConfig.oauthAccessToken == "hc_at_new")
+        #expect(HardcoverConfig.oauthRefreshToken == "hc_rt_new")
+
+        // Failure path: rejects → all credentials cleared.
+        CatalogStubProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 400,
+                                           httpVersion: "HTTP/1.1",
+                                           headerFields: ["Content-Type": "application/json"])!
+            return (response, Data(#"{"error":"invalid_grant"}"#.utf8))
+        }
+        HardcoverConfig.adoptOAuthTokens(access: "hc_at_old", refresh: "hc_rt_old",
+                                         expiresInSeconds: -100)
+        await HardcoverOAuth.refreshTokensIfNeeded(session: stubbedSession)
+        #expect(HardcoverConfig.oauthAccessToken == nil)
+        #expect(HardcoverConfig.oauthRefreshToken == nil)
+        #expect(HardcoverConfig.token == nil)
     }
 }

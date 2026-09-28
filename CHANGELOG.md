@@ -7,13 +7,15 @@ Notable user-facing changes, newest first. The same file ships in the app
 
 ### Added — Hardcover enrichment (optional)
 
-- **Optional Hardcover integration.** Turn it on in Settings → Hardcover:
-  paste your free API key from hardcover.app (Account → API → New API Key)
-  and scanned/imported books gain Hardcover's curated genres, tags, series
-  name & number, extra details, and another cover option. It fills gaps
-  only — never overwrites what OpenLibrary or Google found — and reads
-  exclusively public catalog data (no ratings, reviews, or anything from
-  your Hardcover account). The key is stored in your device's Keychain.
+- **One-tap Hardcover connect.** Connecting now opens a single Hardcover
+  consent screen (OAuth) — no key to create, copy, or paste. LibraryCove
+  receives short-lived access tokens that renew automatically and can be
+  revoked anytime at hardcover.app → Account → Authorized Apps. Only public
+  book data is read — never your Hardcover ratings, reviews, or library.
+- **Enrichment via Hardcover.** Scanned and imported books gain Hardcover's
+  curated genres, tags, series name & number, extra details, and another
+  cover option. It fills gaps only — never overwrites what OpenLibrary or
+  Google found. (Manual API-key entry remains available as a fallback.)
 
 ### Improved — OpenLibrary etiquette
 

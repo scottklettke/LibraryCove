@@ -9,6 +9,10 @@ targets:
     platform: iOS
     sources:
       - BareSpikeApp.swift
+      - path: bare-ios-sim.bundle
+        buildPhase: resources
+      - path: bare-ios.bundle
+        buildPhase: resources
     dependencies:
       - framework: BareKit.xcframework
         embed: true

@@ -17,19 +17,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     weak var ipc: BareIPC?
     var buffer = Data()
 
+    private func log(_ s: String) {
+        print("BareSpike: \(s)")
+        NotificationCenter.default.post(name: .spikeLog, object: s)
+        let line = "\(Date()): \(s)\n"
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("spike.log")
+        if let handle = FileHandle(forWritingAtPath: url.path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            handle.closeFile()
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        let vc = UIViewController()
-        vc.view.backgroundColor = .systemBackground
-        let label = UILabel()
-        label.text = "Bare spike — results in spike.log (app container)"
-        label.textAlignment = .center
-        label.frame = CGRect(x: 20, y: 300, width: 340, height: 60)
-        vc.view.addSubview(label)
-        window = UIWindow(frame: UIScreen.main.bounds)
-        window?.rootViewController = vc
-        window?.makeKeyAndVisible()
-
         startWorklet()
         return true
     }
@@ -37,12 +41,20 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private func startWorklet() {
         BareWorklet.optimize(forMemory: false)
 
-        guard let bundleURL = Bundle.main.url(forResource: "bare-ios-sim", withExtension: "bundle"),
+        // Device builds must load the ios-arm64 bundle; the simulator the
+        // -simulator one. (bare-pack --host picks the addon architecture.)
+        #if targetEnvironment(simulator)
+        let bundleName = "bare-ios-sim"
+        #else
+        let bundleName = "bare-ios"
+        #endif
+
+        guard let bundleURL = Bundle.main.url(forResource: bundleName, withExtension: "bundle"),
               let source = try? String(contentsOf: bundleURL, encoding: .utf8) else {
-            log("FATAL: bare-ios-sim.bundle missing or unreadable")
+            log("FATAL: \(bundleName).bundle missing from app bundle — run npm run bundle and rebuild")
             return
         }
-        log("bundle loaded: \(source.utf8.count) bytes")
+        log("bundle loaded: \(bundleName) \(source.utf8.count) bytes")
 
         let worklet = BareWorklet(configuration: nil)!
         worklet.start("/bare-spike.bundle", source: Data(source.utf8), arguments: [])
@@ -106,7 +118,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         case "net":
             let state = event["state"] as? String ?? "?"
             log(state == "ready"
-                ? "✅ Hyperswarm ready (raw sockets OK), topic \(event["topic"] ?? "")"
+                ? "✅✅ WORKING: Hyperswarm DHT is live (raw sockets OK)\nTopic: \(event["topic"] ?? "…")…"
                 : "⚠️ Hyperswarm error: \(event["msg"] ?? "")")
         case "peer":
             log("✅ peer connected: \(event["info"] ?? "")")
@@ -114,26 +126,28 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             break
         }
     }
-
-    private func log(_ s: String) {
-        print("BareSpike: \(s)")
-        let line = "\(Date()): \(s)\n"
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("spike.log")
-        if let handle = FileHandle(forWritingAtPath: url.path) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            handle.closeFile()
-        } else {
-            try? line.write(to: url, atomically: true, encoding: .utf8)
-        }
-    }
 }
 
 @main
 struct BareSpikeApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+    // Status mirror: AppDelegate.log() updates this via the notification.
+    @State private var status: String = "Bare spike — starting…"
+
     var body: some Scene {
-        WindowGroup { Text("Bare spike") }
+        WindowGroup {
+            Text(status)
+                .font(.system(.body, design: .monospaced))
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(16)
+                .onReceive(NotificationCenter.default.publisher(for: .spikeLog)) { note in
+                    status = note.object as? String ?? ""
+                }
+        }
     }
+}
+
+extension Notification.Name {
+    static let spikeLog = Notification.Name("spikeLog")
 }

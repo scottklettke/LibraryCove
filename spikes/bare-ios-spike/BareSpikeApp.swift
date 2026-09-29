@@ -116,9 +116,19 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func joinLibrary(key: String) {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Drive keys are 64 hex chars — reject obvious paste damage with a
+        // clear message instead of a silent broken join.
+        guard trimmed.count == 64,
+              trimmed.allSatisfy({ $0.isHexDigit }) else {
+            log("⚠️ Join key looks wrong (\(trimmed.count) chars, need 64 hex). Copy it again from the writer's screen.")
+            NotificationCenter.default.post(name: .spikeJoinFailed, object: nil)
+            role = .none
+            return
+        }
         role = .reader
-        driveKey = key
-        send(json: ["cmd": "join", "key": key])
+        driveKey = trimmed
+        send(json: ["cmd": "join", "key": trimmed])
     }
 
     func addBook(title: String) {
@@ -232,6 +242,7 @@ struct RootView: View {
     @State private var bookTitle = ""
     @State private var writerHost = ""
     @State private var copied = false
+    @State private var joinFailed = false
     let appDelegate: AppDelegate
 
     /// Writer's join key — surfaced with a Copy button.
@@ -242,6 +253,11 @@ struct RootView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if appDelegate.role == .none {
+                if joinFailed {
+                    Text("⚠️ That key didn't look right. On the writer device, tap Copy next to the join key, then paste it here.")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
                 HStack {
                     TextField("Library name", text: $libraryName)
                         .textFieldStyle(.roundedBorder)
@@ -339,6 +355,9 @@ struct RootView: View {
             if let line = note.object as? String { logLines.append(line) }
             if logLines.count > 200 { logLines.removeFirst(logLines.count - 200) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .spikeJoinFailed)) { _ in
+            joinFailed = true
+        }
     }
 }
 
@@ -352,4 +371,5 @@ struct BareSpikeApp: App {
 
 extension Notification.Name {
     static let spikeLog = Notification.Name("spikeLog")
+    static let spikeJoinFailed = Notification.Name("spikeJoinFailed")
 }

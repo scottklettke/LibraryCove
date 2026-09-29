@@ -3,6 +3,36 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
+## 0.5.4 (2026-09-29)
+
+### Fixed — Shared library joining actually works
+
+- **First-run library naming keeps up with fast typing.** Typing your name
+  quickly during onboarding could leave the library named after an early
+  prefix ("Te's Library" for "Tester"); the library now always derives from
+  the full name unless you edited the library field yourself.
+- **Accepting a share link now completes.** Joining a shared library used to
+  stop silently after the iCloud confirmation prompt: the app missed
+  cold-launch invitations entirely, looked the accepted share up under a
+  zone name that no longer exists, and never started syncing. The join now
+  happens in the same session — no relaunch — and the shared library's
+  books appear after the first sync.
+- **Sharing is per library.** Each library gets its own share, and multiple
+  libraries can be shared with different people at the same time. Every
+  device syncs all libraries it shares; leaving one share no longer touches
+  the others.
+- **Members show LibraryCove names.** The people list now shows the name
+  each member chose inside LibraryCove (Settings → Your Name), not their
+  iCloud account name or email. Renaming yourself propagates to everyone on
+  the next sync.
+
+### Changed — Sync options
+
+- **Removed the Dropbox, Box, and Nextcloud placeholders** from the sync
+  provider picker. They were never functional; iCloud Sync and Shared
+  Library remain. A peer-to-peer sync option (no accounts, no servers) is
+  under research — see `docs/pears-sync-research.md`.
+
 ## 0.5.3 (2026-09-28)
 
 ### Fixed — Member name sync

@@ -87,7 +87,7 @@ struct RootView: View {
                 LibraryDataService.materializeLocalCovers(context: modelContext)
             }
             // Shared-library hooks: join a pending invitation (flips the
-            // provider for next launch), then sync the mirror store.
+            // provider to the mirror store), then sync the mirror store.
             if SyncSettings.selectedProvider == .sharedLibrary {
                 // A freshly-created mirror store has no User row, which would
                 // show LoginView over the shared library — seed a placeholder
@@ -96,12 +96,29 @@ struct RootView: View {
                 await SharedLibraryCoordinator.processPendingAcceptIfNeeded()
                 await SharedLibraryEngine.shared.syncNow(context: modelContext)
             } else if SharedLibrarySettings.pendingAcceptMetadata != nil {
-                await SharedLibraryCoordinator.processPendingAcceptIfNeeded()
+                // Invitation accepted through the system prompt while the app
+                // was on a private store: join now and hot-swap the running
+                // app onto the mirror store in the same session — the old
+                // design waited for the next launch, which read as "nothing
+                // happened" after accepting.
+                if let joinedID = await SharedLibraryCoordinator.processPendingAcceptIfNeeded() {
+                    await SharedLibraryCoordinator.adoptSharedStoreInSession(joinedLibraryID: joinedID)
+                }
             }
             // Fix books whose dates were never stamped (sentinel 2001-01-01),
             // which rendered "date added" as 12/31/00.
             if let all = try? modelContext.fetch(LibraryScope.shared.activeBooksDescriptor(context: modelContext)) {
                 BookDateRepair.repairSentinelDates(books: all, context: modelContext)
+            }
+        }
+        // A share invitation accepted while the app was OPEN arrives here
+        // (stash → notification): join now and hot-swap onto the mirror
+        // store in the same session, mirroring the launch path above.
+        .onReceive(NotificationCenter.default.publisher(for: .sharedLibraryInviteArrived)) { _ in
+            guard SyncSettings.selectedProvider != .sharedLibrary else { return }
+            Task { @MainActor in
+                guard let joinedID = await SharedLibraryCoordinator.processPendingAcceptIfNeeded() else { return }
+                await SharedLibraryCoordinator.adoptSharedStoreInSession(joinedLibraryID: joinedID)
             }
         }
     }

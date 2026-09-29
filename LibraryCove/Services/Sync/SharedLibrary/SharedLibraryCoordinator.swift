@@ -86,39 +86,69 @@ enum SharedLibraryCoordinator {
     /// Processes accepted share metadata: joins the share now and schedules
     /// the provider switch so the next launch opens the mirror store, which
     /// then pulls the owner's zone. The joiner's own library is untouched.
-    static func join(with metadata: CKShare.Metadata) async throws {
+    @discardableResult
+    static func join(with metadata: CKShare.Metadata) async throws -> SharedLibraryEngine.JoinResult {
         let engine = SharedLibraryEngine.shared
-        try await engine.accept(metadata: metadata)
+        let result = try await engine.accept(metadata: metadata)
         SyncLibraryHandoff.rememberPreviousProvider()
-        // Joining over an existing membership: the old mirror content must
-        // not bleed into the new share's library.
-        if SharedLibrarySettings.membership != .none {
-            try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
-            SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
-        }
+        // Joining over an existing membership: nothing to tear down —
+        // per-library rows and indexes keep every share's content separate
+        // (apply stamps pulled rows with the joined library's id), so a
+        // second join must not wipe the first share's local copy.
         SyncSettings.selectedProvider = .sharedLibrary
         SharedLibrarySettings.pendingAcceptMetadata = nil
+        return result
     }
 
     /// True when CloudKit handed us an invitation while we weren't in the
-    /// sharing flow — surfaced as a prompt at the next launch.
+    /// sharing flow — surfaced as a prompt at the next launch. Re-accepting
+    /// one of THIS device's own shares is rejected later in accept().
     static func storePendingAcceptIfAny(metadata: CKShare.Metadata) {
-        guard SharedLibrarySettings.membership != .owner else { return }
         if let data = try? NSKeyedArchiver.archivedData(withRootObject: metadata,
                                                         requiringSecureCoding: true) {
             SharedLibrarySettings.pendingAcceptMetadata = data
         }
     }
 
-    /// Launch-time hook: joins from a pending invitation, if any.
-    static func processPendingAcceptIfNeeded() async {
+    /// In-session join completion for an invitation accepted while the app
+    /// was running on a private store: hot-swaps the app onto the mirror
+    /// store (the old design waited for the next launch, which read as
+    /// "nothing happened" after accepting), seeds the member row (carrying
+    /// the name chosen on this device) so the login gate doesn't cover the
+    /// joined library, activates the joined library (the registry is
+    /// device-global), and runs the first sync. The joiner's own books stay
+    /// out of the mirror by design — participants pull everything from the
+    /// zone.
+    @MainActor
+    static func adoptSharedStoreInSession(joinedLibraryID: String) async {
+        // Capture the display name BEFORE the swap — after it,
+        // Persistence.shared is the empty mirror store.
+        let name = ((try? Persistence.shared.mainContext.fetch(FetchDescriptor<User>(
+            predicate: #Predicate { $0.isActive }))) ?? []).first?.displayName ?? ""
+        let mirrorContainer = SyncStoreRegistry.makeContainer(for: .sharedLibrary)
+        Persistence.swapShared(to: mirrorContainer)
+        let context = Persistence.shared.mainContext
+        _ = createPrimaryMember(displayName: name, email: "", context: context)
+        if let info = LibraryScope.shared.all(context: context)
+            .first(where: { $0.id == joinedLibraryID }) {
+            LibraryScope.shared.activate(info, context: context)
+        }
+        await SharedLibraryEngine.shared.syncNow(context: context)
+    }
+
+    /// Launch-time hook: joins from a pending invitation, if any. Returns
+    /// the joined library's id on success so the app can hot-swap onto the
+    /// mirror store immediately instead of waiting for the next launch.
+    static func processPendingAcceptIfNeeded() async -> String? {
         guard let data = SharedLibrarySettings.pendingAcceptMetadata,
               let metadata = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKShare.Metadata.self,
-                                                                     from: data) else { return }
+                                                                     from: data) else { return nil }
         do {
-            try await join(with: metadata)
+            let result = try await join(with: metadata)
+            return result.joinedLibraryID
         } catch {
             SharedLibraryEngine.shared.reportError(error.localizedDescription)
+            return nil
         }
     }
 
@@ -134,9 +164,9 @@ enum SharedLibraryCoordinator {
             throw SharedLibraryError.noActiveLibrary
         }
         let destination = try await bringBooksHomeAndResolveDestination(keepBooks: keepCopy)
-        try await SharedLibraryEngine.shared.leaveAsParticipant()
+        try await SharedLibraryEngine.shared.leaveAsParticipant(libraryID: libraryID)
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
-        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+        SharedLibraryMirror.removeAllIndexes()
         SharedLibrarySettings.setMembership(.none, libraryID: libraryID)
         Persistence.swapShared(to: destination.container)
         SyncSettings.selectedProvider = destination.kind
@@ -166,32 +196,36 @@ enum SharedLibraryCoordinator {
         // down the ACTIVE library's share.
         try await SharedLibraryEngine.shared.stopSharingAsOwner(libraryID: libraryID)
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
-        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+        SharedLibraryMirror.removeAllIndexes()
         SharedLibrarySettings.setMembership(.none, libraryID: libraryID)
         Persistence.swapShared(to: destination.container)
         SyncSettings.selectedProvider = destination.kind
         SharedLibrarySettings.previousProvider = nil
     }
 
-    /// Tears the share down WITHOUT bringing any content home — for flows
-    /// that deliberately discard the shared library's contents ("Delete all
-    /// data", a replace-import that will install different content). Removes
-    /// the zone/share, resets membership, discards the mirror store, and
-    /// points the provider at the pre-share provider (or iCloud when
-    /// unknown). The caller then operates on a fresh private context.
+    /// Tears the ACTIVE library's share down WITHOUT bringing any content
+    /// home — for flows that deliberately discard the shared library's
+    /// contents ("Delete all data", a replace-import that will install
+    /// different content). Removes the zone/share, resets membership,
+    /// discards the mirror store, and points the provider at the pre-share
+    /// provider (or iCloud when unknown). The caller then operates on a
+    /// fresh private context.
     static func discardSharedContent() async throws {
-        switch SharedLibraryMembershipGate.membership {
+        guard let libraryID = LibraryScope.shared.activeID(context: Persistence.shared.mainContext) else {
+            throw SharedLibraryError.noActiveLibrary
+        }
+        switch SharedLibrarySettings.membership(libraryID: libraryID) {
         case .owner:
-            try await SharedLibraryEngine.shared.stopSharingAsOwner()
+            try await SharedLibraryEngine.shared.stopSharingAsOwner(libraryID: libraryID)
         case .participant:
-            try await SharedLibraryEngine.shared.leaveAsParticipant()
+            try await SharedLibraryEngine.shared.leaveAsParticipant(libraryID: libraryID)
         case .none:
             break
         }
         SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .iCloud
         SharedLibrarySettings.previousProvider = nil
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
-        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+        SharedLibraryMirror.removeAllIndexes()
     }
 
     /// Factory-reset variant of `discardSharedContent`: tears down EVERY
@@ -218,6 +252,10 @@ enum SharedLibraryCoordinator {
             .contains { $0.hasPrefix("UI_TEST_") }
         let hasAccount = isUITest ? false
             : await SharedLibraryEngine.shared.hasICloudAccount()
+        // Lift pre-migration GLOBAL share keys into the default library's
+        // namespace first so the per-library loop below tears them down
+        // (zone delete for owners, removeParticipant for joiners).
+        SharedLibrarySettings.migrateLegacyShare(libraryID: LibraryScope.defaultLibraryID)
         for libraryID in SharedLibrarySettings.sharedLibraryIDs {
             guard hasAccount else {
                 SharedLibrarySettings.reset(libraryID: libraryID)
@@ -237,29 +275,17 @@ enum SharedLibraryCoordinator {
                 SharedLibrarySettings.reset(libraryID: libraryID)
             }
         }
-        // Legacy single-share state on a device that has not migrated yet.
-        do {
-            switch SharedLibraryMembershipGate.membership {
-            case .owner:
-                try await SharedLibraryEngine.shared.stopSharingAsOwner()
-            case .participant:
-                try await SharedLibraryEngine.shared.leaveAsParticipant()
-            case .none:
-                break
-            }
-        } catch {
-            SharedLibrarySettings.reset()
-        }
-        // Sweep the legacy namespace even when the gate saw .none: the
-        // engine paths reset() themselves, but a .none observation (share
-        // torn down earlier, or the keys migrated away mid-flow) would
-        // otherwise leave legacy leftovers (shareTitle, tokens) behind —
-        // a factory reset must leave nothing.
-        SharedLibrarySettings.reset()
+        // Per-library loop above already reset each library's own keys and
+        // the engine paths reset() themselves. The GLOBAL keys (membership,
+        // ownerZone*, shareTitle, pendingAcceptMetadata…) are swept here —
+        // EXCEPT previousProvider, which the provider flip below still
+        // needs (reset() would erase it mid-flow; migrateLegacyShare has
+        // already lifted the legacy share into a per-library namespace).
+        SharedLibrarySettings.resetLegacyKeys()
         SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .iCloud
         SharedLibrarySettings.previousProvider = nil
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
-        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
+        SharedLibraryMirror.removeAllIndexes()
 
         // Belt and braces: the per-library teardown above relies on
         // per-library UserDefaults keys to know which zone to delete. A
@@ -415,16 +441,18 @@ extension SharedLibraryCoordinator {
     /// state must be consistent with the provider regardless.
     static func repairOrphanedMembershipIfNeeded() async {
         guard SyncSettings.selectedProvider != .sharedLibrary,
-              SharedLibrarySettings.membership != .none else { return }
-        switch SharedLibraryMembershipGate.membership {
-        case .owner:
-            try? await SharedLibraryEngine.shared.stopSharingAsOwner()
-        case .participant:
-            try? await SharedLibraryEngine.shared.leaveAsParticipant()
-        case .none:
-            break
+              !SharedLibrarySettings.sharedLibraryIDs.isEmpty else { return }
+        for libraryID in SharedLibrarySettings.sharedLibraryIDs {
+            switch SharedLibrarySettings.membership(libraryID: libraryID) {
+            case .owner:
+                try? await SharedLibraryEngine.shared.stopSharingAsOwner(libraryID: libraryID)
+            case .participant:
+                try? await SharedLibraryEngine.shared.leaveAsParticipant(libraryID: libraryID)
+            case .none:
+                break
+            }
+            SharedLibrarySettings.reset(libraryID: libraryID)
         }
-        SharedLibrarySettings.reset()
     }
 
     /// Creates the member row for onboarding, ADOPTING a synced primary

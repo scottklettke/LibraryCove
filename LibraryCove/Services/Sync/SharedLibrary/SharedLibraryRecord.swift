@@ -57,6 +57,34 @@ enum SharedLibraryRecord {
         return ShareParticipantRole(rawValue: raw)
     }
 
+    /// Fixed-name record mapping CloudKit participant record names to the
+    /// display name each member chose INSIDE LibraryCove (their member
+    /// profile name) — not their iCloud identity. The share's participant
+    /// list only exposes Apple-ID-derived names; this record is the app-level
+    /// transport so the owner's Members list shows "Matt", not an email.
+    /// Written by the owner for themselves at makeShare and by each joiner
+    /// at accept (readWrite members only — read-only joiners fall back to
+    /// their iCloud name).
+    static let participantsRecordName = "participants"
+
+    struct ParticipantProfile: Codable, Equatable {
+        var name: String
+    }
+
+    static func encodeParticipants(_ profiles: [String: ParticipantProfile],
+                                   inZoneWith zoneID: CKRecordZone.ID) -> CKRecord {
+        let record = CKRecord(recordType: "BNParticipants",
+                              recordID: CKRecord.ID(recordName: participantsRecordName, zoneID: zoneID))
+        record[Field.payload] = try? JSONEncoder().encode(profiles)
+        record[Field.schema] = schemaVersion
+        return record
+    }
+
+    static func decodeParticipants(from record: CKRecord) -> [String: ParticipantProfile] {
+        guard let data = record[Field.payload] as? Data else { return [:] }
+        return (try? JSONDecoder().decode([String: ParticipantProfile].self, from: data)) ?? [:]
+    }
+
     enum Field {
         static let payload = "payload"        // JSON Data of the Shared* DTO
         static let schema = "schemaVersion"   // Int64, for forward compatibility

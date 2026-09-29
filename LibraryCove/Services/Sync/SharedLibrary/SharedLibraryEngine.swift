@@ -253,6 +253,13 @@ enum SharedLibrarySettings {
         }
     }
 
+    /// Sweeps the LEGACY global share keys without touching
+    /// `previousProvider` (the factory-reset provider flip still needs it).
+    /// The per-library namespaces stay untouched.
+    static func resetLegacyKeys() {
+        reset()
+    }
+
     /// Every trace of ONE library's share: membership, zone/share facts,
     /// sync token, and the per-participant role keys — anything under
     /// `sharedLibrary.<id>.`, including shapes added later. Used when a
@@ -281,6 +288,15 @@ enum SharedLibrarySettings {
         guard let name = acceptedZoneName(libraryID: libraryID),
               let owner = acceptedZoneOwnerName(libraryID: libraryID) else { return nil }
         return CKRecordZone.ID(zoneName: name, ownerName: owner)
+    }
+
+    /// The zone this device syncs against FOR ONE LIBRARY, whatever the role.
+    static func activeZoneID(libraryID: String) -> CKRecordZone.ID? {
+        switch membership(libraryID: libraryID) {
+        case .owner: return ownerZoneID(libraryID: libraryID)
+        case .participant: return acceptedZoneID(libraryID: libraryID)
+        case .none: return nil
+        }
     }
 
     static var acceptedZoneID: CKRecordZone.ID? {
@@ -366,13 +382,6 @@ final class SharedLibraryEngine: ObservableObject {
         self.container = container
     }
 
-    /// The database this role talks to for the shared zone.
-    private var db: CKDatabase {
-        SharedLibrarySettings.membership == .owner
-            ? container.privateCloudDatabase
-            : container.sharedCloudDatabase
-    }
-
     /// Per-library database: owner talks to the private DB, participant to
     /// the shared DB.
     private func db(libraryID: String) -> CKDatabase {
@@ -394,13 +403,6 @@ final class SharedLibraryEngine: ObservableObject {
     }
 
     // MARK: - Becoming owner
-
-    /// Creates the shared zone + zone-wide share and returns the share (the
-    /// caller then pushes the initial library into the zone and presents the
-    /// standard sharing UI). Zone and share live in the owner's private DB.
-    func makeShare(title: String) async throws -> CKShare {
-        try await makeShare(title: title, libraryID: LibraryScope.defaultLibraryID)
-    }
 
     /// Per-library variant: each library gets its OWN zone + share, so
     /// different libraries can be shared with different people
@@ -425,7 +427,9 @@ final class SharedLibraryEngine: ObservableObject {
         // The link's default role travels in a fixed-name record in the
         // zone: both admin and editor map to .readWrite on the CKShare, so
         // the share permission alone cannot tell the joiner which role the
-        // owner picked for this link.
+        // owner picked for this link. (Each member's chosen LibraryCove
+        // display name travels in the participants record, written by
+        // publishOwnProfile during every sync.)
         let rolesRecord = SharedLibraryRecord.encodeLinkRole(linkRole, inZoneWith: zoneID)
         let result = try await container.privateCloudDatabase
             .modifyRecords(saving: [share, rolesRecord], deleting: [],
@@ -456,40 +460,6 @@ final class SharedLibraryEngine: ObservableObject {
     }
 
     // MARK: - Share lookup
-
-    /// The stored share, refetched from the server. `nil` when never created
-    /// or no longer present (zone deleted / sharing stopped).
-    func currentShare() async throws -> CKShare? {
-        switch SharedLibrarySettings.membership {
-        case .owner:
-            guard let recordName = SharedLibrarySettings.ownerShareRecordName,
-                  let zoneID = SharedLibrarySettings.ownerZoneID else { return nil }
-            let id = CKRecord.ID(recordName: recordName, zoneID: zoneID)
-            let results = try await db.records(for: [id])
-            guard case .success(let record) = results[id] else { return nil }
-            return record as? CKShare
-        case .participant:
-            guard let zone = try await participantZone() else { return nil }
-            guard let ref = zone.share else { return nil }
-            let results = try await db.records(for: [ref.recordID])
-            guard case .success(let record) = results[ref.recordID] else { return nil }
-            return record as? CKShare
-        case .none:
-            return nil
-        }
-    }
-
-    /// The accepted zone in the shared database, matched by our fixed zone
-    /// name (CKShare doesn't hand participants its zone ID directly). A
-    /// self-owned zone can't appear in the shared DB, but the name filter is
-    /// also guarded against stale owner state re-entering participant mode.
-    private func participantZone() async throws -> CKRecordZone? {
-        let zones = try await container.sharedCloudDatabase.allRecordZones()
-        return zones.first {
-            $0.zoneID.zoneName == Self.zoneName
-                && $0.zoneID.ownerName != CKCurrentUserDefaultName
-        }
-    }
 
     /// The accepted zone for a specific joined library.
     private func participantZone(libraryID: String) async throws -> CKRecordZone? {
@@ -605,31 +575,35 @@ final class SharedLibraryEngine: ObservableObject {
 
     // MARK: - Participants
 
-    /// Rebuilds `members` from the share's participant list. Works for both
-    /// roles; failures land in `lastError` without throwing (list is a
+    /// Rebuilds `members` from a library's share's participant list. Names
+    /// come from the zone's participants record (the display name each
+    /// member chose INSIDE LibraryCove); the iCloud identity is the
+    /// fallback. Failures land in `lastError` without throwing (list is a
     /// display, not a control flow dependency).
-    func refreshParticipants() async {
-        do {
-            if let share = try await currentShare() {
-                refreshParticipants(from: share)
-            }
-        } catch {
-            lastError = error.localizedDescription
-        }
-    }
-
-    /// Per-library variant: refreshes members from that library's share.
     func refreshParticipants(libraryID: String) async {
         do {
             if let share = try await currentShare(libraryID: libraryID) {
-                refreshParticipants(from: share)
+                let profiles = await participantProfiles(zoneID: share.recordID.zoneID,
+                                                         libraryID: libraryID)
+                refreshParticipants(from: share, profiles: profiles)
             }
         } catch {
             lastError = error.localizedDescription
         }
     }
 
-    private func refreshParticipants(from share: CKShare) {
+    /// Reads the zone's participants record (owner reads it from the
+    /// private DB, a participant from the shared DB).
+    private func participantProfiles(zoneID: CKRecordZone.ID,
+                                     libraryID: String) async -> [String: SharedLibraryRecord.ParticipantProfile] {
+        let participantsID = CKRecord.ID(recordName: SharedLibraryRecord.participantsRecordName,
+                                         zoneID: zoneID)
+        guard let record = try? await db(libraryID: libraryID).record(for: participantsID) else { return [:] }
+        return SharedLibraryRecord.decodeParticipants(from: record)
+    }
+
+    private func refreshParticipants(from share: CKShare,
+                                     profiles: [String: SharedLibraryRecord.ParticipantProfile] = [:]) {
         // Remember the current user's participant record name for role
         // lookups (myRole).
         if let recordName = share.currentUserParticipant?.userIdentity.userRecordID?.recordName {
@@ -646,11 +620,17 @@ final class SharedLibraryEngine: ObservableObject {
                 }
             }
         }
+        func profileName(_ identity: CKUserIdentity) -> String? {
+            guard let recordName = identity.userRecordID?.recordName,
+                  let profile = profiles[recordName],
+                  !profile.name.isEmpty else { return nil }
+            return profile.name
+        }
         var result: [SharedLibraryMember] = []
         let owner = share.owner
         result.append(SharedLibraryMember(
             id: owner.userIdentity.userRecordID?.recordName ?? "owner",
-            name: displayName(owner.userIdentity) ?? "Owner",
+            name: profileName(owner.userIdentity) ?? displayName(owner.userIdentity) ?? "Owner",
             isOwner: true,
             isCurrentUser: share.currentUserParticipant?.role == .owner,
             acceptanceStatusDescription: acceptanceText(owner.acceptanceStatus),
@@ -662,7 +642,9 @@ final class SharedLibraryEngine: ObservableObject {
                 id: participant.userIdentity.userRecordID?.recordName
                     ?? participant.userIdentity.lookupInfo?.emailAddress
                     ?? UUID().uuidString,
-                name: displayName(participant.userIdentity) ?? "Invited person",
+                name: profileName(participant.userIdentity)
+                    ?? displayName(participant.userIdentity)
+                    ?? "Invited person",
                 isOwner: false,
                 isCurrentUser: participant.userIdentity.userRecordID?.recordName == selfRecordName,
                 acceptanceStatusDescription: acceptanceText(participant.acceptanceStatus),
@@ -699,25 +681,92 @@ final class SharedLibraryEngine: ObservableObject {
 
     // MARK: - Joining
 
+    /// The outcome of a completed join. The app hot-swaps onto the mirror
+    /// store and syncs when this arrives; `joinedLibraryID` is the registry
+    /// id the joined library lives under.
+    struct JoinResult {
+        let joinedLibraryID: String
+    }
+
     /// Processes a share-accept flow end-to-end. Called either from the app
     /// delegate when CloudKit hands over invitation metadata, or at launch
     /// with the persisted pending metadata.
-    func accept(metadata: CKShare.Metadata) async throws {
+    @discardableResult
+    func accept(metadata: CKShare.Metadata) async throws -> JoinResult {
         guard await hasICloudAccount() else { throw SharedLibraryError.noICloudAccount }
-        let results = try await container.accept([metadata])
-        guard case .success(let share) = results.values.first
-            else { throw SharedLibraryError.metadataUnavailable }
-        try await finishJoin(share: share)
+        // Re-opened link (metadata already accepted in a previous session —
+        // the pending-accept retry path): CKAcceptSharesOperation fails for
+        // those, so finish the join from the carried CKShare instead of
+        // surfacing a bogus error and retrying forever.
+        if metadata.participantStatus == .accepted {
+            return try await finishJoin(share: metadata.share)
+        }
+        let share: CKShare
+        do {
+            let results = try await container.accept([metadata])
+            switch results.values.first {
+            case .success(let accepted):
+                share = accepted
+            case .failure(let itemError):
+                guard let acceptedShare = Self.alreadyAcceptedShare(itemError, metadata) else {
+                    throw itemError
+                }
+                share = acceptedShare
+            case nil:
+                throw SharedLibraryError.metadataUnavailable
+            }
+        } catch let acceptError {
+            // The server can reject the accept as already-done even when the
+            // cached metadata status is stale (link re-tapped, or accept
+            // landed before a crash lost the join's local state). Finish the
+            // join from the metadata's carried share — the membership keys
+            // make a repeat finishJoin idempotent.
+            guard let acceptedShare = Self.alreadyAcceptedShare(acceptError, metadata) else {
+                throw acceptError
+            }
+            share = acceptedShare
+        }
+        // Accepting one of THIS device's own shares (e.g. tapping your own
+        // link): nothing to join — surface the owning library instead.
+        if let owned = SharedLibrarySettings.sharedLibraryIDs.first(where: {
+            SharedLibrarySettings.membership(libraryID: $0) == .owner
+                && SharedLibrarySettings.ownerZoneName(libraryID: $0) == share.recordID.zoneID.zoneName
+        }) {
+            return JoinResult(joinedLibraryID: owned)
+        }
+        return try await finishJoin(share: share)
+    }
+
+    /// True when `error` is CloudKit rejecting the accept because THIS
+    /// account already accepted the share (link re-tapped, or the accept
+    /// landed before a crash lost the local join state). The metadata's
+    /// carried share is then the materialized, accepted CKShare and the
+    /// join finishes from it — a repeat finishJoin is idempotent because
+    /// the membership keys are keyed by the derived library id.
+    private static func alreadyAcceptedShare(_ error: Error,
+                                             _ metadata: CKShare.Metadata) -> CKShare? {
+        guard let ckError = error as? CKError else { return nil }
+        // No dedicated "already accepted" code exists: CloudKit surfaces the
+        // already-accepted case as .invalidArguments (or .unknownItem on
+        // some server revisions). Only finish the join from the carried
+        // share when the metadata itself says this account already accepted
+        // — that combination cannot be a genuinely failed first accept.
+        let alreadyDone = ckError.code == .invalidArguments
+            || ckError.code == .unknownItem
+            || metadata.participantStatus == .accepted
+        guard alreadyDone else { return nil }
+        return metadata.share
     }
 
     /// Stores the accepted share's zone and flips membership to participant
     /// — for a PER-LIBRARY share. The joiner gets their own LibraryInfo
     /// (named from the share title) whose id is derived from the share's
     /// zone name, so every share maps to its own library independently.
-    private func finishJoin(share: CKShare) async throws {
-        guard let zone = try await zoneLookup() else {
-            throw SharedLibraryError.zoneNotFound
-        }
+    private func finishJoin(share: CKShare) async throws -> JoinResult {
+        // The accepted share carries its zone ID directly — never match by
+        // zone-name polling (per-library zones are suffixed with a hash, so
+        // a fixed-name match can never succeed).
+        let zone = try await zoneLookup(for: share)
         let joinerLibraryID = "shared-" + zone.zoneID.zoneName
         SharedLibrarySettings.setAcceptedZoneName(zone.zoneID.zoneName, libraryID: joinerLibraryID)
         SharedLibrarySettings.setAcceptedZoneOwnerName(zone.zoneID.ownerName, libraryID: joinerLibraryID)
@@ -752,6 +801,11 @@ final class SharedLibraryEngine: ObservableObject {
             }
             SharedLibrarySettings.setLinkDefaultRole(linkRole, libraryID: joinerLibraryID)
         }
+        // Publish the display name this person chose INSIDE LibraryCove so
+        // the owner's Members list shows it instead of the iCloud identity.
+        // (Guest joins keep the Apple-ID-derived name; the sync's
+        // publishOwnProfile re-publishes on every run so renames travel.)
+        await publishOwnProfile(share: share, libraryID: joinerLibraryID)
         // Create the joiner's library entry (inactive — switching to it is
         // the user's choice).
         if !LibraryScope.shared.all(context: Persistence.shared.mainContext).contains(where: { $0.id == joinerLibraryID }) {
@@ -763,20 +817,55 @@ final class SharedLibraryEngine: ObservableObject {
                                             to: joinerLibraryID, context: Persistence.shared.mainContext)
         }
         refreshParticipants(from: share)
+        return JoinResult(joinedLibraryID: joinerLibraryID)
     }
 
-    /// Polls briefly for the accepted zone to appear in the shared database.
-    private func zoneLookup() async throws -> CKRecordZone? {
+    /// Reads the accepted share's zone out of the shared database. One
+    /// bounded retry for CloudKit's brief post-accept propagation window;
+    /// the lookup is BY ZONE ID, so there is no name-collision risk.
+    private func zoneLookup(for share: CKShare) async throws -> CKRecordZone {
+        let zoneID = share.recordID.zoneID
         for _ in 0..<10 {
-            if let zone = try? await participantZone() { return zone }
+            if let zone = try? await container.sharedCloudDatabase.recordZone(for: zoneID) {
+                return zone
+            }
             try await Task.sleep(nanoseconds: 300_000_000)
         }
-        return nil
+        throw SharedLibraryError.zoneNotFound
+    }
+
+    /// Writes/updates THIS member's entry in the zone's participants record:
+    /// the display name the person chose inside LibraryCove (their member
+    /// profile name), keyed by their CloudKit participant record name. Works
+    /// for the owner (private DB) and participants (shared DB, read-write
+    /// members only). Read-modify-write so concurrent joiners don't erase
+    /// each other's names. Called from every sync, so renames propagate.
+    private func publishOwnProfile(share: CKShare, libraryID: String) async {
+        guard let recordName = share.currentUserParticipant?.userIdentity.userRecordID?.recordName,
+              share.currentUserParticipant?.permission != .readOnly else { return }
+        let participantsID = CKRecord.ID(recordName: SharedLibraryRecord.participantsRecordName,
+                                         zoneID: share.recordID.zoneID)
+        let db = db(libraryID: libraryID)
+        var profiles: [String: SharedLibraryRecord.ParticipantProfile] = [:]
+        var base: CKRecord?
+        if let existing = try? await db.record(for: participantsID) {
+            profiles = SharedLibraryRecord.decodeParticipants(from: existing)
+            base = existing
+        }
+        profiles[recordName] = SharedLibraryRecord.ParticipantProfile(
+            name: LibraryDataService.activeMemberName(Persistence.shared.mainContext))
+        let record = base ?? SharedLibraryRecord.encodeParticipants([:], inZoneWith: share.recordID.zoneID)
+        record[SharedLibraryRecord.Field.payload] = try? JSONEncoder().encode(profiles)
+        record[SharedLibraryRecord.Field.schema] = SharedLibraryRecord.schemaVersion
+        _ = try? await db.modifyRecords(saving: [record], deleting: [],
+                                        savePolicy: .ifServerRecordUnchanged)
     }
     /// Full sync: pull remote changes into the mirror store, then push local
     /// unsynced edits to the zone. Safe to call repeatedly; coalesces.
+    /// Syncs EVERY library this device shares (owner or participant) — the
+    /// app holds one store, so all per-library zones share one mirror file.
     func syncNow(context: ModelContext) async {
-        guard SharedLibrarySettings.membership != .none else { return }
+        guard !SharedLibrarySettings.sharedLibraryIDs.isEmpty else { return }
         guard syncTask == nil else { return }
         let task = Task { [weak self] () -> Void in
             guard let self else { return }
@@ -793,55 +882,60 @@ final class SharedLibraryEngine: ObservableObject {
         do {
             let status = (try? await container.accountStatus()) ?? .couldNotDetermine
             guard status == .available else {
-                // Only reachable when a share exists (membership ≠ none):
-                // surfaces in Settings instead of a silently frozen library.
+                // Only reachable when a share exists (a membership key is
+                // set): surfaces in Settings instead of a silently frozen
+                // library.
                 reportError(status == .noAccount
                             ? "Sign in to iCloud to keep this shared library up to date."
                             : "iCloud is temporarily unavailable — the shared library will sync when it reconnects.")
                 return
             }
-            guard let zoneID = SharedLibrarySettings.activeZoneID else { return }
-            if SharedLibrarySettings.membership == .participant {
-                // The zone shows up in the shared DB shortly after accept —
-                // and disappears when the owner stops sharing or removes us.
-                guard let zone = try await participantZone() else {
-                    revokeParticipantLocally()
-                    return
-                }
-                if zone.share == nil {
-                    // Zone exists but its share reference is gone — same outcome.
-                    revokeParticipantLocally()
-                    return
-                }
-            } else {
-                // Owner: make sure the zone exists (fresh-install restore).
-                let zones = try await db.recordZones(for: [zoneID])
-                if case .failure = zones[zoneID] {
-                    _ = try? await db.modifyRecordZones(saving: [CKRecordZone(zoneID: zoneID)], deleting: [])
-                }
+            for libraryID in SharedLibrarySettings.sharedLibraryIDs {
+                try await runSyncOne(libraryID: libraryID, context: context)
             }
-            try await pullRemoteChanges(context: context, zoneID: zoneID)
-            try await pushLocalChanges(context: context, zoneID: zoneID)
-            // The library this zone belongs to: participant joins derive
-            // their id from the zone name; owners hold the zone in
-            // ownerZoneName.
-            let libraryID = SharedLibrarySettings.membership == .owner
-                ? SharedLibrarySettings.sharedLibraryIDs.first {
-                    SharedLibrarySettings.ownerZoneName(libraryID: $0) == zoneID.zoneName
-                }
-                : SharedLibrarySettings.sharedLibraryIDs.first {
-                    SharedLibrarySettings.acceptedZoneName(libraryID: $0) == zoneID.zoneName
-                }
-            if let libraryID {
-                await refreshRolesIfNeeded(zoneID: zoneID, libraryID: libraryID)
-            }
-            SharedLibrarySettings.lastSyncAt = Date()
             lastError = nil
         } catch is CancellationError {
             // Coalesced-out sync — not an error.
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// One library's zone sync (pull then push), keyed off its per-library
+    /// membership state.
+    private func runSyncOne(libraryID: String, context: ModelContext) async throws {
+        let membership = SharedLibrarySettings.membership(libraryID: libraryID)
+        guard membership != .none, let zoneID = SharedLibrarySettings.activeZoneID(libraryID: libraryID) else { return }
+        let libraryDb = db(libraryID: libraryID)
+        if membership == .participant {
+            // The zone shows up in the shared DB shortly after accept —
+            // and disappears when the owner stops sharing or removes us.
+            guard let zone = try await participantZone(libraryID: libraryID) else {
+                revokeParticipantLocally(libraryID: libraryID)
+                return
+            }
+            if zone.share == nil {
+                // Zone exists but its share reference is gone — same outcome.
+                revokeParticipantLocally(libraryID: libraryID)
+                return
+            }
+        } else {
+            // Owner: make sure the zone exists (fresh-install restore).
+            let zones = try await libraryDb.recordZones(for: [zoneID])
+            if case .failure = zones[zoneID] {
+                _ = try? await libraryDb.modifyRecordZones(saving: [CKRecordZone(zoneID: zoneID)], deleting: [])
+            }
+        }
+        try await pullRemoteChanges(context: context, zoneID: zoneID, libraryID: libraryID)
+        try await pushLocalChanges(context: context, zoneID: zoneID, libraryID: libraryID)
+        await refreshRolesIfNeeded(zoneID: zoneID, libraryID: libraryID)
+        // Publish (or refresh) this device's chosen LibraryCove display
+        // name in the zone's participants record — works for owner and
+        // read-write participants, so renames propagate to everyone.
+        if let share = try? await currentShare(libraryID: libraryID) {
+            await publishOwnProfile(share: share, libraryID: libraryID)
+        }
+        SharedLibrarySettings.setLastSyncAt(Date(), libraryID: libraryID)
     }
 
     /// Pulls the zone's fixed-name roles record and refreshes the local
@@ -876,27 +970,31 @@ final class SharedLibraryEngine: ObservableObject {
         }
     }
 
-    /// The owner stopped sharing or removed this participant: drop the local
-    /// sharing state and flip the provider back for next launch. The mirror
-    /// file is kept (its content is the only local copy; "keep a copy" can be
-    /// offered manually later) but the index is cleared so nothing re-pushes.
-    private func revokeParticipantLocally() {
+    /// The owner stopped sharing or removed this participant: drop that
+    /// library's local sharing state. Other live shares keep syncing; the
+    /// provider flips back to the pre-share provider only when NO share
+    /// remains. The mirror rows are kept (the only local copy; "keep a
+    /// copy" can be offered manually later) but the index is cleared so
+    /// nothing re-pushes.
+    private func revokeParticipantLocally(libraryID: String) {
         reportError("This shared library is no longer available.")
-        SharedLibrarySettings.membership = .none
-        SharedLibrarySettings.changeTokenData = nil
-        // Drop the hash index: its entries are the only delete markers, and
-        // with membership gone those records must never re-push anywhere.
-        SharedLibraryMirror().saveIndex(SharedLibraryMirror.Index())
-        SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .localOnly
-        SharedLibrarySettings.previousProvider = nil
+        SharedLibrarySettings.reset(libraryID: libraryID)
+        SharedLibraryMirror().clearIndex(libraryID: libraryID)
+        if SharedLibrarySettings.sharedLibraryIDs.isEmpty {
+            SyncSettings.selectedProvider = SharedLibrarySettings.previousProvider ?? .iCloud
+            SharedLibrarySettings.previousProvider = nil
+        }
         members = []
     }
 
     /// Fetches zone changes since the stored token and applies them to the
-    /// mirror store. First run (no token) fetches everything.
-    private func pullRemoteChanges(context: ModelContext, zoneID: CKRecordZone.ID) async throws {
+    /// mirror store. First run (no token) fetches everything. `libraryID` is
+    /// the share the zone belongs to: it scopes the mirror scan and tags
+    /// every pulled row so the joined library's registry id shows its books.
+    private func pullRemoteChanges(context: ModelContext, zoneID: CKRecordZone.ID,
+                                   libraryID: String) async throws {
         var token: CKServerChangeToken?
-        if let data = SharedLibrarySettings.changeTokenData {
+        if let data = SharedLibrarySettings.changeTokenData(libraryID: libraryID) {
             token = try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: data)
         }
 
@@ -908,7 +1006,7 @@ final class SharedLibraryEngine: ObservableObject {
         var latestToken: CKServerChangeToken?
         var moreComing = true
         while moreComing {
-            let batch = try await db.recordZoneChanges(inZoneWith: zoneID, since: token)
+            let batch = try await db(libraryID: libraryID).recordZoneChanges(inZoneWith: zoneID, since: token)
             latestToken = batch.changeToken
             moreComing = batch.moreComing
             token = batch.changeToken
@@ -928,8 +1026,8 @@ final class SharedLibraryEngine: ObservableObject {
         }
 
         let mirror = SharedLibraryMirror()
-        var index = mirror.loadIndex()
-        let local = mirror.scan(context: context)
+        var index = mirror.loadIndex(libraryID: libraryID)
+        let local = mirror.scan(context: context, libraryID: libraryID)
         let entriesByName = Dictionary(local.map { ($0.recordName, $0) },
                                        uniquingKeysWith: { first, _ in first })
         let hadDeletes = changes.contains { if case .deleted = $0.kind { return true }; return false }
@@ -937,23 +1035,25 @@ final class SharedLibraryEngine: ObservableObject {
                                    assets: assetsByRecordName,
                                    entriesByName: entriesByName,
                                    index: &index,
+                                   libraryID: libraryID,
                                    context: context)
         if applied > 0 || hadDeletes {
             onRemoteChange?()
         }
-        mirror.saveIndex(index)
+        mirror.saveIndex(index, libraryID: libraryID)
         if let latestToken,
            let data = try? NSKeyedArchiver.archivedData(withRootObject: latestToken,
                                                         requiringSecureCoding: true) {
-            SharedLibrarySettings.changeTokenData = data
+            SharedLibrarySettings.setChangeTokenData(data, libraryID: libraryID)
         }
     }
 
     /// Uploads every locally-dirty record (hash-index diff) and deletions.
-    private func pushLocalChanges(context: ModelContext, zoneID: CKRecordZone.ID) async throws {
+    private func pushLocalChanges(context: ModelContext, zoneID: CKRecordZone.ID,
+                                  libraryID: String) async throws {
         let mirror = SharedLibraryMirror()
-        var index = mirror.loadIndex()
-        let entries = mirror.scan(context: context)
+        var index = mirror.loadIndex(libraryID: libraryID)
+        let entries = mirror.scan(context: context, libraryID: libraryID)
         let changes = mirror.pushChanges(entries: entries, index: index)
         guard !changes.isEmpty else { return }
 
@@ -977,7 +1077,7 @@ final class SharedLibraryEngine: ObservableObject {
         // DTOs (no server change tag, so .changedKeys is undefined for them),
         // and the app-level policy is last-writer-wins per record — a push is
         // meant to overwrite the server copy wholesale.
-        let result = try await db.modifyRecords(saving: toSave, deleting: toDelete, savePolicy: .allKeys)
+        let result = try await db(libraryID: libraryID).modifyRecords(saving: toSave, deleting: toDelete, savePolicy: .allKeys)
         var failedRecordNames: Set<String> = []
         var deletedRecordNames: Set<String> = []
         for (recordID, outcome) in result.saveResults {
@@ -999,7 +1099,7 @@ final class SharedLibraryEngine: ObservableObject {
         for name in deletedRecordNames {
             index.hashes.removeValue(forKey: name)
         }
-        mirror.saveIndex(index)
+        mirror.saveIndex(index, libraryID: libraryID)
     }
 
     /// Builds the CKRecord for a locally-scanned entry.
@@ -1022,37 +1122,6 @@ final class SharedLibraryEngine: ObservableObject {
     }
 
     // MARK: - Leaving / stopping
-
-    /// Participant leaves: removes self from the share, then clears local
-    /// settings. The coordinator offers "keep a copy" (mirror → private
-    /// import) BEFORE calling this; afterwards the mirror store is discarded
-    /// and the app relaunches on the private store.
-    func leaveAsParticipant() async throws {
-        if let share = try await currentShare(), let me = share.currentUserParticipant, me.role != .owner {
-            share.removeParticipant(me)
-            _ = try? await db.modifyRecords(saving: [share], deleting: [], savePolicy: .changedKeys)
-        }
-        SharedLibrarySettings.reset()
-        members = []
-    }
-
-    /// Owner stops sharing: deletes the zone (revoking everyone's access and
-    /// destroying the shared data) and clears local settings.
-    func stopSharingAsOwner() async throws {
-        if let zoneID = SharedLibrarySettings.ownerZoneID {
-            // The owner zone lives in the private DB (see makeShare).
-            _ = try? await container.privateCloudDatabase
-                .modifyRecordZones(saving: [], deleting: [zoneID])
-        }
-        let libraryID = LibraryScope.defaultLibraryID
-        SharedLibrarySettings.reset()
-        members = []
-        // Mirror the stop into the registry so other devices drop their
-        // shared-library UI for this library too.
-        LibraryScope.shared.setShareFacts(nil, libraryID: libraryID)
-    }
-
-    // MARK: - Leaving / stopping (per library)
 
     /// Owner stops sharing ONE library: deletes that library's zone (the
     /// share dies with it, revoking everyone's access) and clears that

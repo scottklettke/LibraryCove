@@ -5,23 +5,10 @@ import SwiftData
 @Suite struct SyncTests {
 
     @Test func optionsExposeAllAndAvailability() {
-        #expect(LibrarySync.allCases.count == 6)
+        #expect(LibrarySync.allCases.count == 3)
         #expect(LibrarySync.localOnly.isAvailableNow)
         #expect(LibrarySync.iCloud.isAvailableNow)
         #expect(LibrarySync.sharedLibrary.isAvailableNow)
-        #expect(!LibrarySync.dropbox.isAvailableNow)
-        #expect(!LibrarySync.box.isAvailableNow)
-        #expect(!LibrarySync.nextcloud.isAvailableNow)
-    }
-
-    @Test func notYetImplementedOptionsAreStructuralOnly() {
-        // Dropbox/Box/Nextcloud register in the framework but must not be able
-        // to back the store yet.
-        for kind in [LibrarySync.dropbox, .box, .nextcloud] {
-            #expect(throws: LibrarySyncError.self) {
-                try SyncStoreRegistry.provider(for: kind).makeStoreConfiguration()
-            }
-        }
     }
 
     @Test func localAndCloudOptionsReturnStoreConfigs() {

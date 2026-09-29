@@ -8,9 +8,6 @@ import SwiftData
 enum LibrarySync: String, CaseIterable, Identifiable, Codable {
     case localOnly
     case iCloud
-    case dropbox
-    case box
-    case nextcloud
     case sharedLibrary
 
     var id: String { rawValue }
@@ -20,25 +17,19 @@ enum LibrarySync: String, CaseIterable, Identifiable, Codable {
         case .localOnly: return "Local only"
         case .iCloud: return "iCloud Sync"
         case .sharedLibrary: return "Shared Library"
-        case .dropbox: return "Dropbox"
-        case .box: return "Box"
-        case .nextcloud: return "Nextcloud"
         }
     }
 
-    /// True when the option can be used end-to-end today. Dropbox/Box/Nextcloud
-    /// are structural placeholders that register but aren't built out yet.
+    /// True when the option can be used end-to-end today.
     var isAvailableNow: Bool {
         switch self {
         case .localOnly, .iCloud, .sharedLibrary: return true
-        case .dropbox, .box, .nextcloud: return false
         }
     }
 }
 
 /// The contract for backing the library store for a `LibrarySync` option.
-/// Local-only and iCloud produce SwiftData configurations; the placeholder
-/// cloud providers conform structurally and throw until they're implemented.
+/// Local-only and iCloud produce SwiftData configurations.
 protocol SyncStoreProvider {
     var librarySync: LibrarySync { get }
     /// Builds the SwiftData store configuration for this option. Throws when
@@ -57,9 +48,6 @@ enum SyncStoreRegistry {
         case .localOnly: return SwiftDataLocalOnlySync()
         case .iCloud: return SwiftDataiCloudSync()
         case .sharedLibrary: return SwiftDataSharedLibrarySync()
-        case .dropbox: return DropboxSyncStoreProvider()
-        case .box: return BoxSyncStoreProvider()
-        case .nextcloud: return NextcloudSyncStoreProvider()
         }
     }
 
@@ -197,42 +185,3 @@ struct SwiftDataSharedLibrarySync: SyncStoreProvider {
 }
 
 // MARK: - Structural placeholders
-
-/// Shared placeholder behavior for store options that aren't built out yet.
-private struct UnavailableSyncStore: SyncStoreProvider {
-    let librarySync: LibrarySync
-
-    func makeStoreConfiguration() throws -> ModelConfiguration {
-        throw LibrarySyncError.notImplementedFor(librarySync)
-    }
-
-    func activateStore() async throws {
-        throw LibrarySyncError.notImplementedFor(librarySync)
-    }
-
-    func deactivateStore() async {}
-}
-
-struct DropboxSyncStoreProvider: SyncStoreProvider {
-    let librarySync: LibrarySync = .dropbox
-    private let impl = UnavailableSyncStore(librarySync: .dropbox)
-    func makeStoreConfiguration() throws -> ModelConfiguration { try impl.makeStoreConfiguration() }
-    func activateStore() async throws { try await impl.activateStore() }
-    func deactivateStore() async { await impl.deactivateStore() }
-}
-
-struct BoxSyncStoreProvider: SyncStoreProvider {
-    let librarySync: LibrarySync = .box
-    private let impl = UnavailableSyncStore(librarySync: .box)
-    func makeStoreConfiguration() throws -> ModelConfiguration { try impl.makeStoreConfiguration() }
-    func activateStore() async throws { try await impl.activateStore() }
-    func deactivateStore() async { await impl.deactivateStore() }
-}
-
-struct NextcloudSyncStoreProvider: SyncStoreProvider {
-    let librarySync: LibrarySync = .nextcloud
-    private let impl = UnavailableSyncStore(librarySync: .nextcloud)
-    func makeStoreConfiguration() throws -> ModelConfiguration { try impl.makeStoreConfiguration() }
-    func activateStore() async throws { try await impl.activateStore() }
-    func deactivateStore() async { await impl.deactivateStore() }
-}

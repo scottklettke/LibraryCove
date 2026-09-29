@@ -7,8 +7,15 @@ import SwiftData
 /// export → restore (importArchive) → export must keep same-title copies.
 @Suite(.serialized) @MainActor struct DuplicatePreservationTests {
 
+    /// Own container: `Persistence.inMemory.mainContext` is shared across
+    /// suites (Swift Testing serializes per SUITE, not the process —
+    /// LibraryCoveTests/StopSharingMigrationTests/MultiLibraryTests all use
+    /// it), and an interleaving suite touching the shared store during this
+    /// test's export await crashed the store connection (reproduced twice).
+    private static let container = try! ModelContainerForTesting.inMemory()
+
     private func baseContext() -> ModelContext {
-        Persistence.inMemory.mainContext
+        ModelContext(Self.container)
     }
 
     @Test func exportImportExportPreservesDuplicates() async throws {

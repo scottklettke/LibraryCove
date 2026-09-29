@@ -44,8 +44,10 @@ of your data — on-device, in iCloud, or in exports you can read by hand.
   **OpenAI-compatible endpoint** (including self-hosted local models).
 - **Privacy-first sync** — optional private iCloud (SwiftData + CloudKit)
   sync of your own devices, plus Notes-style **shared libraries**: invite
-  family members to a shared shelf via link, with membership management and
-  server-wins merging. The rest of your data stays on-device.
+  family members to a shared shelf via link — each library carries its own
+  share, joiners pick up the role the link grants (admin / editor / guest),
+  and members appear under the name they chose in LibraryCove, not their
+  Apple ID. The rest of your data stays on-device.
 - **Export / import** — backup as a readable zip (`library.json`, cover
   JPEGs, a format guide), edit it by hand if you like, and restore later.
   Archives from the app's predecessor (BookNexus, `booknexus-library` format)

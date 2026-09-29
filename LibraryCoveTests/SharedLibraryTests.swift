@@ -142,6 +142,7 @@ final class SharedLibraryTests: XCTestCase {
 
         // First scan: one book — everything is "new".
         let book = Book(id: "b1", title: "First")
+        book.libraryID = "test-library"
         context.insert(book)
         try context.save()
         var entries = mirror.scan(context: context)
@@ -200,6 +201,7 @@ final class SharedLibraryTests: XCTestCase {
 
         // Seed local book already synced with the cloud.
         let local = Book(id: "b9", title: "Local v1")
+        local.libraryID = "test-library"
         local.updatedAt = Date(timeIntervalSince1970: 1_000)
         context.insert(local)
         try context.save()
@@ -232,6 +234,7 @@ final class SharedLibraryTests: XCTestCase {
         let context = ModelContext(try ModelContainerForTesting.inMemory())
 
         let local = Book(id: "b10", title: "Local v1")
+        local.libraryID = "test-library"
         local.updatedAt = Date(timeIntervalSince1970: 1_000)
         context.insert(local)
         try context.save()
@@ -263,6 +266,7 @@ final class SharedLibraryTests: XCTestCase {
         let context = ModelContext(try ModelContainerForTesting.inMemory())
 
         let local = Book(id: "b11", title: "Doomed")
+        local.libraryID = "test-library"
         context.insert(local)
         try context.save()
         mirror.markSynced(entries: mirror.scan(context: context), failedRecordNames: [], index: &index)

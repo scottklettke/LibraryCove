@@ -45,50 +45,97 @@ final class SharedLibraryMirror {
 
     // MARK: - Index persistence
 
-    static var indexURL: URL {
+    /// Legacy shared index (pre-per-library); removed on first per-library
+    /// save so stale entries can never push into the wrong zone.
+    static var legacyIndexURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask).first!
         return base.appendingPathComponent("shared-mirror-index.json")
     }
-    func loadIndex() -> Index {
-        guard let data = try? Data(contentsOf: Self.indexURL),
+
+    static func indexURL(libraryID: String) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first!
+        return base.appendingPathComponent("shared-mirror-index-\(libraryID).json")
+    }
+
+    func loadIndex(libraryID: String = "test-library") -> Index {
+        // One-time lift from the pre-per-library single index: content was
+        // synced under the active share, so its entries belong to that
+        // library's index.
+        if !FileManager.default.fileExists(atPath: Self.indexURL(libraryID: libraryID).path),
+           FileManager.default.fileExists(atPath: Self.legacyIndexURL.path),
+           let data = try? Data(contentsOf: Self.legacyIndexURL),
+           let index = try? JSONDecoder().decode(Index.self, from: data) {
+            saveIndex(index, libraryID: libraryID)
+            try? FileManager.default.removeItem(at: Self.legacyIndexURL)
+            return index
+        }
+        guard let data = try? Data(contentsOf: Self.indexURL(libraryID: libraryID)),
               let index = try? JSONDecoder().decode(Index.self, from: data) else { return Index() }
         return index
     }
 
-    func saveIndex(_ index: Index) {
+    func saveIndex(_ index: Index, libraryID: String = "test-library") {
         if let data = try? JSONEncoder().encode(index) {
-            try? data.write(to: Self.indexURL, options: .atomic)
+            try? data.write(to: Self.indexURL(libraryID: libraryID), options: .atomic)
         }
+        if FileManager.default.fileExists(atPath: Self.legacyIndexURL.path) {
+            try? FileManager.default.removeItem(at: Self.legacyIndexURL)
+        }
+    }
+
+    /// Removes ONE library's index (its share ended locally).
+    func clearIndex(libraryID: String) {
+        try? FileManager.default.removeItem(at: Self.indexURL(libraryID: libraryID))
+    }
+
+    /// Removes every per-library index and the legacy file (full mirror
+    /// teardown — the store file itself is deleted by the caller).
+    static func removeAllIndexes() {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask).first!
+        if let files = try? FileManager.default.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) {
+            for url in files where url.lastPathComponent.hasPrefix("shared-mirror-index-") {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        try? FileManager.default.removeItem(at: legacyIndexURL)
     }
 
     // MARK: - Local scan
 
-    /// Fetches every model row from the mirror store and snapshots it into
-    /// entries. One scan serves both pull-side conflict checks and push-side
-    /// dirty detection.
-    func scan(context: ModelContext) -> [Entry] {
+    /// Fetches the rows belonging to `libraryID` from the mirror store and
+    /// snapshots them into entries. One scan serves both pull-side conflict
+    /// checks and push-side dirty detection. (The mirror store holds at most
+    /// one library's content at a time — the provider slot is global — but
+    /// scoping keeps every operation keyed to its share regardless.)
+    func scan(context: ModelContext, libraryID: String = "test-library") -> [Entry] {
         var entries: [Entry] = []
 
-        let books = (try? context.fetch(FetchDescriptor<Book>())) ?? []
+        let books = (try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }))) ?? []
         for book in books {
             entries.append(entry(recordName: SharedLibraryRecord.recordName(type: .book, id: book.id),
                                  payload: Self.payloadData(Self.dto(from: book)),
                                  book: book, note: nil, list: nil, item: nil))
         }
-        let notes = (try? context.fetch(FetchDescriptor<Note>())) ?? []
+        let notes = (try? context.fetch(FetchDescriptor<Note>(
+            predicate: #Predicate { $0.libraryID == libraryID }))) ?? []
         for note in notes {
             entries.append(entry(recordName: SharedLibraryRecord.recordName(type: .note, id: note.id),
                                  payload: Self.payloadData(Self.dto(from: note)),
                                  book: nil, note: note, list: nil, item: nil))
         }
-        let lists = (try? context.fetch(FetchDescriptor<ReadingList>())) ?? []
+        let lists = (try? context.fetch(FetchDescriptor<ReadingList>(
+            predicate: #Predicate { $0.libraryID == libraryID }))) ?? []
         for list in lists {
             entries.append(entry(recordName: SharedLibraryRecord.recordName(type: .readingList, id: list.id),
                                  payload: Self.payloadData(Self.dto(from: list)),
                                  book: nil, note: nil, list: list, item: nil))
         }
-        let items = (try? context.fetch(FetchDescriptor<ReadingListItem>())) ?? []
+        let items = (try? context.fetch(FetchDescriptor<ReadingListItem>(
+            predicate: #Predicate { $0.libraryID == libraryID }))) ?? []
         for item in items {
             entries.append(entry(recordName: SharedLibraryRecord.recordName(type: .readingListItem, id: item.id),
                                  payload: Self.payloadData(Self.dto(from: item)),
@@ -126,7 +173,9 @@ final class SharedLibraryMirror {
 
     /// Applies pulled changes to the mirror store. `entriesByName` is the
     /// local scan, `index` is mutated in place. Returns the number of applied
-    /// (non-skip) changes.
+    /// (non-skip) changes. `libraryID` is stamped onto every inserted row so
+    /// the joined library's registry id shows its books (rows arrive with no
+    /// library affiliation of their own).
     ///
     /// Conflict policy: a locally-dirty record (index hash ≠ local hash) loses
     /// to the server only when the server copy is newer by `updatedAt`; ties
@@ -137,6 +186,7 @@ final class SharedLibraryMirror {
                assets: [String: Data],
                entriesByName: [String: Entry],
                index: inout Index,
+               libraryID: String = "test-library",
                context: ModelContext) -> Int {
         var applied = 0
 
@@ -159,16 +209,16 @@ final class SharedLibraryMirror {
             case .book(let dto):
                 if applyBook(dto, assetData: assets[change.recordName],
                              local: entriesByName[change.recordName],
-                             index: &index, context: context) { applied += 1 }
+                             index: &index, libraryID: libraryID, context: context) { applied += 1 }
             case .note(let dto):
                 if applyNote(dto, local: entriesByName[change.recordName],
-                             index: &index, context: context) { applied += 1 }
+                             index: &index, libraryID: libraryID, context: context) { applied += 1 }
             case .readingList(let dto):
                 if applyList(dto, local: entriesByName[change.recordName],
-                             index: &index, context: context) { applied += 1 }
+                             index: &index, libraryID: libraryID, context: context) { applied += 1 }
             case .readingListItem(let dto):
                 if applyItem(dto, local: entriesByName[change.recordName],
-                             index: &index, context: context) { applied += 1 }
+                             index: &index, libraryID: libraryID, context: context) { applied += 1 }
             case .deleted(let recordName):
                 if applyDelete(recordName: recordName, index: &index, context: context) { applied += 1 }
             }
@@ -197,7 +247,8 @@ final class SharedLibraryMirror {
     }
 
     private func applyBook(_ dto: SharedBook, assetData: Data?,
-                           local: Entry?, index: inout Index, context: ModelContext) -> Bool {
+                           local: Entry?, index: inout Index, libraryID: String,
+                           context: ModelContext) -> Bool {
         let existing: Book? = local?.book ?? fetchByID(dto.id, context: context)
         guard serverShouldWin(recordName: SharedLibraryRecord.recordName(type: .book, id: dto.id),
                               incoming: Self.payloadData(dto), local: local, index: index,
@@ -234,6 +285,10 @@ final class SharedLibraryMirror {
         book.updatedAt = dto.updatedAt
         applyCover(to: book, dtoCoverURL: dto.coverImageURL, fingerprint: dto.coverFingerprint,
                    assetData: assetData)
+        // Pulled rows must belong to the share's library — without this the
+        // registry id ("shared-<zone>") never matches and the books are
+        // invisible in the joined library.
+        book.libraryID = libraryID
         if existing == nil { context.insert(book) }
         index.hashes[SharedLibraryRecord.recordName(type: .book, id: dto.id)] = Self.sha256(Self.payloadData(dto))
         return true
@@ -258,7 +313,8 @@ final class SharedLibraryMirror {
         }
     }
 
-    private func applyNote(_ dto: SharedNote, local: Entry?, index: inout Index, context: ModelContext) -> Bool {
+    private func applyNote(_ dto: SharedNote, local: Entry?, index: inout Index,
+                           libraryID: String, context: ModelContext) -> Bool {
         let existing: Note? = local?.note ?? fetchByID(dto.id, context: context)
         guard serverShouldWin(recordName: SharedLibraryRecord.recordName(type: .note, id: dto.id),
                               incoming: Self.payloadData(dto), local: local, index: index,
@@ -277,12 +333,14 @@ final class SharedLibraryMirror {
         note.mentions = dto.mentions
         note.createdAt = dto.createdAt
         note.updatedAt = dto.updatedAt
+        note.libraryID = libraryID
         if existing == nil { context.insert(note) }
         index.hashes[SharedLibraryRecord.recordName(type: .note, id: dto.id)] = Self.sha256(Self.payloadData(dto))
         return true
     }
 
-    private func applyList(_ dto: SharedReadingList, local: Entry?, index: inout Index, context: ModelContext) -> Bool {
+    private func applyList(_ dto: SharedReadingList, local: Entry?, index: inout Index,
+                           libraryID: String, context: ModelContext) -> Bool {
         let existing: ReadingList? = local?.list ?? fetchByID(dto.id, context: context)
         guard serverShouldWin(recordName: SharedLibraryRecord.recordName(type: .readingList, id: dto.id),
                               incoming: Self.payloadData(dto), local: local, index: index,
@@ -297,12 +355,14 @@ final class SharedLibraryMirror {
         list.isPrivate = dto.isPrivate
         list.createdAt = dto.createdAt
         list.updatedAt = dto.updatedAt
+        list.libraryID = libraryID
         if existing == nil { context.insert(list) }
         index.hashes[SharedLibraryRecord.recordName(type: .readingList, id: dto.id)] = Self.sha256(Self.payloadData(dto))
         return true
     }
 
-    private func applyItem(_ dto: SharedReadingListItem, local: Entry?, index: inout Index, context: ModelContext) -> Bool {
+    private func applyItem(_ dto: SharedReadingListItem, local: Entry?, index: inout Index,
+                           libraryID: String, context: ModelContext) -> Bool {
         let existing: ReadingListItem? = local?.item ?? fetchByID(dto.id, context: context)
         guard serverShouldWin(recordName: SharedLibraryRecord.recordName(type: .readingListItem, id: dto.id),
                               incoming: Self.payloadData(dto), local: local, index: index,
@@ -317,6 +377,7 @@ final class SharedLibraryMirror {
         item.priority = dto.priority
         item.targetDate = dto.targetDate
         item.createdAt = dto.createdAt
+        item.libraryID = libraryID
         if existing == nil { context.insert(item) }
         index.hashes[SharedLibraryRecord.recordName(type: .readingListItem, id: dto.id)] = Self.sha256(Self.payloadData(dto))
         return true

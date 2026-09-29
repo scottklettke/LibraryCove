@@ -420,7 +420,6 @@ struct SettingsView: View {
         case .localOnly: return "Stored on this device"
         case .iCloud: return "Syncing via iCloud"
         case .sharedLibrary: return "Sharing via iCloud"
-        case .dropbox, .box, .nextcloud: return "Not connected"
         }
     }
 
@@ -898,7 +897,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Sync")
                 } footer: {
-                    Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync. Dropbox, Box, and Nextcloud are coming soon.")
+                    Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync.")
                 }
     }
 
@@ -1186,10 +1185,15 @@ struct CloudSharingSheet: UIViewControllerRepresentable {
     }
 }
 
-/// Snapshot of the membership role for view bodies (Settings reads this in
-/// `body`, where async engine state isn't directly available).
+/// Snapshot of the ACTIVE library's membership role for view bodies (async
+/// engine state isn't directly available there). The legacy global share
+/// keys are migration-only now — a share lives under its library's id.
+@MainActor
 enum SharedLibraryMembershipGate {
     static var membership: SharedLibraryMembership {
-        SharedLibrarySettings.membership
+        guard let id = LibraryScope.shared.activeID(context: Persistence.shared.mainContext) else {
+            return .none
+        }
+        return SharedLibrarySettings.membership(libraryID: id)
     }
 }

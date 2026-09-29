@@ -61,6 +61,17 @@ final class ShareAcceptSceneDelegate: NSObject, UIWindowSceneDelegate {
                      userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
         ShareAcceptDelegate.stash(metadata)
     }
+
+    /// Cold launch through the link: the metadata rides the connection
+    /// options, NOT the accepted-callback (which only fires when a scene
+    /// already exists). Without this, the first open of a share link on a
+    /// device where the app wasn't running is silently dropped.
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        if let metadata = connectionOptions.cloudKitShareMetadata {
+            ShareAcceptDelegate.stash(metadata)
+        }
+    }
 }
 
 @main

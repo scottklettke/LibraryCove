@@ -92,6 +92,7 @@ struct WelcomeView: View {
             Section("About you") {
                 TextField("Your name", text: $name)
                     .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
                     .onChange(of: name) { _, newValue in
                         // Prefill the library name from the name until the
                         // user edits the library field themselves.
@@ -103,6 +104,7 @@ struct WelcomeView: View {
             Section {
                 TextField("Library name", text: $libraryName)
                     .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
                     .onChange(of: libraryName) { _, newValue in
                         libraryNameEdited = !newValue.isEmpty &&
                             newValue != SharedLibrarySettings.defaultShareTitle(for: name)
@@ -119,6 +121,15 @@ struct WelcomeView: View {
     private func finish() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLibrary = libraryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Fast typing (hardware keyboards, autocorrect, XCUITest typeText)
+        // can coalesce name keystrokes: libraryName is then left holding a
+        // derivation of an earlier PREFIX of the name ("Te's Library" while
+        // name is "Tester") and the onChange pairing flips
+        // libraryNameEdited true from the stale comparison. A library name
+        // that still equals the CURRENT name's derivation was never
+        // hand-edited — treat it as auto-derived.
+        let derived = SharedLibrarySettings.defaultShareTitle(for: trimmedName)
+        let handEdited = libraryNameEdited && trimmedLibrary != derived
         // Adopt-or-create the shared member row: a second device on the
         // same iCloud account reuses the synced identity instead of minting
         // a diverging duplicate (the root cause of names disagreeing
@@ -130,10 +141,12 @@ struct WelcomeView: View {
         // The library name chosen here names the active library. On a
         // fresh install there is NO library yet (the registry stays empty
         // until the user acts) — create one instead of renaming a default
-        // that no longer exists.
-        let chosenName = trimmedLibrary.isEmpty
-            ? SharedLibrarySettings.defaultShareTitle(for: trimmedName)
-            : trimmedLibrary
+        // that no longer exists. When the typed library name is still the
+        // auto-derivation, the CURRENT name's derivation wins (it may have
+        // out-run the stale prefilled string).
+        let chosenName = handEdited
+            ? (trimmedLibrary.isEmpty ? derived : trimmedLibrary)
+            : derived
         if let active = LibraryScope.shared.active(context: modelContext) {
             let localName = active.name
             // Only stamp the library name when the user actually typed
@@ -141,7 +154,7 @@ struct WelcomeView: View {
             // here gives the library a NOW stamp that outranks a rename
             // the user made on ANOTHER device — onboarding would silently
             // undo it.
-            if libraryNameEdited || localName.isEmpty {
+            if handEdited || localName.isEmpty {
                 LibraryScope.shared.rename(id: active.id, to: chosenName,
                                     context: modelContext)
             }

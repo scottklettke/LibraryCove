@@ -27,6 +27,11 @@ const path = require('bare-path')
 const { stdin, stdout } = require('bare-process')
 const { Server, createConnection } = require('bare-tcp')
 
+// Unhandled stream errors must never abort the worklet (bare aborts on
+// uncaught exceptions — a failed noise handshake killed a whole session).
+process.on('unhandledRejection', (e) => send({ evt: 'log', msg: 'unhandled: ' + (e && e.message ? e.message : e) }))
+process.on('uncaughtException', (e) => send({ evt: 'log', msg: 'uncaught: ' + (e && e.message ? e.message : e) }))
+
 const onDevice = typeof BareKit !== 'undefined' && !!BareKit.IPC
 let storageRoot = onDevice ? '.' : '/tmp/spike2-store'
 
@@ -76,7 +81,10 @@ function announce(keyBuf) {
   dht.on('error', (e) => send({ evt: 'log', msg: 'dht error: ' + (e.code || e.message) }))
   swarm.on('connection', (conn) => {
     send({ evt: 'peer', via: 'hyperswarm' })
-    const stream = drive.replicate(true, { keepAlive: true })
+    // Pass the hyperswarm connection itself: corestore detects it is a
+    // stream and reads the noise initiator role from the connection (it
+    // already handshook). Hardcoding 'true' on both sides collides.
+    const stream = drive.replicate(conn, { keepAlive: true })
     stream.on('error', (e) => send({ evt: 'log', msg: 'repl: ' + (e.code || e.message) }))
     conn.pipe(stream).pipe(conn)
   })

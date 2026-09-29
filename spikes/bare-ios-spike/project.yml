@@ -9,6 +9,10 @@ targets:
     platform: iOS
     sources:
       - BareSpikeApp.swift
+      - path: spike2-sim.bundle
+        buildPhase: resources
+      - path: spike2-ios.bundle
+        buildPhase: resources
       - path: bare-ios-sim.bundle
         buildPhase: resources
       - path: bare-ios.bundle
@@ -90,6 +94,9 @@ targets:
         embed: true
         codeSign: true
       - framework: addons-flat/quickbit-native.2.4.9.xcframework
+        embed: true
+        codeSign: true
+      - framework: addons-flat/rabin-native.2.0.0.xcframework
         embed: true
         codeSign: true
       - framework: addons-flat/rocksdb-native.3.18.1.xcframework

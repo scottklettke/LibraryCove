@@ -1,40 +1,27 @@
-// BareSpike: boots a Bare worklet and proves the full P2P chain:
-// JS boots → IPC round-trip → Hyperswarm up (raw sockets granted).
+// BareSpike 2: library replication between two devices.
 //
-// Integration contract (mirrors bare-kit's own test/apple/worklet-ipc.m):
-//   worklet created with NIL configuration
-//   worklet.start(filename ending .bundle, source: Data) for packed bundles
-//   BareIPC created AFTER start
-//   reads use the completion API; a pump timer guards missed wakeups
-// The JS entry must talk over the injected `BareKit.IPC` global, NOT
-// process.stdout (that never reaches Swift).
+// The app is BOTH roles via the UI:
+//   • "Create Library" — becomes the writer, shows the join key
+//   • "Join" (paste key) — becomes the reader, pulls books live
+//   • "Add Book" — writers push a sample book into the drive
+//   • reader screen live-updates: library name + synced book list
+//
+// JS side: entry-spike2.js (hyperdrive per library over BareKit.IPC).
+// Transport: LAN TCP today (writer listens :8787, reader connects);
+// Hyperswarm discovery joins the topic in parallel and takes over when
+// the DHT path is reachable — the replication protocol is identical.
 
 import BareKit
 import SwiftUI
 
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
-    weak var ipc: BareIPC?
+    var ipc: BareIPC?
     var buffer = Data()
+    var role: Role = .none
+    var driveKey: String?
 
-    private func log(_ s: String) {
-        print("BareSpike: \(s)")
-        // BareKit's readable callback fires on ITS thread; SwiftUI observes
-        // .spikeLog, so the notification must land on main.
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .spikeLog, object: s)
-        }
-        let line = "\(Date()): \(s)\n"
-        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("spike.log")
-        if let handle = FileHandle(forWritingAtPath: url.path) {
-            handle.seekToEndOfFile()
-            handle.write(Data(line.utf8))
-            handle.closeFile()
-        } else {
-            try? line.write(to: url, atomically: true, encoding: .utf8)
-        }
-    }
+    enum Role { case none, writer, reader }
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -42,23 +29,53 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
+    /// UI-test seam: SPIKE_ROLE=writer|reader + SPIKE_KEY=<hex> +
+    /// SPIKE_PEER=<writer-ip> drive the flow without taps (writer→reader
+    /// two-simulator test). Checked after the worklet boots.
+    private func runAutomatedFlowIfAny() {
+        let env = ProcessInfo.processInfo.environment
+        guard let role = env["SPIKE_ROLE"] else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            guard let self else { return }
+            switch role {
+            case "writer":
+                self.createLibrary(name: "Automated Library")
+                // add two books so the reader has content to pull
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.addBook(title: "Dune")
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
+                    self.addBook(title: "The Dispossessed")
+                }
+            case "reader":
+                joinLibrary(key: env["SPIKE_KEY"] ?? "")
+                if let peer = env["SPIKE_PEER"] {
+                    let port = Int(env["SPIKE_PORT"] ?? "8787") ?? 8787
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                        self?.connectToWriter(peer, port: port)
+                    }
+                }
+            default:
+                break
+            }
+        }
+    }
+
     private func startWorklet() {
         BareWorklet.optimize(forMemory: false)
 
-        // Device builds must load the ios-arm64 bundle; the simulator the
-        // -simulator one. (bare-pack --host picks the addon architecture.)
         #if targetEnvironment(simulator)
-        let bundleName = "bare-ios-sim"
+        let bundleName = "spike2-sim"
         #else
-        let bundleName = "bare-ios"
+        let bundleName = "spike2-ios"
         #endif
 
         guard let bundleURL = Bundle.main.url(forResource: bundleName, withExtension: "bundle"),
               let source = try? String(contentsOf: bundleURL, encoding: .utf8) else {
-            log("FATAL: \(bundleName).bundle missing from app bundle — run npm run bundle and rebuild")
+            log("FATAL: \(bundleName).bundle missing — run npm run bundle, then rebuild")
             return
         }
-        log("bundle loaded: \(bundleName) \(source.utf8.count) bytes")
+        log("bundle loaded: \(bundleName) (\(source.utf8.count) bytes)")
 
         let worklet = BareWorklet(configuration: nil)!
         worklet.start("/bare-spike.bundle", source: Data(source.utf8), arguments: [])
@@ -66,13 +83,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         let ipc = BareIPC(worklet: worklet)!
         self.ipc = ipc
 
-        // Completion-based read loop (the official pattern).
         func readLoop() {
             ipc.read { [weak self] data, error in
                 guard let self else { return }
                 if let data {
                     if data.isEmpty {
-                        log("JS side closed the stream")
+                        log("JS stream closed")
                         return
                     }
                     buffer.append(data)
@@ -83,14 +99,44 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         readLoop()
 
-        log("worklet started — awaiting boot event")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.send(json: ["cmd": "ping", "n": 1])
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            self?.send(json: ["cmd": "net-start"])
+        log("worklet started")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            // Documents is the sync storage root — per-app, sandboxed.
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path
+            self?.send(json: ["cmd": "init", "storageRoot": docs])
+            self?.runAutomatedFlowIfAny()
         }
     }
+
+    // MARK: - UI actions (called from the SwiftUI views)
+
+    func createLibrary(name: String) {
+        role = .writer
+        send(json: ["cmd": "create", "library": name])
+    }
+
+    func joinLibrary(key: String) {
+        role = .reader
+        driveKey = key
+        send(json: ["cmd": "join", "key": key])
+    }
+
+    func addBook(title: String) {
+        log("addBook called, role=\(role), title=\(title)")
+        guard role == .writer else { log("addBook BLOCKED: not writer"); return }
+        let id = UUID().uuidString.prefix(8)
+        send(json: ["cmd": "put", "path": "books/\(id).json",
+                    "data": ["title": title, "addedBy": UIDevice.current.name,
+                             "addedAt": ISO8601DateFormatter().string(from: Date())]])
+        // Writers listen once, from the created event (a second listen hits
+        // EADDRINUSE and aborts the worklet).
+    }
+
+    func connectToWriter(_ host: String, port: Int = 8787) {
+        send(json: ["cmd": "connect", "host": host, "port": port])
+    }
+
+    // MARK: - IPC plumbing
 
     private func send(json: [String: Any]) {
         guard let ipc, let data = try? JSONSerialization.data(withJSONObject: json),
@@ -118,16 +164,133 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private func handle(event: [String: Any]) {
         switch event["evt"] as? String {
         case "boot":
-            log("✅ JS booted")
-        case "net":
-            let state = event["state"] as? String ?? "?"
-            log(state == "ready"
-                ? "✅✅ WORKING: Hyperswarm DHT is live (raw sockets OK)\nTopic: \(event["topic"] ?? "…")…"
-                : "⚠️ Hyperswarm error: \(event["msg"] ?? "")")
+            log("✅ JS booted — pick Create or Join")
+        case "created":
+            let key = event["key"] as? String ?? "?"
+            driveKey = key
+            log("📚 Library created.\nJoin key (send to the other device):\n\(key)")
+            // Writers listen immediately for readers on the LAN.
+            send(json: ["cmd": "listen", "port": 8787])
+            if ProcessInfo.processInfo.environment["SPIKE_ROLE"] == "writer" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    self?.addBook(title: "Dune")
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    self?.addBook(title: "The Dispossessed")
+                }
+            }
+        case "joined":
+            log("🔗 Joined library — connecting to writer…")
+        case "library":
+            log("📖 Library: \(event["name"] ?? "?")")
+        case "sync":
+            log("📥 Synced books: \(event["count"] ?? 0)")
+        case "written":
+            log("✍️ Book written to drive")
         case "peer":
-            log("✅ peer connected: \(event["info"] ?? "")")
+            log("🤝 Peer connected via \(event["via"] ?? "?")")
+        case "listening":
+            log("👂 Listening on port \(event["port"] ?? "?")")
+        case "data":
+            if let path = event["path"] as? String, let data = event["data"] {
+                log("📥 \(path): \(data)")
+            }
+        case "list":
+            let paths = event["paths"] as? [String] ?? []
+            log("📚 Books in library: \(paths.filter { $0.contains("books/") }.count)")
+        case "error":
+            log("⚠️ \(event["msg"] ?? "unknown error")")
         default:
             break
+        }
+    }
+
+    private func log(_ s: String) {
+        print("BareSpike: \(s)")
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .spikeLog, object: s)
+        }
+        let line = "\(Date()): \(s)\n"
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("spike.log")
+        if let handle = FileHandle(forWritingAtPath: url.path) {
+            handle.seekToEndOfFile()
+            handle.write(Data(line.utf8))
+            handle.closeFile()
+        } else {
+            try? line.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+}
+
+// MARK: - UI
+
+struct RootView: View {
+    @State private var logLines: [String] = []
+    @State private var libraryName = "My Library"
+    @State private var joinKey = ""
+    @State private var bookTitle = ""
+    @State private var writerHost = ""
+    let appDelegate: AppDelegate
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if appDelegate.role == .none {
+                HStack {
+                    TextField("Library name", text: $libraryName)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Create") { appDelegate.createLibrary(name: libraryName) }
+                        .buttonStyle(.borderedProminent)
+                }
+                HStack {
+                    TextField("Join key (from writer)", text: $joinKey)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    Button("Join") { appDelegate.joinLibrary(key: joinKey.trimmingCharacters(in: .whitespaces)) }
+                        .buttonStyle(.borderedProminent)
+                }
+            } else if appDelegate.role == .writer {
+                HStack {
+                    TextField("Book title", text: $bookTitle)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Add Book") {
+                        appDelegate.addBook(title: bookTitle)
+                        bookTitle = ""
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(bookTitle.isEmpty)
+                }
+                if let key = appDelegate.driveKey {
+                    Text("Join key:\n\(key)")
+                        .font(.system(size: 10, design: .monospaced))
+                        .textSelection(.enabled)
+                }
+            } else {
+                HStack {
+                    TextField("Writer's IP (same Wi-Fi)", text: $writerHost)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                        .keyboardType(.decimalPad)
+                    Button("Connect") { appDelegate.connectToWriter(writerHost) }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(logLines.enumerated().reversed()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 11, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .onReceive(NotificationCenter.default.publisher(for: .spikeLog)) { note in
+            if let line = note.object as? String { logLines.append(line) }
+            if logLines.count > 200 { logLines.removeFirst(logLines.count - 200) }
         }
     }
 }
@@ -135,20 +298,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 @main
 struct BareSpikeApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    // Status mirror: AppDelegate.log() updates this via the notification.
-    @State private var status: String = "Bare spike — starting…"
-
     var body: some Scene {
-        WindowGroup {
-            Text(status)
-                .font(.system(.body, design: .monospaced))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(16)
-                .onReceive(NotificationCenter.default.publisher(for: .spikeLog)) { note in
-                    status = note.object as? String ?? ""
-                }
-        }
+        WindowGroup { RootView(appDelegate: delegate) }
     }
 }
 

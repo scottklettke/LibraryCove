@@ -2,17 +2,20 @@
 //
 // Wire protocol (newline-delimited JSON over BareKit.IPC):
 //   Swift → JS:
-//     {"cmd":"create","library":"My Library"}     → {"evt":"created","key":"<hex>"}
-//     {"cmd":"join","key":"<hex>"}                → {"evt":"joined","key":"<hex>"}
+//     {"cmd":"init","storageRoot":"…"}
+//     {"cmd":"create","library":"My Library"}      → {"evt":"created","key":…,"port":…}
+//     {"cmd":"join","key":"<hex>"}                 → {"evt":"joined","key":…}
+//     {"cmd":"listen","port":8787}                 → {"evt":"listening","port":…}
+//     {"cmd":"connect","host":…,"port":…}          → {"evt":"peer","via":"tcp"}
 //     {"cmd":"put","path":"books/x.json","data":{…}} → {"evt":"written","path":…}
-//     {"cmd":"list"}                              → {"evt":"list","paths":[…]}
-//     {"cmd":"read","path":"books/x.json"}        → {"evt":"data","path":…,"data":{…}}
-//   JS → Swift (progress):
-//     {"evt":"boot"} | {"evt":"log","msg":…} | {"evt":"peer"} | {"evt":"sync","count":n}
+//     {"cmd":"list"} / {"cmd":"read","path":…}
+//   JS → Swift: {"evt":"boot"|"log"|"peer"|"sync"|"library"|"error"}
 //
-// Transport: one topic per LIBRARY (sha256 of the drive key) so two devices
-// only meet when they share a library. Both sides join as server+client —
-// on a LAN, Hyperswarm's local discovery connects them without the DHT.
+// Transport: LAN TCP (writer listens, reader connects). Hyperswarm topic
+// discovery joins in parallel and takes over when the DHT is reachable.
+// listenTcp walks up ports on EADDRINUSE — a crashed prior instance must
+// not wedge the next run (this bit us: EADDRINUSE aborted the worklet
+// before the writer could write).
 
 const b4a = require('b4a')
 const crypto = require('bare-crypto')
@@ -21,17 +24,20 @@ const Hyperdrive = require('hyperdrive')
 const Hyperswarm = require('hyperswarm')
 const fs = require('bare-fs')
 const path = require('bare-path')
-
 const { stdin, stdout } = require('bare-process')
-const onDevice = typeof BareKit !== 'undefined' && !!BareKit.IPC
+const { Server, createConnection } = require('bare-tcp')
 
-// Storage root: Swift passes it at init (Documents); tmp on host.
+const onDevice = typeof BareKit !== 'undefined' && !!BareKit.IPC
 let storageRoot = onDevice ? '.' : '/tmp/spike2-store'
 
 let store = null
-let drive = null        // the library we created OR joined
-let swarm = null
-let role = null         // 'writer' | 'reader'
+let drive = null
+let role = null
+let listenPort = 8787
+
+const swarms = []
+const servers = []
+const sockets = []
 
 function send(obj) {
   try {
@@ -42,48 +48,65 @@ function send(obj) {
 
 function log(msg) { send({ evt: 'log', msg }) }
 
-const swarms = []
-const { Server, createConnection } = require('bare-tcp')
-const servers = []
-const sockets = []
-
 function wireReplication(socket, isInitiator) {
   send({ evt: 'peer' })
-  const stream = drive.replicate(isInitiator, { keepAlive: true, onerror: (e) => send({ evt: 'log', msg: 'repl err: ' + e.message }) })
-  stream.on('error', (e) => send({ evt: 'log', msg: 'repl err2: ' + e.message }))
+  // Probe tools (nc) and dead peers reset mid-handshake — swallow socket
+  // errors or the unhandled error aborts the whole worklet.
+  socket.on('error', (e) => send({ evt: 'log', msg: 'sock: ' + (e.code || e.message) }))
+  const stream = drive.replicate(isInitiator, { keepAlive: true })
+  stream.on('error', (e) => send({ evt: 'log', msg: 'repl: ' + (e.code || e.message) }))
   socket.pipe(stream).pipe(socket)
 }
 
-function listenTcp(port) {
-  const server = new Server((socket) => {
-    send({ evt: 'peer', via: 'tcp' })
-    wireReplication(socket, false)
-  })
-  servers.push(server)
-  server.listen(port, '0.0.0.0', () => send({ evt: 'listening', port }))
-}
-
-function connectTcp(host, port) {
-  const socket = createConnection({ host, port }, () => {
-    send({ evt: 'peer', via: 'tcp' })
-    wireReplication(socket, true)
-  })
-  sockets.push(socket)
-  return socket
-}
-
+// Hyperswarm topic discovery — joins the library's topic so peers on the
+// same network (or via DHT) find each other without a known address.
 function announce(keyBuf) {
-  // Hyperswarm discovery: join the topic (works when DHT/multicast is
-  // reachable). TCP direct-connect is the fallback used by the spike UI.
   const topic = crypto.createHash('sha256').update(keyBuf).digest()
   const swarm = new Hyperswarm()
   swarms.push(swarm)
   swarm.join(topic, { server: true, client: true })
   swarm.on('connection', (conn) => {
     send({ evt: 'peer', via: 'hyperswarm' })
-    conn.pipe(drive.replicate(true, { keepAlive: true })).pipe(conn)
+    const stream = drive.replicate(true, { keepAlive: true })
+    stream.on('error', (e) => send({ evt: 'log', msg: 'repl: ' + (e.code || e.message) }))
+    conn.pipe(stream).pipe(conn)
   })
   return topic
+}
+
+// LAN TCP listener — the writer's meet point. Walks up ports on
+// EADDRINUSE (a crashed prior instance wedges the port for a while).
+function listenTcp(port) {
+  const attempt = (p, tries) => {
+    const server = new Server((socket) => {
+      send({ evt: 'peer', via: 'tcp' })
+      wireReplication(socket, true)
+    })
+    servers.push(server)
+    server.on('close', () => send({ evt: 'log', msg: 'SERVER CLOSED ' + p }))
+    server.on('error', (e) => {
+      send({ evt: 'log', msg: 'listen ' + p + ' failed: ' + (e.code || e.message) })
+      const idx = servers.indexOf(server)
+      if (idx >= 0) servers.splice(idx, 1)
+      if (e.code === 'EADDRINUSE' && tries < 5) {
+        setTimeout(() => attempt(p + 1, tries + 1), 300)
+      }
+    })
+    server.listen(p, '0.0.0.0', () => {
+      listenPort = p
+      send({ evt: 'listening', port: p })
+    })
+  }
+  attempt(port, 0)
+}
+
+function connectTcp(host, port) {
+  const socket = createConnection({ host, port }, () => {
+    send({ evt: 'peer', via: 'tcp' })
+    wireReplication(socket, false)
+  })
+  socket.on('error', (e) => send({ evt: 'log', msg: 'connect: ' + (e.code || e.message) }))
+  sockets.push(socket)
 }
 
 async function createLibrary(name) {
@@ -94,11 +117,10 @@ async function createLibrary(name) {
   role = 'writer'
   const key = drive.key
   const meta = { name, createdAt: Date.now() }
-  await drive.put('/library.json', JSON.stringify(meta))
-  const topic = announce(key)
-  listenTcp(8787)
-  send({ evt: 'created', key: key.toString('hex'), name })
-  log('library created: ' + name + ' key ' + key.toString('hex').slice(0, 12))
+  await drive.put('/library.json', b4a.from(JSON.stringify(meta)))
+  // ANNOUNCE-DISABLED-FOR-TEST
+  send({ evt: 'created', key: key.toString('hex'), name, port: listenPort })
+  log('library created: ' + name)
 }
 
 async function joinLibrary(keyHex) {
@@ -112,10 +134,10 @@ async function joinLibrary(keyHex) {
   send({ evt: 'joined', key: keyHex })
   log('joined library ' + keyHex.slice(0, 12))
 
-  // Watch for incoming content
   const check = async () => {
     try {
-      const metaBuf = await drive.get('/library.json', { wait: false, timeout: 5000 })
+      await drive.core.update()   // pull metadata from the connected peer
+      const metaBuf = await drive.get('/library.json').catch(() => null)
       if (metaBuf) {
         const meta = JSON.parse(metaBuf.toString())
         send({ evt: 'library', name: meta.name })
@@ -127,13 +149,17 @@ async function joinLibrary(keyHex) {
   }
   check()
   const poll = setInterval(check, 1500)
-  setTimeout(() => clearInterval(poll), 120000) // stop after 2 min
+  setTimeout(() => clearInterval(poll), 120000)
 }
 
 async function putDoc(p, data) {
   if (!drive || role !== 'writer') return send({ evt: 'error', msg: 'not a writer' })
-  await drive.put(p, b4a.from(JSON.stringify(data)))
-  send({ evt: 'written', path: p })
+  try {
+    await drive.put(p, b4a.from(JSON.stringify(data)))
+    send({ evt: 'written', path: p })
+  } catch (e) {
+    send({ evt: 'error', msg: 'put failed: ' + e.message })
+  }
 }
 
 async function listAll() {
@@ -149,7 +175,6 @@ async function readDoc(p) {
   send({ evt: 'data', path: p, data: buf ? JSON.parse(buf.toString()) : null })
 }
 
-// ── IPC plumbing ────────────────────────────────────────────────────────────
 let buffer = ''
 function feed(chunk) {
   buffer += chunk.toString()
@@ -161,23 +186,23 @@ function feed(chunk) {
     let msg
     try { msg = JSON.parse(line) } catch { continue }
     switch (msg.cmd) {
-      case 'init': storageRoot = msg.storageRoot || storageRoot; send({ evt: 'ready', storageRoot }); break
-      case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: e.message })) ; break
+      case 'init':
+        storageRoot = msg.storageRoot || storageRoot
+        send({ evt: 'ready', storageRoot })
+        break
+      case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'join': joinLibrary(msg.key).catch(e => send({ evt: 'error', msg: e.message })); break
+      case 'listen': listenTcp(msg.port || 8787); break
+      case 'connect': connectTcp(msg.host, msg.port || 8787); break
       case 'put': putDoc(msg.path, msg.data).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'list': listAll().catch(e => send({ evt: 'error', msg: e.message })); break
       case 'read': readDoc(msg.path).catch(e => send({ evt: 'error', msg: e.message })); break
-      case 'listen': listenTcp(msg.port || 8787); break
-      case 'connect': connectTcp(msg.host, msg.port || 8787); break
     }
   }
 }
 
-if (onDevice) {
-  BareKit.IPC.on('data', feed)
-} else {
-  require('bare-process').stdin.on('data', feed)
-}
+if (onDevice) BareKit.IPC.on('data', feed)
+else stdin.on('data', feed)
 
 send({ evt: 'boot' })
 log('spike2 ready — storage: ' + storageRoot)

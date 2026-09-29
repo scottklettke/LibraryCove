@@ -24,13 +24,15 @@ const Hyperdrive = require('hyperdrive')
 const Hyperswarm = require('hyperswarm')
 const fs = require('bare-fs')
 const path = require('bare-path')
-const { stdin, stdout } = require('bare-process')
+// bare-process module IS the process object (bare has no global process)
+const _process = require('bare-process')
+const { stdin, stdout } = _process
 const { Server, createConnection } = require('bare-tcp')
 
 // Unhandled stream errors must never abort the worklet (bare aborts on
 // uncaught exceptions — a failed noise handshake killed a whole session).
-require('bare-process').process.on('unhandledRejection', (e) => send({ evt: 'log', msg: 'unhandled: ' + (e && e.message ? e.message : e) }))
-require('bare-process').process.on('uncaughtException', (e) => send({ evt: 'log', msg: 'uncaught: ' + (e && e.message ? e.message : e) }))
+_process.on('unhandledRejection', (e) => send({ evt: 'log', msg: 'unhandled: ' + (e && e.message ? e.message : e) }))
+_process.on('uncaughtException', (e) => send({ evt: 'log', msg: 'uncaught: ' + (e && e.message ? e.message : e) }))
 
 const onDevice = typeof BareKit !== 'undefined' && !!BareKit.IPC
 let storageRoot = onDevice ? '.' : '/tmp/spike2-store'

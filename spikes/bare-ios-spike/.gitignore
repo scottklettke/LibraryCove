@@ -4,4 +4,9 @@ DerivedData/
 *.xcodeproj
 xcuserdata/
 build/
-bare-universal.bundle
+addons/
+addons-flat/
+BareKit.xcframework/
+*.bundle
+!tiny.js
+!pure.js

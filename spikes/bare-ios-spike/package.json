@@ -6,6 +6,8 @@
     "bundle": "bare-pack entry.js --host ios-arm64 --linked --defer fs --defer path -o bare-ios.bundle && bare-pack entry.js --host ios-arm64-simulator --linked --defer fs --defer path -o bare-ios-sim.bundle"
   },
   "dependencies": {
+    "autobase": "7.25.1",
+    "b4a": "1.8.0",
     "bare": "1.34.0",
     "bare-abort": "2.0.13",
     "bare-buffer": "3.7.1",
@@ -14,6 +16,7 @@
     "bare-events": "2.8.2",
     "bare-fs": "4.8.1",
     "bare-hrtime": "2.1.2",
+    "bare-inspect": "3.1.10",
     "bare-module": "7.0.3",
     "bare-module-lexer": "1.6.7",
     "bare-os": "3.9.3",
@@ -30,18 +33,15 @@
     "bare-tty": "5.1.2",
     "bare-type": "1.1.1",
     "bare-url": "2.5.4",
-    "b4a": "1.8.0",
+    "blind-peering": "2.0.1",
+    "corestore": "7.8.0",
+    "hyperbee": "2.27.3",
     "hypercore": "11.26.0",
     "hypercore-crypto": "3.6.1",
-    "hyperbee": "2.27.3",
     "hyperdht": "6.33.0",
     "hyperswarm": "4.17.0",
-    "corestore": "7.8.0",
-    "autobase": "7.25.1",
-    "blind-peering": "2.0.1",
-    "sodium-universal": "5.0.1",
-    "streamx": "2.23.0",
     "keet-identity-key": "3.1.0",
-    "bare-inspect": "3.1.10"
+    "sodium-universal": "5.0.1",
+    "streamx": "2.23.0"
   }
 }

@@ -12,7 +12,46 @@
 // the DHT path is reachable — the replication protocol is identical.
 
 import BareKit
+import Network
 import SwiftUI
+
+/// Pokes the local network once at boot so iOS shows the Local Network
+/// permission prompt (Hyperswarm's device-to-device discovery is otherwise
+/// silently blocked — the app never appears in Settings → Local Network
+/// unless something actually sends a multicast/broadcast packet).
+enum LocalNetworkProbe {
+    static func trigger() {
+        let connection = NWConnection(host: "255.255.255.255", port: 5353, using: .udp)
+        connection.stateUpdateHandler = { _ in }
+        connection.send(content: Data([0]), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
+        connection.start(queue: .global())
+    }
+}
+
+/// The device's Wi-Fi (en0) IPv4 address — shown on the writer so the
+/// reader can type it into Connect when auto-discovery fails.
+enum DeviceIP {
+    static func wifi() -> String? {
+        var address: String?
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        var ptr: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = ptr {
+            let name = String(cString: current.pointee.ifa_name)
+            if name == "en0", let sa = current.pointee.ifa_addr {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                if getnameinfo(sa, socklen_t(sa.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
+                    address = String(cString: host)
+                }
+            }
+            ptr = current.pointee.ifa_next
+        }
+        freeifaddrs(first)
+        return address
+    }
+}
 
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
@@ -25,6 +64,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        LocalNetworkProbe.trigger()
         startWorklet()
         return true
     }
@@ -288,7 +328,11 @@ struct RootView: View {
                 }
                 if let key = writerKey {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Join key — paste into Join on the other device:")
+                        Text("Your IP for manual connect (reader types this): " + (DeviceIP.wifi() ?? "?") + ":8787")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            Text("Join key — paste into Join on the other device:")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {

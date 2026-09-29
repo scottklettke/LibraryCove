@@ -231,7 +231,13 @@ struct RootView: View {
     @State private var joinKey = ""
     @State private var bookTitle = ""
     @State private var writerHost = ""
+    @State private var copied = false
     let appDelegate: AppDelegate
+
+    /// Writer's join key — surfaced with a Copy button.
+    private var writerKey: String? {
+        appDelegate.role == .writer ? appDelegate.driveKey : nil
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -261,20 +267,60 @@ struct RootView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(bookTitle.isEmpty)
                 }
-                if let key = appDelegate.driveKey {
-                    Text("Join key:\n\(key)")
-                        .font(.system(size: 10, design: .monospaced))
-                        .textSelection(.enabled)
+                if let key = writerKey {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Join key — paste into Join on the other device:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Text(key)
+                                .font(.system(size: 10, design: .monospaced))
+                                .lineLimit(3)
+                                .textSelection(.enabled)
+                            Button {
+                                UIPasteboard.general.string = key
+                                copied = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                            } label: {
+                                Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
                 }
             } else {
-                HStack {
-                    TextField("Writer's IP (same Wi-Fi)", text: $writerHost)
-                        .textFieldStyle(.roundedBorder)
-                        .autocorrectionDisabled()
-                        .keyboardType(.decimalPad)
-                    Button("Connect") { appDelegate.connectToWriter(writerHost) }
-                        .buttonStyle(.borderedProminent)
+                // READER: after joining, devices on the same Wi-Fi usually
+                // find each other automatically (Hyperswarm). The manual
+                // IP fallback stays for networks that block discovery.
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        TextField("Writer's IP — only if auto-discovery fails", text: $writerHost)
+                            .textFieldStyle(.roundedBorder)
+                            .autocorrectionDisabled()
+                            .keyboardType(.numbersAndPunctuation)
+                        Button("Connect") { appDelegate.connectToWriter(writerHost) }
+                            .buttonStyle(.bordered)
+                            .disabled(writerHost.isEmpty)
+                    }
+                    Text("Waiting for the writer… discovery runs automatically. If nothing happens in ~30s, ask the writer for their IP (shown on their screen) and tap Connect.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
+            }
+
+            HStack {
+                Button {
+                    UIPasteboard.general.string = logLines.joined(separator: "\n")
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
+                } label: {
+                    Label(copied ? "Logs copied" : "Copy logs", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                Spacer()
+                Text("\(logLines.count) lines")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
 
             ScrollView {
@@ -283,6 +329,7 @@ struct RootView: View {
                         Text(line)
                             .font(.system(size: 11, design: .monospaced))
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
                     }
                 }
             }

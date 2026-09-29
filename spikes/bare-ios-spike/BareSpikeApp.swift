@@ -66,9 +66,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
         #if targetEnvironment(simulator)
         let bundleName = "spike2-sim"
+        let device = "simulator"
         #else
         let bundleName = "spike2-ios"
+        let device = UIDevice.current.name
         #endif
+        log("device: \(device)")
 
         guard let bundleURL = Bundle.main.url(forResource: bundleName, withExtension: "bundle"),
               let source = try? String(contentsOf: bundleURL, encoding: .utf8) else {

@@ -1,0 +1,22 @@
+const Corestore = require('corestore')
+const Hyperdrive = require('hyperdrive')
+const Hyperswarm = require('hyperswarm')
+const crypto = require('bare-crypto')
+
+const store = new Corestore('/tmp/hd-test/alice-store')
+const drive = new Hyperdrive(store)
+drive.ready().then(async () => {
+  console.log('alice drive key:', drive.key.toString('hex'))
+  await drive.put('/books/book-1.json', JSON.stringify({ title: 'Dune', author: 'Frank Herbert' }))
+  const swarm = new Hyperswarm()
+  const topic = crypto.createHash('sha256').update('librarycove-spike-2').digest()
+  swarm.join(topic, { server: true, client: false })
+  swarm.on('connection', (conn) => {
+    console.log('alice: swarm connection opened')
+    console.log('alice: peer connected')
+    swarm.configure(conn, { topic })
+    conn.pipe(drive.replicate(conn, { keepAlive: true })).pipe(conn)
+  })
+  console.log('alice topic:', topic.toString('hex'))
+  console.log('alice announcing, waiting for bob...')
+})

@@ -19,7 +19,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     private func log(_ s: String) {
         print("BareSpike: \(s)")
-        NotificationCenter.default.post(name: .spikeLog, object: s)
+        // BareKit's readable callback fires on ITS thread; SwiftUI observes
+        // .spikeLog, so the notification must land on main.
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .spikeLog, object: s)
+        }
         let line = "\(Date()): \(s)\n"
         let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("spike.log")

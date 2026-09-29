@@ -29,8 +29,8 @@ const { Server, createConnection } = require('bare-tcp')
 
 // Unhandled stream errors must never abort the worklet (bare aborts on
 // uncaught exceptions — a failed noise handshake killed a whole session).
-process.on('unhandledRejection', (e) => send({ evt: 'log', msg: 'unhandled: ' + (e && e.message ? e.message : e) }))
-process.on('uncaughtException', (e) => send({ evt: 'log', msg: 'uncaught: ' + (e && e.message ? e.message : e) }))
+require('bare-process').process.on('unhandledRejection', (e) => send({ evt: 'log', msg: 'unhandled: ' + (e && e.message ? e.message : e) }))
+require('bare-process').process.on('uncaughtException', (e) => send({ evt: 'log', msg: 'uncaught: ' + (e && e.message ? e.message : e) }))
 
 const onDevice = typeof BareKit !== 'undefined' && !!BareKit.IPC
 let storageRoot = onDevice ? '.' : '/tmp/spike2-store'

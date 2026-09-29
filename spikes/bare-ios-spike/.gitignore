@@ -1,0 +1,7 @@
+node_modules/
+.build/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+build/
+bare-universal.bundle

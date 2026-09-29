@@ -70,8 +70,8 @@ function announce(keyBuf) {
   // fails, the next log paste shows exactly where discovery stalls.
   const dht = swarm.dht
   dht.on('boot', () => send({ evt: 'log', msg: 'dht: bootstrapped' }))
-  dht.on('nat-update', (firewalled, remote) => {
-    send({ evt: 'log', msg: 'dht: nat-update firewalled=' + firewalled + ' remote=' + remote })
+  dht.on('nat-update', (...args) => {
+    send({ evt: 'log', msg: 'dht: nat-update ' + JSON.stringify(args).slice(0, 200) })
   })
   dht.on('error', (e) => send({ evt: 'log', msg: 'dht error: ' + (e.code || e.message) }))
   swarm.on('connection', (conn) => {
@@ -136,7 +136,7 @@ async function createLibrary(name) {
   const key = drive.key
   const meta = { name, createdAt: Date.now() }
   await drive.put('/library.json', b4a.from(JSON.stringify(meta)))
-  // ANNOUNCE-DISABLED-FOR-TEST
+  const topic = announce(key)
   send({ evt: 'created', key: key.toString('hex'), name, port: listenPort })
   log('library created: ' + name)
 }

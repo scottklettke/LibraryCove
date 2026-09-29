@@ -16,3 +16,4 @@ bare-ios.bundle
 min-ios-sim.bundle
 min-entry.js
 *.backup-test
+pearcal-lock-reference.json

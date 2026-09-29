@@ -10,3 +10,9 @@ BareKit.xcframework/
 *.bundle
 !tiny.js
 !pure.js
+bare-host.bundle
+bare-ios-sim.bundle
+bare-ios.bundle
+min-ios-sim.bundle
+min-entry.js
+*.backup-test

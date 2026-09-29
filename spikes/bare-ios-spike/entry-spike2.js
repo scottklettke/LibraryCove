@@ -65,12 +65,30 @@ function announce(keyBuf) {
   const swarm = new Hyperswarm()
   swarms.push(swarm)
   swarm.join(topic, { server: true, client: true })
+  // Discovery diagnostics: bare hosts log nothing by default, so surface
+  // the DHT lifecycle — if bootstrap never completes or holepunching
+  // fails, the next log paste shows exactly where discovery stalls.
+  const dht = swarm.dht
+  dht.on('boot', () => send({ evt: 'log', msg: 'dht: bootstrapped' }))
+  dht.on('nat-update', (firewalled, remote) => {
+    send({ evt: 'log', msg: 'dht: nat-update firewalled=' + firewalled + ' remote=' + remote })
+  })
+  dht.on('error', (e) => send({ evt: 'log', msg: 'dht error: ' + (e.code || e.message) }))
   swarm.on('connection', (conn) => {
     send({ evt: 'peer', via: 'hyperswarm' })
     const stream = drive.replicate(true, { keepAlive: true })
     stream.on('error', (e) => send({ evt: 'log', msg: 'repl: ' + (e.code || e.message) }))
     conn.pipe(stream).pipe(conn)
   })
+  // Periodic peer-count heartbeat so a silent stall is visible in logs.
+  let beats = 0
+  const beat = setInterval(() => {
+    beats++
+    let peers = 0
+    for (const c of swarm.connections) peers++
+    send({ evt: 'log', msg: 'discovery beat ' + beats + ': peers=' + peers })
+    if (beats >= 10) clearInterval(beat)
+  }, 10000)
   return topic
 }
 

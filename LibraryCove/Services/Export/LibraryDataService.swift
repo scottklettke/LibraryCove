@@ -450,16 +450,96 @@ enum LibraryDataService {
     static func copyArchive(data: Data, context: ModelContext) throws -> ImportSummary {
         var loaded = try loadArchive(data)
         let activeLibraryID = LibraryScope.shared.activeID(context: context)
-        let existingBookIDs = Set(((try? context.fetch(FetchDescriptor<Book>(
-            predicate: #Predicate { $0.libraryID == activeLibraryID }
-        ))) ?? []).map(\.id))
-        if !existingBookIDs.isEmpty {
-            loaded.envelope.books = loaded.envelope.books.filter { !existingBookIDs.contains($0.id) }
+        // Id-skip across ALL libraries, not just the active one: on a
+        // CloudKit store the pour can run BEFORE the first mirror import
+        // lands (launch order), so the active-library filter saw nothing
+        // and re-inserted every archive row — each launch with a pending
+        // snapshot compounded copies. A row with the same id in ANY
+        // library is already present; re-tag it into the active library
+        // below instead of inserting a twin.
+        let existingBookIDs = Set(((try? context.fetch(FetchDescriptor<Book>())) ?? []).map(\.id))
+        let fresh = loaded.envelope.books.filter { !existingBookIDs.contains($0.id) }
+        if fresh.count != loaded.envelope.books.count {
+            // Same-id rows whose library no longer exists in the registry
+            // (a reset re-created the active library with a different id)
+            // follow the pour's destination so they rejoin the visible
+            // library instead of stranding in a deleted one. Rows in
+            // LIVE libraries stay put — a same-id row in another library
+            // is legitimate placement, not an orphan.
+            let liveLibraryIDs = Set(LibraryScope.shared.all(context: context).map(\.id))
+            for book in try context.fetch(FetchDescriptor<Book>())
+            where existingBookIDs.contains(book.id) && !(book.libraryID.map(liveLibraryIDs.contains) ?? false) {
+                book.libraryID = activeLibraryID
+            }
         }
+        loaded.envelope.books = fresh
         restoreCovers(from: &loaded.envelope, files: loaded.files)
         insert(loaded.envelope, into: context)
         try context.save()
         return ImportSummary(loaded.envelope)
+    }
+
+    /// Counts rows deduplicateBooks would remove, without touching data.
+    static func previewDuplicateBooks(context: ModelContext) -> Int {
+        duplicateBooks(context: context).count
+    }
+
+    /// Rows that would be removed per the dedupe rule (see
+    /// deduplicateBooks) — the oldest row per (library, ISBN-else-
+    /// title+authors key) survives; later twins are returned.
+    private static func duplicateBooks(context: ModelContext) -> [Book] {
+        let books = (try? context.fetch(FetchDescriptor<Book>())) ?? []
+        var kept: [String: Book] = [:]   // key -> oldest row
+        var toDelete: [Book] = []
+        for book in books {
+            let key = duplicateKey(for: book)
+            if let existing = kept[key] {
+                let existingDate = existing.createdAt
+                let newDate = book.createdAt
+                if newDate < existingDate {
+                    // The current book is older: keep it, drop the stored one.
+                    kept[key] = book
+                    toDelete.append(existing)
+                } else {
+                    toDelete.append(book)
+                }
+            } else {
+                kept[key] = book
+            }
+        }
+        return toDelete
+    }
+
+    private static func duplicateKey(for book: Book) -> String {
+        let libraryID = book.libraryID ?? ""
+        if let isbn = Book.normalizedISBN(book.isbn) {
+            return "\(libraryID)|isbn|\(isbn)"
+        }
+        let t = book.title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let a = book.authors.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }.sorted().joined(separator: "|")
+        return "\(libraryID)|title|\(t)|\(a)"
+    }
+
+    /// Removes unintended duplicate Book rows within each library — rows
+    /// sharing the same normalized ISBN / title+authors key (re-added
+    /// after a reset while CloudKit still held the originals, or poured
+    /// repeatedly by a pending snapshot). Keeps the OLDEST row per key so
+    /// reading status and notes on the first copy survive; later rows are
+    /// deleted so CloudKit propagates the removals to the other device.
+    /// EXPLICITLY user-invoked only (Settings → Advanced): intentional
+    /// duplicate copies are first-class data, identical in shape to an
+    /// accidental flood, so this must never run on its own. Ids are never
+    /// rewritten (re-keying would fabricate duplicates on the peer
+    /// through the mirror).
+    static func deduplicateBooks(context: ModelContext) -> Int {
+        let toDelete = duplicateBooks(context: context)
+        guard !toDelete.isEmpty else { return 0 }
+        for row in toDelete {
+            context.delete(row)
+        }
+        try? context.save()
+        return toDelete.count
     }
 
     private static func knownBookKeys(context: ModelContext) -> (isbns: Set<String>, titleKeys: Set<String>) {

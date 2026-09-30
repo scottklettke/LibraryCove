@@ -14,15 +14,27 @@ struct AdvancedSettingsView: View {
     @State private var showDeleteEverythingConfirm = false
     @State private var showDeleteTypeConfirm = false
     @State private var deleteConfirmText = ""
+    /// Explicit user-invoked duplicate cleanup: books that arrived as
+    /// unintended copies (mirror re-delivery after a reset, snapshot
+    /// pours racing the first CloudKit import). Copies the user added
+    /// deliberately are identical in shape to the flood — so this never
+    /// runs automatically; the user decides from a live preview.
+    @State private var duplicatePreviewCount = 0
+    @State private var showDuplicateConfirm = false
+    @State private var dedupeDoneCount: Int?
 
     var body: some View {
         Form {
+            duplicateCleanupSection
             aiLogsSection
             startFreshSection
         }
         .navigationTitle("Advanced")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { reloadLogs() }
+        .onAppear {
+            reloadLogs()
+            duplicatePreviewCount = LibraryDataService.previewDuplicateBooks(context: modelContext)
+        }
         .alert(
             "Delete everything and start fresh?",
             isPresented: $showDeleteEverythingConfirm
@@ -49,6 +61,39 @@ struct AdvancedSettingsView: View {
     }
 
     // MARK: - Sections
+
+    private var duplicateCleanupSection: some View {
+        Section {
+            if let removed = dedupeDoneCount {
+                Text(removed == 0 ? "No duplicates found." : "Removed \(removed) duplicate book\(removed == 1 ? "" : "s").")
+                    .foregroundStyle(.secondary)
+            }
+            Button(role: .destructive) {
+                showDuplicateConfirm = true
+            } label: {
+                Label("Remove duplicate books", systemImage: "square.stack.3d.down.right")
+            }
+            .disabled(duplicatePreviewCount == 0)
+        } header: {
+            Text("Duplicate cleanup")
+        } footer: {
+            if duplicatePreviewCount > 0 {
+                Text("\(duplicatePreviewCount) unintended duplicate book\(duplicatePreviewCount == 1 ? "" : "s") found (same title/authors/ISBN within a library, keeping the oldest). Copies you added on purpose look identical to accidental ones — review the library after, and re-add anything removed by mistake. Changes sync to your other devices.")
+            } else {
+                Text("No unintended duplicate books detected. Extra copies you add on purpose are never touched by sync or cleanup.")
+            }
+        }
+        .alert("Remove \(duplicatePreviewCount) duplicate book\(duplicatePreviewCount == 1 ? "" : "s")?",
+               isPresented: $showDuplicateConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Remove", role: .destructive) {
+                dedupeDoneCount = LibraryDataService.deduplicateBooks(context: modelContext)
+                duplicatePreviewCount = LibraryDataService.previewDuplicateBooks(context: modelContext)
+            }
+        } message: {
+            Text("Within each library, when several rows share the same ISBN or title+authors, the oldest is kept and the rest are removed. This cannot be undone. If you keep intentional extra copies, re-add them afterwards.")
+        }
+    }
 
     private var aiLogsSection: some View {
         Section {
@@ -217,6 +262,11 @@ struct AdvancedSettingsView: View {
         // A full reset behaves like a brand-new install: the provider
         // choice returns to the default (.iCloud) on next launch.
         SyncSettings.resetProvider()
+        // A stale pending-sync-migration.zip would re-pour its archive at
+        // EVERY launch (finishPendingMigrationIfNeeded) — the compounding
+        // duplicate-book flood after resets. A factory reset has no
+        // migration to finish.
+        SyncSettings.clearSnapshot()
         wipeAIRemnantsAndSearchHistory()
         // Same for Hardcover: the OAuth refresh token (or pasted PAT) must
         // not survive a factory reset in the Keychain. Revoking server-side

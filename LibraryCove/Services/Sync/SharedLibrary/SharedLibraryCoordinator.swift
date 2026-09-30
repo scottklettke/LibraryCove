@@ -171,6 +171,9 @@ enum SharedLibraryCoordinator {
         Persistence.swapShared(to: destination.container)
         SyncSettings.selectedProvider = destination.kind
         SharedLibrarySettings.previousProvider = nil
+        // beginShare wrote a pour snapshot; the move home consumed it —
+        // a leftover file would re-pour the archive at every launch.
+        SyncSettings.clearSnapshot()
     }
 
     /// Owner stops sharing: everyone loses access to the share. The owner's
@@ -201,6 +204,8 @@ enum SharedLibraryCoordinator {
         Persistence.swapShared(to: destination.container)
         SyncSettings.selectedProvider = destination.kind
         SharedLibrarySettings.previousProvider = nil
+        // Same as leave(): the pour snapshot is consumed by the move home.
+        SyncSettings.clearSnapshot()
     }
 
     /// Tears the ACTIVE library's share down WITHOUT bringing any content
@@ -226,6 +231,9 @@ enum SharedLibraryCoordinator {
         SharedLibrarySettings.previousProvider = nil
         try? FileManager.default.removeItem(at: SwiftDataSharedLibrarySync.storeURL)
         SharedLibraryMirror.removeAllIndexes()
+        // Deliberate discard: any pending pour snapshot is stale by
+        // definition — never re-pour it at the next launch.
+        SyncSettings.clearSnapshot()
     }
 
     /// Factory-reset variant of `discardSharedContent`: tears down EVERY

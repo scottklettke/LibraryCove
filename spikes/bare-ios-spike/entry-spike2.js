@@ -158,6 +158,7 @@ async function createLibrary(name) {
   const topic = announce(key)
   send({ evt: 'created', key: key.toString('hex'), primaryKey: store.primaryKey.toString('hex'), name, port: listenPort })
   log('library created: ' + name)
+  startPolling()
 }
 
 async function joinLibrary(keyHex, primaryKeyHex) {

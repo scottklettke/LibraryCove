@@ -198,6 +198,13 @@ function startPolling() {
           send({ evt: 'library', name: meta.name })
           lastSyncCount = count
           lastSyncName = meta.name
+          // include titles so content sync is verifiable in logs
+          const titles = []
+          for await (const entry of drive.list('/books')) {
+            const b = await drive.get(entry.key).catch(() => null)
+            if (b) { try { titles.push(JSON.parse(b.toString()).title) } catch {} }
+          }
+          send({ evt: 'books', titles })
         }
       }
     } catch {}
@@ -248,7 +255,7 @@ function feed(chunk) {
         storageRoot = msg.storageRoot || storageRoot
         send({ evt: 'ready', storageRoot })
         break
-      case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: e.message })); break
+      case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: 'create failed: ' + e.message })); break
       case 'join': joinLibrary(msg.key, msg.primaryKey).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'listen': listenTcp(msg.port || 8787); break
       case 'connect': connectTcp(msg.host, msg.port || 8787); break

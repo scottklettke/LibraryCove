@@ -3,7 +3,16 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
-## 0.5.4 (2026-09-29)
+## 0.5.4 (2026-09-30)
+
+### Fixed — Sync status diagnosis
+
+- **Sync errors now name the actual failing records.** When iCloud reports
+  a partial failure (some records in a batch fail while others succeed),
+  the Sync row showed only a generic "The operation couldn't be completed"
+  message. It now lists the failing records and the reason for each
+  (validation, missing record, quota), so sync problems can be identified
+  directly from the app instead of guessing.
 
 ### Fixed — Shared library joining actually works
 

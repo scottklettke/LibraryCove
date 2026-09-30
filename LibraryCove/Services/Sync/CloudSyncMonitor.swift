@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import CloudKit
 
 /// Observes NSPersistentCloudKitContainer's event stream and exposes the
 /// current iCloud sync activity for the Settings > Sync status UI.
@@ -88,7 +89,7 @@ final class CloudSyncMonitor: ObservableObject {
         } else {
             // Finished.
             if let error = event.error {
-                lastError = error.localizedDescription
+                lastError = Self.detailedMessage(for: error)
             } else {
                 lastError = nil
             }
@@ -110,5 +111,25 @@ final class CloudSyncMonitor: ObservableObject {
         case .export: return .export
         default: return .export
         }
+    }
+
+    /// `.partialFailure` (code 2) means SOME records in the batch failed;
+    /// its localizedDescription is generic ("The operation couldn't be
+    /// completed") and hides the real per-record causes. Surface the
+    /// underlying errors — they name the failing record and the actual
+    /// reason (validation, quota, zoneNotFound, …).
+    private static func detailedMessage(for error: Error) -> String {
+        guard let ckError = error as? CKError, ckError.code == .partialFailure,
+              let byItem = ckError.userInfo[CKPartialErrorsByItemIDKey] as? [CKRecord.ID: Error],
+              !byItem.isEmpty else {
+            return error.localizedDescription
+        }
+        let parts = byItem.prefix(3).map { itemID, sub -> String in
+            let subCK = sub as? CKError
+            let reason = subCK.map { String(describing: $0.code) } ?? sub.localizedDescription
+            return "\(reason) (\(itemID.recordName))"
+        }
+        let more = byItem.count > 3 ? " (+\(byItem.count - 3) more)" : ""
+        return "partialFailure: \(parts.joined(separator: "; "))\(more)"
     }
 }

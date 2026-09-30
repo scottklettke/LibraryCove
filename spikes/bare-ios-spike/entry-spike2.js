@@ -195,7 +195,7 @@ function startPolling() {
   const check = async () => {
     try {
       const before = drive.core.length
-      await drive.core.update()   // pull metadata from the connected peer
+      await drive.core.update({ force: true })   // writable sessions no-op without force
       if (drive.core.length !== before) send({ evt: 'log', msg: 'poll: metadata ' + before + ' → ' + drive.core.length })
       const metaBuf = await drive.get('/library.json').catch(() => null)
       if (metaBuf) {

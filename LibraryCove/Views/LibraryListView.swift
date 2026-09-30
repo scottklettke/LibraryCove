@@ -17,6 +17,10 @@ struct LibraryListView: View {
     @State private var renameError: String?
     @State private var shareSheetLibrary: LibraryInfo?
     @State private var shareSheetShare: CKShare?
+    /// Role picked for the link — drives the ShareLibrarySheet's copy
+    /// ("grants write access" vs view-only wording).
+    @State private var shareSheetLinkRole: ShareParticipantRole = .editor
+    @State private var showShareSheet = false
     @State private var membersSheetLibrary: LibraryInfo?
     @State private var shareActionError: String?
     @State private var leaveConfirmLibrary: LibraryInfo?
@@ -148,13 +152,16 @@ struct LibraryListView: View {
         } message: {
             Text(createError ?? "")
         }
-        .sheet(isPresented: Binding(
-            get: { shareSheetShare != nil },
-            set: { if !$0 { shareSheetShare = nil; shareSheetLibrary = nil } }
-        )) {
+        .sheet(isPresented: $showShareSheet, onDismiss: {
+            shareSheetShare = nil
+            shareSheetLibrary = nil
+        }) {
             if let share = shareSheetShare,
                let library = shareSheetLibrary, !library.id.isEmpty {
-                CloudSharingSheet(share: share, libraryID: library.id)
+                ShareLibrarySheet(library: library, share: share,
+                                  linkRole: shareSheetLinkRole) {
+                    reload()
+                }
             }
         }
         .sheet(isPresented: Binding(
@@ -394,6 +401,8 @@ struct LibraryListView: View {
             if let share = try await SharedLibraryEngine.shared.currentShare(libraryID: library.id) {
                 shareSheetShare = share
                 shareSheetLibrary = library
+                shareSheetLinkRole = SharedLibrarySettings.linkDefaultRole(libraryID: library.id)
+                showShareSheet = true
             } else {
                 // First share from the list: same role pre-picker as
                 // Settings (the link's default role must be chosen before
@@ -409,7 +418,7 @@ struct LibraryListView: View {
     }
 
     /// Role pre-sheet's Continue: create the share with the picked link
-    /// role and present the system sharing sheet for the (now active)
+    /// role and show the link sheet (copy + send) for the (now active)
     /// library.
     private func createShareWithPickedRole() async {
         guard let library = LibraryScope.shared.active(context: modelContext) else {
@@ -424,6 +433,8 @@ struct LibraryListView: View {
                 linkRole: pendingLinkRole)
             shareSheetShare = share
             shareSheetLibrary = library
+            shareSheetLinkRole = pendingLinkRole
+            showShareSheet = true
             showLinkRolePicker = false
         } catch {
             shareActionError = error.localizedDescription

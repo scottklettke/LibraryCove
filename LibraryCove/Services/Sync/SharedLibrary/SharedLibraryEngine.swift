@@ -423,6 +423,16 @@ final class SharedLibraryEngine: ObservableObject {
 
         let share = CKShare(recordZoneID: zoneID)
         share[CKShare.SystemFieldKey.title] = title as NSString
+        // The link is the invitation: public permission MUST be set or
+        // any link recipient hits "Item Unavailable — the owner stopped
+        // sharing, or your account doesn't have permission" (a share
+        // with .none only accepts participants individually added
+        // through the owner's own share sheet). Role granularity beyond
+        // read/write travels in the rolesRecord below: admin and editor
+        // both map to .readWrite; guest maps to .readOnly.
+        share.publicPermission = (linkRole == .guest)
+            ? CKShare.ParticipantPermission.readOnly
+            : CKShare.ParticipantPermission.readWrite
 
         // The link's default role travels in a fixed-name record in the
         // zone: both admin and editor map to .readWrite on the CKShare, so

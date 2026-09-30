@@ -153,16 +153,29 @@ async function createLibrary(name) {
   log('library created: ' + name)
 }
 
-async function joinLibrary(keyHex) {
+async function joinLibrary(keyHex, primaryKeyHex) {
   if (drive) return send({ evt: 'error', msg: 'already have a library' })
-  store = new Corestore(path.join(storageRoot, 'store'))
+  const writable = !!primaryKeyHex
+  const storePath = path.join(storageRoot, 'store')
+  if (writable) {
+    // The persisted primary seed wins over a passed one (setSeed is
+    // first-write-wins) — a stale store from a read-only era would derive
+    // the WRONG keypair (SESSION_NOT_WRITABLE). Spike-level: start clean
+    // when claiming writability.
+    fs.rmSync(path.join(storageRoot, 'store'), { recursive: true, force: true })
+  }
+  store = writable
+    ? new Corestore(storePath, { primaryKey: b4a.from(primaryKeyHex, 'hex') })
+    : new Corestore(storePath)
   const keyBuf = b4a.from(keyHex, 'hex')
-  drive = new Hyperdrive(store, keyBuf)
+  drive = writable
+    ? new Hyperdrive(store)
+    : new Hyperdrive(store, keyBuf)
   await drive.ready()
-  role = 'reader'
+  role = writable ? 'writer' : 'reader'
   announce(keyBuf)
-  send({ evt: 'joined', key: keyHex })
-  log('joined library ' + keyHex.slice(0, 12))
+  send({ evt: 'joined', key: keyHex, writable })
+  log('joined library ' + keyHex.slice(0, 12) + (writable ? ' (writable)' : ' (read-only)'))
 
   startPolling()
 }

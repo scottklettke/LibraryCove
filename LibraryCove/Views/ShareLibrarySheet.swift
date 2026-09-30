@@ -20,7 +20,6 @@ struct ShareLibrarySheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
-    @State private var showSystemShare = false
     @State private var showSystemSharingController = false
 
     init(library: LibraryInfo, share: CKShare, linkRole: ShareParticipantRole,
@@ -76,11 +75,6 @@ struct ShareLibrarySheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSystemShare) {
-                if let link = linkURL {
-                    ShareLinkSheet(url: link)
-                }
-            }
             .sheet(isPresented: $showSystemSharingController) {
                 CloudSharingSheet(share: share, libraryID: library.id, container: container)
             }
@@ -119,12 +113,18 @@ struct ShareLibrarySheet: View {
 
     private var actionsSection: some View {
         Section {
-            Button {
-                showSystemShare = true
-            } label: {
+            // SwiftUI ShareLink hands the URL to Messages/Mail/AirDrop
+            // without the UIActivityViewController-in-sheet path that
+            // flash-dismissed in the system sharing controller. If it
+            // ever misbehaves, Copy + manual paste is the fallback.
+            if let link = linkURL {
+                ShareLink(item: link) {
+                    Label("Send link…", systemImage: "paperplane")
+                }
+            } else {
                 Label("Send link…", systemImage: "paperplane")
+                    .foregroundStyle(.secondary)
             }
-            .disabled(linkURL == nil)
 
             Button {
                 showSystemSharingController = true
@@ -135,16 +135,4 @@ struct ShareLibrarySheet: View {
             Text("Send the link however you like — text, email, anything. New members appear in Members after they accept and sync once.")
         }
     }
-}
-
-/// System share sheet (Messages, Mail, AirDrop, Copy) presenting the
-/// link URL itself.
-private struct ShareLinkSheet: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: [url], applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

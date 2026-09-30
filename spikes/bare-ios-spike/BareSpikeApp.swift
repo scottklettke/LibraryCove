@@ -59,6 +59,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     var buffer = Data()
     var role: Role = .none
     var driveKey: String?
+    var primaryKey: String?
 
     enum Role { case none, writer, reader }
 
@@ -158,20 +159,35 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         send(json: ["cmd": "create", "library": name])
     }
 
+    /// Accepts "<driveKey>" (read-only, legacy) or "<driveKey>:<primaryKey>"
+    /// (bidirectional — the primary key derives the drive's writer keypair).
     func joinLibrary(key: String) {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Drive keys are 64 hex chars — reject obvious paste damage with a
-        // clear message instead of a silent broken join.
-        guard trimmed.count == 64,
-              trimmed.allSatisfy({ $0.isHexDigit }) else {
-            log("⚠️ Join key looks wrong (\(trimmed.count) chars, need 64 hex). Copy it again from the writer's screen.")
+        let parts = trimmed.split(separator: ":").map(String.init)
+        guard let drivePart = parts.first, drivePart.count == 64,
+              drivePart.allSatisfy({ $0.isHexDigit }) else {
+            log("⚠️ Join key looks wrong (\(trimmed.count) chars, need 64 or 64:64 hex). Copy it again from the writer's screen.")
             NotificationCenter.default.post(name: .spikeJoinFailed, object: nil)
             role = .none
             return
         }
-        role = .reader
-        driveKey = trimmed
-        send(json: ["cmd": "join", "key": trimmed])
+        var primaryPart: String?
+        if parts.count > 1 {
+            let p = parts[1]
+            if p.count == 64 && p.allSatisfy({ $0.isHexDigit }) {
+                primaryPart = p
+            } else {
+                log("⚠️ Primary key part malformed — joining READ-ONLY. Recopy the full key for write access.")
+            }
+        }
+        role = primaryPart != nil ? .writer : .reader
+        driveKey = drivePart
+        primaryKey = primaryPart
+        if let primaryPart {
+            send(json: ["cmd": "join", "key": drivePart, "primaryKey": primaryPart])
+        } else {
+            send(json: ["cmd": "join", "key": drivePart])
+        }
     }
 
     func addBook(title: String) {
@@ -221,6 +237,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         case "created":
             let key = event["key"] as? String ?? "?"
             driveKey = key
+            // The store's primary key derives every drive keypair — sharing
+            // it makes the joiner a full writer (bidirectional sync).
+            if let primaryKey = event["primaryKey"] as? String {
+                self.primaryKey = primaryKey
+            }
             log("📚 Library created.\nJoin key (send to the other device):\n\(key)")
             // Writers listen immediately for readers on the LAN.
             send(json: ["cmd": "listen", "port": 8787])
@@ -327,21 +348,22 @@ struct RootView: View {
                     .disabled(bookTitle.isEmpty)
                 }
                 if let key = writerKey {
+                    // Bidirectional share: driveKey:primaryKey — the joiner
+                    // becomes a full writer (adds books from their device).
+                    let shareKey = appDelegate.primaryKey != nil
+                        ? key + ":" + appDelegate.primaryKey!
+                        : key
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Your IP for manual connect (reader types this): " + (DeviceIP.wifi() ?? "?") + ":8787")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            Text("Join key — paste into Join on the other device:")
+                        Text("Join key — paste into Join on the other device (grants write access):")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {
-                            Text(key)
+                            Text(shareKey)
                                 .font(.system(size: 10, design: .monospaced))
-                                .lineLimit(3)
+                                .lineLimit(4)
                                 .textSelection(.enabled)
                             Button {
-                                UIPasteboard.general.string = key
+                                UIPasteboard.general.string = shareKey
                                 copied = true
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
                             } label: {

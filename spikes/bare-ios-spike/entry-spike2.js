@@ -149,7 +149,7 @@ async function createLibrary(name) {
   const meta = { name, createdAt: Date.now() }
   await drive.put('/library.json', b4a.from(JSON.stringify(meta)))
   const topic = announce(key)
-  send({ evt: 'created', key: key.toString('hex'), name, port: listenPort })
+  send({ evt: 'created', key: key.toString('hex'), primaryKey: store.primaryKey.toString('hex'), name, port: listenPort })
   log('library created: ' + name)
 }
 
@@ -183,7 +183,7 @@ async function joinLibrary(keyHex) {
 }
 
 async function putDoc(p, data) {
-  if (!drive || role !== 'writer') return send({ evt: 'error', msg: 'not a writer' })
+  if (!drive) return send({ evt: 'error', msg: 'no library' })
   try {
     await drive.put(p, b4a.from(JSON.stringify(data)))
     send({ evt: 'written', path: p })
@@ -221,7 +221,7 @@ function feed(chunk) {
         send({ evt: 'ready', storageRoot })
         break
       case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: e.message })); break
-      case 'join': joinLibrary(msg.key).catch(e => send({ evt: 'error', msg: e.message })); break
+      case 'join': joinLibrary(msg.key, msg.primaryKey).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'listen': listenTcp(msg.port || 8787); break
       case 'connect': connectTcp(msg.host, msg.port || 8787); break
       case 'put': putDoc(msg.path, msg.data).catch(e => send({ evt: 'error', msg: e.message })); break

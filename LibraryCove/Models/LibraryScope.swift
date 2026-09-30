@@ -1013,6 +1013,12 @@ final class LibraryScope: ObservableObject {
                             share: dto.share,
                             shareClearedAt: dto.shareClearedAt)
             }
+            // The writer's snapshot should carry one active, but a second
+            // writer's stale flag could sneak in — enforce the invariant.
+            var kept = false
+            for i in registry.indices where registry[i].isActive {
+                if kept { registry[i].isActive = false } else { kept = true }
+            }
             if !registry.contains(where: { $0.isActive }), let _ = registry.first {
                 registry[0].isActive = true
             }
@@ -1078,11 +1084,13 @@ final class LibraryScope: ObservableObject {
                     registry[idx].modifiedAt = max(localStamp, remoteStamp)
                     changed = true
                 }
-                if remoteNewer,
-                   let remoteActive = dto.isActive, remoteActive != registry[idx].isActive {
-                    registry[idx].isActive = remoteActive
-                    changed = true
-                }
+                // NOTE: no isActive adoption here. Activeness is device-
+                // local (activeID); the DTO flag records which library the
+                // WRITER had open and is consumed only by step 0 (fresh
+                // adopt). Adopting it on existing entries let a remote
+                // device's switch demote this device's active library —
+                // the checkmark then sat on the wrong row and the tap
+                // guard (isActive) swallowed taps to fix it.
                 // Share events are ordered by their OWN clock, never the
                 // entry's modifiedAt (renames move that; share events must
                 // not be ordered by them). A remote SHARE block adopts when
@@ -1112,14 +1120,48 @@ final class LibraryScope: ObservableObject {
                     }
                 }
             } else {
+                // Activeness is DEVICE-LOCAL (activeID on this device): an
+                // appended remote entry must not arrive pre-checked. The
+                // writer's active choice only matters in step 0 (fresh
+                // adopt) and step 3b (no-active promotion). Adopting it
+                // here produced two checked libraries when the other
+                // device created one while this device's library was
+                // active — and the tap handler no-ops on isActive=true
+                // rows, wedging the checkmark until another library was
+                // created.
                 registry.append(LibraryInfo(id: dto.id, name: dto.name,
-                                            isActive: dto.isActive ?? false,
+                                            isActive: false,
                                             createdAt: dto.createdAt,
                                             modifiedAt: remoteStamp,
                                             share: dto.share,
                                             shareClearedAt: dto.shareClearedAt))
                 changed = true
             }
+        }
+
+        // Single-active invariant: activeness is device-local, so exactly
+        // one entry may be flagged — the one matching activeID. Remote
+        // folds (step 0 wholesale adoption) can leave two flagged; a
+        // second flagged row renders a second checkmark and its tap is
+        // swallowed by the `if !isActive` guard. Net-diff semantics: flip
+        // ONLY rows whose flag differs from the target, so a fold whose
+        // registry content is unchanged returns false (the no-op contract
+        // the tests encode) instead of churning flags into a true.
+        let target: LibraryInfo? = {
+            if let match = registry.first(where: { $0.id == activeID }) { return match }
+            // activeID matches no entry (fresh process, pre-migration):
+            // keep the already-flagged row and re-point activeID silently.
+            return registry.first(where: { $0.isActive })
+        }()
+        for i in registry.indices {
+            let shouldBeActive = target?.id == registry[i].id
+            if registry[i].isActive != shouldBeActive {
+                registry[i].isActive = shouldBeActive
+                changed = true
+            }
+        }
+        if let target, activeID != target.id {
+            activeID = target.id
         }
 
         // 3b. No active library (deletions removed the active one, a sole

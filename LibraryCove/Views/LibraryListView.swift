@@ -34,7 +34,12 @@ struct LibraryListView: View {
                         .foregroundStyle(.secondary)
                 }
                 ForEach(libraries) { library in
-                    let isActive = library.isActive
+                    // Render activeness from the device's activeID, not the
+                    // registry row's flag: the flag is mirrored state that a
+                    // remote fold can duplicate — activeID is this device's
+                    // truth. (Stale double-flags also swallowed taps via the
+                    // old `if !isActive` guard.)
+                    let isActive = library.id == LibraryScope.shared.activeID
                     Button {
                         if !isActive {
                             LibraryScope.shared.activate(library, context: modelContext)

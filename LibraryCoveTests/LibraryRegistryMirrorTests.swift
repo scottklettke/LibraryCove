@@ -290,6 +290,54 @@ import SwiftData
         }
     }
 
+    // MARK: - Single-active invariant (double-checkmark regression)
+
+    @Test func foldAppendOnFullSnapshotNeverFlagsRemoteActive() throws {
+        try withSandboxedRegistry {
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            // Full remote snapshot as the OTHER device publishes it: both
+            // libraries (each device's registry carries both after
+            // mirroring), with the writer's active flag on lib-2. THIS
+            // device has lib-1 active.
+            seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
+                              createdAt: base, modifiedAt: base)])
+            let remote = [("lib-1", false), ("lib-2", true)].map { id, flag in
+                (LibraryRegistryDTO(id: id, name: id == "lib-1" ? "Home" : "Reading 2026",
+                                    createdAt: base.addingTimeInterval(30),
+                                    modifiedAt: base.addingTimeInterval(30),
+                                    isActive: flag),
+                 base.addingTimeInterval(30))
+            }
+            #expect(LibraryScope.shared.foldRemoteRegistry(remote))
+            let libs = load()
+            #expect(libs.count == 2)
+            // Activeness is device-local: this device stays on lib-1. The
+            // writer's flag must not arrive pre-checked — two flagged rows
+            // rendered two checkmarks and the tap handler (isActive guard)
+            // swallowed every tap.
+            #expect(libs.first { $0.id == "lib-2" }?.isActive == false)
+            #expect(libs.first { $0.id == "lib-1" }?.isActive == true)
+        }
+    }
+
+    @Test func foldReducesMultipleActiveFlagsToOne() throws {
+        try withSandboxedRegistry {
+            let base = Date(timeIntervalSinceReferenceDate: 1_000_000)
+            // Pre-existing double-flagged registry (state produced by the
+            // old append bug): exactly one check may survive, and it must
+            // be the device's activeID.
+            seed([LibraryInfo(id: "lib-1", name: "Home", isActive: true,
+                              createdAt: base, modifiedAt: base),
+                  LibraryInfo(id: "lib-2", name: "Away", isActive: true,
+                              createdAt: base, modifiedAt: base)])
+            let dto = LibraryRegistryDTO(id: "lib-1", name: "Home",
+                                         createdAt: base, modifiedAt: base)
+            #expect(LibraryScope.shared.foldRemoteRegistry([(dto, base)]))
+            let libs = load()
+            #expect(libs.filter(\.isActive).map(\.id) == [LibraryScope.shared.activeIDForTesting])
+        }
+    }
+
     // MARK: - Share-facts mirroring (share events have their own clock)
 
     @Test func foldAdoptsSharePublish() throws {

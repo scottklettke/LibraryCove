@@ -266,8 +266,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             let role = event["role"] as? String
             let remote = event["remote"] as? String
             var line = "🤝 Peer connected via \(via)"
-            if let role { line += " (\(role)" }
-            if let remote { line += role != nil ? " \(remote))" : " (\(remote))" }
+            if let role {
+                line += " (\(role)"
+                if let remote { line += " \(remote)" }
+                line += ")"
+            } else if let remote {
+                line += " (\(remote))"
+            }
             log(line)
         case "listening":
             log("👂 Listening on port \(event["port"] ?? "?")")

@@ -145,6 +145,32 @@ function connectTcp(host, port) {
   sockets.push(socket)
 }
 
+// Library identity persisted across relaunches: both devices keep the
+// SAME join key (drive + primary), so discovery keys never change and a
+// killed app rejoins without the Create/Join ritual.
+function saveLibraryMeta(meta) {
+  try {
+    fs.writeFileSync(path.join(storageRoot, 'library-meta.json'),
+                     JSON.stringify(meta))
+  } catch (e) {
+    send({ evt: 'log', msg: 'meta save failed: ' + (e.code || e.message) })
+  }
+}
+
+function loadLibraryMeta() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(storageRoot, 'library-meta.json'), 'utf8'))
+  } catch { return null }
+}
+
+async function restoreLibrary() {
+  if (drive) return
+  const meta = loadLibraryMeta()
+  if (!meta || !meta.key) return
+  log('restoring library ' + (meta.name || '') + ' from previous run')
+  await joinLibrary(meta.key, meta.primaryKey)
+}
+
 async function createLibrary(name) {
   if (drive) return send({ evt: 'error', msg: 'already have a library' })
   const withTimeout = (p, ms, what) => Promise.race([
@@ -164,6 +190,7 @@ async function createLibrary(name) {
   const topic = announce(key)
   send({ evt: 'created', key: key.toString('hex'), primaryKey: store.primaryKey.toString('hex'), name, port: listenPort })
   log('library created: ' + name)
+  saveLibraryMeta({ key: key.toString('hex'), primaryKey: store.primaryKey.toString('hex'), name })
   startPolling()
 }
 
@@ -190,6 +217,7 @@ async function joinLibrary(keyHex, primaryKeyHex) {
   announce(keyBuf)
   send({ evt: 'joined', key: keyHex, writable })
   log('joined library ' + keyHex.slice(0, 12) + (writable ? ' (writable)' : ' (read-only)'))
+  saveLibraryMeta({ key: keyHex, primaryKey: primaryKeyHex || null })
 
   startPolling()
 }
@@ -270,6 +298,12 @@ function feed(chunk) {
       case 'init':
         storageRoot = msg.storageRoot || storageRoot
         send({ evt: 'ready', storageRoot })
+        // Reopen a persisted library from a previous run: re-announce and
+        // resume polling so a relaunched app rejoins its library WITHOUT
+        // the Create/Join ritual. Both devices keep the same join key,
+        // and both ends re-announce — the internet path needs no fresh
+        // handshake beyond this.
+        restoreLibrary().catch(e => send({ evt: 'error', msg: 'restore failed: ' + e.message }))
         break
       case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: 'create failed: ' + e.message })); break
       case 'join': joinLibrary(msg.key, msg.primaryKey).catch(e => send({ evt: 'error', msg: e.message })); break

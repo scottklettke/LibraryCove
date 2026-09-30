@@ -193,7 +193,9 @@ async function joinLibrary(keyHex, primaryKeyHex) {
 function startPolling() {
   const check = async () => {
     try {
+      const before = drive.core.length
       await drive.core.update()   // pull metadata from the connected peer
+      if (drive.core.length !== before) send({ evt: 'log', msg: 'poll: metadata ' + before + ' → ' + drive.core.length })
       const metaBuf = await drive.get('/library.json').catch(() => null)
       if (metaBuf) {
         const meta = JSON.parse(metaBuf.toString())

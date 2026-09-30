@@ -141,9 +141,16 @@ function connectTcp(host, port) {
 
 async function createLibrary(name) {
   if (drive) return send({ evt: 'error', msg: 'already have a library' })
+  const withTimeout = (p, ms, what) => Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(what + ' timed out after ' + ms + 'ms — stale lock? delete the app and reinstall')), ms))
+  ])
+  // Fresh create: wipe any stale store (a RocksDB LOCK from a killed
+  // prior instance hangs open() forever with no error).
+  fs.rmSync(path.join(storageRoot, 'store'), { recursive: true, force: true })
   store = new Corestore(path.join(storageRoot, 'store'))
   drive = new Hyperdrive(store)
-  await drive.ready()
+  await withTimeout(drive.ready(), 5000, 'store open')
   role = 'writer'
   const key = drive.key
   const meta = { name, createdAt: Date.now() }

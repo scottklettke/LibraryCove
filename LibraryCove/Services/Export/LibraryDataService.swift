@@ -500,6 +500,18 @@ enum LibraryDataService {
                     // The current book is older: keep it, drop the stored one.
                     kept[key] = book
                     toDelete.append(existing)
+                } else if newDate == existingDate {
+                    // Deterministic tie-break: rows from one pour batch
+                    // share createdAt. Fetch order is device-dependent —
+                    // without this, two devices running cleanup could each
+                    // keep (and delete the other's) survivor. Lower
+                    // persistentModelID hash wins on both devices.
+                    if book.persistentModelID.hashValue < existing.persistentModelID.hashValue {
+                        kept[key] = book
+                        toDelete.append(existing)
+                    } else {
+                        toDelete.append(book)
+                    }
                 } else {
                     toDelete.append(book)
                 }

@@ -165,7 +165,7 @@ async function joinLibrary(keyHex, primaryKeyHex) {
     fs.rmSync(path.join(storageRoot, 'store'), { recursive: true, force: true })
   }
   store = writable
-    ? new Corestore(storePath, { primaryKey: b4a.from(primaryKeyHex, 'hex') })
+    ? new Corestore(storePath, { primaryKey: b4a.from(primaryKeyHex, 'hex'), unsafe: true })
     : new Corestore(storePath)
   const keyBuf = b4a.from(keyHex, 'hex')
   drive = writable

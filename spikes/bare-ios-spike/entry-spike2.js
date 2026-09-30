@@ -168,7 +168,9 @@ async function restoreLibrary() {
   const meta = loadLibraryMeta()
   if (!meta || !meta.key) return
   log('restoring library ' + (meta.name || '') + ' from previous run')
-  await joinLibrary(meta.key, meta.primaryKey)
+  // NEVER wipe on restore: the stored seed is already correct after the
+  // original join — wiping here would destroy the device's local writes.
+  await joinLibrary(meta.key, meta.primaryKey, { wipe: false })
 }
 
 async function createLibrary(name) {
@@ -194,15 +196,18 @@ async function createLibrary(name) {
   startPolling()
 }
 
-async function joinLibrary(keyHex, primaryKeyHex) {
+async function joinLibrary(keyHex, primaryKeyHex, opts = {}) {
   if (drive) return send({ evt: 'error', msg: 'already have a library' })
+  const wipe = opts.wipe !== false
   const writable = !!primaryKeyHex
   const storePath = path.join(storageRoot, 'store')
-  if (writable) {
+  if (writable && wipe) {
     // The persisted primary seed wins over a passed one (setSeed is
     // first-write-wins) — a stale store from a read-only era would derive
     // the WRONG keypair (SESSION_NOT_WRITABLE). Spike-level: start clean
-    // when claiming writability.
+    // when claiming writability. RELAUNCH RESTORE MUST NOT TAKE THIS
+    // PATH (opts.wipe = false): the stored seed is already correct after
+    // the original join, and wiping would destroy local writes.
     fs.rmSync(path.join(storageRoot, 'store'), { recursive: true, force: true })
   }
   store = writable

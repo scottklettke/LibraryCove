@@ -83,12 +83,14 @@ function announce(keyBuf) {
   dht.on('error', (e) => send({ evt: 'log', msg: 'dht error: ' + (e.code || e.message) }))
   swarm.on('connection', (conn) => {
     send({ evt: 'peer', via: 'hyperswarm' })
-    // Pass the hyperswarm connection itself: corestore detects it is a
-    // stream and reads the noise initiator role from the connection (it
-    // already handshook). Hardcoding 'true' on both sides collides.
-    const stream = drive.replicate(conn, { keepAlive: true })
+    // drive.replicate(conn) returns a PROTOCOL stream that wraps the
+    // already-noise-encrypted connection internally — piping conn into
+    // it again would double-wrap ("Can only pipe to one destination").
+    // Instead: replicate(conn) wires the socket directly; no extra pipes.
+    const stream = drive.replicate(conn)
     stream.on('error', (e) => send({ evt: 'log', msg: 'repl: ' + (e.code || e.message) }))
-    conn.pipe(stream).pipe(conn)
+    conn.on('error', (e) => send({ evt: 'log', msg: 'conn: ' + (e.code || e.message) }))
+    stream.on('close', () => { swarm.flush().catch(() => {}) })
   })
   // Periodic peer-count heartbeat so a silent stall is visible in logs.
   let beats = 0

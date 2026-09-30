@@ -81,8 +81,14 @@ function announce(keyBuf) {
     send({ evt: 'log', msg: 'dht: nat-update ' + JSON.stringify(args).slice(0, 200) })
   })
   dht.on('error', (e) => send({ evt: 'log', msg: 'dht error: ' + (e.code || e.message) }))
-  swarm.on('connection', (conn) => {
-    send({ evt: 'peer', via: 'hyperswarm' })
+  swarm.on('connection', (conn, peerInfo) => {
+    // Internet-path diagnostics: which side dialed (client = we connected
+    // out; server = they punched in) and the remote endpoint — holepunch
+    // success/failure is invisible without this.
+    const role = peerInfo && peerInfo.client === true ? 'client(out)' : peerInfo && peerInfo.client === false ? 'server(in)' : 'unknown'
+    let remote = '?'
+    try { remote = conn.rawStream ? (conn.rawStream.remoteHost + ':' + conn.rawStream.remotePort) : conn.remoteAddress } catch {}
+    send({ evt: 'peer', via: 'hyperswarm', role, remote })
     // drive.replicate(conn) returns a PROTOCOL stream that wraps the
     // already-noise-encrypted connection internally — piping conn into
     // it again would double-wrap ("Can only pipe to one destination").

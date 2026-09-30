@@ -262,7 +262,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         case "written":
             log("✍️ Book written to drive")
         case "peer":
-            log("🤝 Peer connected via \(event["via"] ?? "?")")
+            let via = event["via"] ?? "?"
+            let role = event["role"] as? String
+            let remote = event["remote"] as? String
+            var line = "🤝 Peer connected via \(via)"
+            if let role { line += " (\(role)" }
+            if let remote { line += role != nil ? " \(remote))" : " (\(remote))" }
+            log(line)
         case "listening":
             log("👂 Listening on port \(event["port"] ?? "?")")
         case "data":

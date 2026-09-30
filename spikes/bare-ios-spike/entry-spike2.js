@@ -164,6 +164,13 @@ async function joinLibrary(keyHex) {
   send({ evt: 'joined', key: keyHex })
   log('joined library ' + keyHex.slice(0, 12))
 
+  startPolling()
+}
+
+// Both roles poll: the writer sees books added by a shared-primary-key
+// joiner; the reader sees the writer's content. drive.core.update() pulls
+// metadata over the connected replication stream.
+function startPolling() {
   const check = async () => {
     try {
       await drive.core.update()   // pull metadata from the connected peer
@@ -173,14 +180,22 @@ async function joinLibrary(keyHex) {
         send({ evt: 'library', name: meta.name })
         let count = 0
         for await (const entry of drive.list('/books')) count++
-        send({ evt: 'sync', count })
+        if (count !== lastSyncCount || meta.name !== lastSyncName) {
+          send({ evt: 'sync', count })
+          send({ evt: 'library', name: meta.name })
+          lastSyncCount = count
+          lastSyncName = meta.name
+        }
       }
     } catch {}
   }
   check()
-  const poll = setInterval(check, 1500)
-  setTimeout(() => clearInterval(poll), 120000)
+  poll = setInterval(check, 1500)
 }
+
+let poll = null
+let lastSyncCount = -1
+let lastSyncName = null
 
 async function putDoc(p, data) {
   if (!drive) return send({ evt: 'error', msg: 'no library' })

@@ -488,6 +488,18 @@ extension SharedLibraryCoordinator {
                     row.displayName = trimmedName
                 }
             }
+            // Adopting the canonical row = becoming the active member.
+            // A reset/reinstall cycle re-delivers the old row via CloudKit
+            // with isActive=false (the pre-reset repair deactivated it);
+            // without this, WelcomeView's finish() returns an inactive
+            // row and the app loops on the welcome screen forever.
+            if !existing.isActive {
+                let all = (try? context.fetch(FetchDescriptor<User>())) ?? []
+                for row in all where row.isActive && row.id != existing.id {
+                    row.isActive = false
+                }
+                existing.isActive = true
+            }
             try? context.save()
             return existing
         }

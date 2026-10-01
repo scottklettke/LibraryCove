@@ -92,6 +92,20 @@ function announce(keyBuf) {
     conn.on('error', (e) => send({ evt: 'log', msg: 'conn: ' + (e.code || e.message) }))
     stream.on('close', () => { swarm.flush().catch(() => {}) })
   })
+  // Control channel: a SECOND hyperswarm connection per joiner carries
+  // the token-redemption handshake (NDJSON, magic first line). The
+  // replication connection stays untouched. The admin answers control
+  // lines only if it holds the primary key (is the bootstrap writer).
+  const ctrlTopic = crypto.createHash('sha256').update(Buffer.concat([keyBuf, b4a.from(':control')])).digest()
+  const ctrlSwarm = new Hyperswarm()
+  swarms.push(ctrlSwarm)
+  ctrlSwarm.join(ctrlTopic, { server: role === 'writer', client: true })
+  ctrlSwarm.on('connection', (conn) => {
+    conn.on('error', (e) => send({ evt: 'log', msg: 'ctrl: ' + (e.code || e.message) }))
+    if (role === 'writer') serveControl(conn)
+    // Joiner-side control replies arrive here too (see redeem()).
+    controlFeed(conn)
+  })
   let beats = 0
   const beat = setInterval(() => {
     beats++
@@ -154,11 +168,13 @@ function loadLibraryMeta() {
 
 async function restoreLibrary() {
   if (drive) return
+  // Admin (this device created the library): reopen from the local
+  // primary-key credential.
+  if (fs.existsSync(PK_STORE_PATH())) return restoreAdmin()
+  // Member: restore the redeemed session (no wipe — local writes).
   const meta = loadLibraryMeta()
-  if (!meta || !meta.key) return
-  log('restoring library ' + (meta.name || '') + ' from previous run')
-  // NEVER wipe on restore: the stored seed is already correct — wiping
-  // would destroy local writes.
+  if (!meta || !meta.key || !meta.primaryKey) return
+  log('restoring member session for ' + (meta.name || meta.key.slice(0, 12)))
   await joinLibrary(meta.key, meta.primaryKey, { wipe: false })
 }
 
@@ -180,10 +196,13 @@ async function createLibrary(name) {
   // library.json holds ONLY plain metadata the worklet itself reads —
   // NOT a SharedBook payload; written as worklet-owned JSON.
   await drive.put('/library.json', b4a.from(JSON.stringify(meta)))
+  // The primary key NEVER leaves this device via IPC — redemption
+  // dispenses it over the encrypted control channel. Persist LOCALLY
+  // (admin credential); the admin UI gets invites from generateJoinKey.
+  fs.writeFileSync(PK_STORE_PATH(), store.primaryKey.toString('hex'))
   const topic = announce(key)
-  send({ evt: 'created', key: key.toString('hex'), primaryKey: store.primaryKey.toString('hex'), name, port: listenPort })
+  send({ evt: 'created', key: key.toString('hex'), name, port: listenPort })
   log('library created: ' + name)
-  saveLibraryMeta({ key: key.toString('hex'), primaryKey: store.primaryKey.toString('hex'), name })
   startPolling()
 }
 
@@ -215,93 +234,205 @@ async function joinLibrary(keyHex, primaryKeyHex, opts = {}) {
   startPolling()
 }
 
-// --- Single-use join keys (Pears membership model) ---
+// --- Single-use join tokens (redemption handshake) ---
 //
-// The ADMIN owns keys.json in the drive root — the canonical list, so
-// every writer validates against the same state (v1: the admin device
-// is the sole writer until a member accepts; members' writes arrive
-// through the shared-keypair path and the admin's poll merges).
-// Record shape: { code, role, createdAt, state: 'pending'|'used'|'revoked',
-// usedBy, usedAt }.
+// The ADMIN holds the primary key and NEVER broadcasts it. The invite
+// string lc1.<driveKey>.<token> carries only the discovery topic and a
+// one-time token. The joiner:
+//   1. opens the drive READ-ONLY (public key) — replication starts,
+//      content flows, but nothing can be written
+//   2. dials the control topic (driveKey+':control' hashed) and sends
+//      {cmd:'redeem', token, memberName}
+//   3. the ADMIN validates the token against its keys store:
+//        pending → mark used {usedBy, usedAt}, reply {ok:true,
+//        primaryKey} — the joiner re-opens its store WRITABLE and
+//        announces /members/<token>.json
+//        used/revoked/unknown → reply {ok:false, why} — joiner stays
+//        read-only (that IS the guest state) and the event surfaces
+//        in the admin UI
+// Revocation = the admin marks the token revoked; redemption refuses.
+// (True cryptographic revocation of an ALREADY-redeemed writer is the
+// primary-key rotation story, documented for v2.)
 //
-// Handoff: the admin app shows the FULL join string
-//   lc1.<driveKey>.<primaryKey>.<code>
-// The joiner pastes it (or opens librarycove://join?key=…). The joiner's
-// worklet sends {cmd:'joinV2', key, primaryKey, code, memberName} to the
-// ADMIN's worklet? NO — v1 has no pre-replication channel. Instead:
-// the ADMIN pre-authorizes the code (it's in keys.json), and the
-// JOINER validates nothing at the worklet layer — the ADMIN sees the
-// join event (peer connected + joinV2 announce via a control file) and
-// marks the code used. The pragmatic v1: the joiner writes its
-// memberName into the drive at /members/<code>.json (it has write
-// access via the shared primaryKey); the ADMIN's poll sees the member
-// file appear, marks the corresponding code used with that name, and
-// surfaces it in the admin list. Revocation marks the code revoked —
-// the admin then deletes /members/<code>.json and (v2) rotates the
-// primary key; v1 audit-only.
-//
-// Admin-side handlers:
+// Keys store: LOCAL file on the admin device (keys.json in storageRoot)
+// — the admin device is the single writer until redemption, so no
+// replication race. Members list is PUBLISHED to /meta/members.json in
+// the drive so the admin UI on other devices stays consistent.
 
-function keysPath() { return path.join(storageRoot, 'keys.json') }
+const KEY_STORE_PATH = () => path.join(storageRoot, 'keys.json')
+const CTRL_MAGIC = 'lc1-ctrl'
 
 function loadKeys() {
-  try { return JSON.parse(fs.readFileSync(keysPath(), 'utf8')) } catch { return [] }
+  try { return JSON.parse(fs.readFileSync(KEY_STORE_PATH(), 'utf8')) } catch { return [] }
 }
 
 function saveKeys(keys) {
-  fs.writeFileSync(keysPath(), JSON.stringify(keys, null, 2))
-  // Publish to the drive so the admin's list is visible cross-device.
-  if (drive) drive.put('/meta/keys.json', b4a.from(JSON.stringify(keys))).catch(() => {})
+  fs.writeFileSync(KEY_STORE_PATH(), JSON.stringify(keys, null, 2))
+  // Mirror the (sanitized) list into the drive for cross-device admin UI.
+  if (drive && role === 'writer') {
+    const publicList = keys.map(k => ({ token: k.token, role: k.role, state: k.state, usedBy: k.usedBy, usedAt: k.usedAt, createdAt: k.createdAt }))
+    drive.put('/meta/keys.json', b4a.from(JSON.stringify(publicList))).catch(() => {})
+  }
 }
 
 function generateJoinKey(role) {
   const keys = loadKeys()
-  const code = crypto.randomBytes(16).toString('hex')
-  keys.push({ code, role: role || 'editor', createdAt: Date.now(), state: 'pending', usedBy: null, usedAt: null })
+  const token = crypto.randomBytes(16).toString('hex')
+  keys.push({ token, role: role || 'editor', createdAt: Date.now(), state: 'pending', usedBy: null, usedAt: null })
   saveKeys(keys)
-  return { code, key: keys[keys.length - 1] }
+  send({ evt: 'joinKeyGenerated', token })
+  return keys[keys.length - 1]
 }
 
 function listJoinKeys() {
   send({ evt: 'joinKeys', keys: loadKeys() })
 }
 
-function revokeJoinKey(code) {
+function revokeJoinKey(token) {
   const keys = loadKeys()
-  const k = keys.find(x => x.code === code)
+  const k = keys.find(x => x.token === token)
   if (k) { k.state = 'revoked'; saveKeys(keys) }
-  send({ evt: 'joinKeyRevoked', code })
+  send({ evt: 'joinKeyRevoked', token })
 }
 
-// Member side: after a writable join, announce identity by writing the
-// member file the admin's poll watches.
-async function announceMembership(code, memberName) {
-  if (!drive || role !== 'writer') return send({ evt: 'error', msg: 'cannot announce membership (not writable)' })
-  const p = '/members/' + code + '.json'
-  await drive.put(p, b4a.from(JSON.stringify({ memberName, joinedAt: Date.now() })))
-  send({ evt: 'membershipAnnounced', path: p })
+// --- Control channel ---
+
+function controlSend(conn, obj) {
+  conn.write(b4a.from(JSON.stringify(obj) + '\n'))
 }
 
-// Admin-side poll hook: a pending code whose member file appeared is now
-// used. Called from startPolling's check.
-async function reconcileMembers() {
-  if (!drive) return
-  const keys = loadKeys()
-  let changed = false
-  for (const k of keys) {
-    if (k.state !== 'pending') continue
-    const buf = await drive.get('/members/' + k.code + '.json').catch(() => null)
-    if (!buf) continue
-    try {
-      const m = JSON.parse(buf.toString())
-      k.state = 'used'
-      k.usedBy = m.memberName || 'Unknown'
-      k.usedAt = Date.now()
-      changed = true
-      send({ evt: 'memberJoined', code: k.code, name: k.usedBy, role: k.role })
-    } catch {}
+// Admin side: answer redeem requests. NDJSON lines after a magic line.
+function serveControl(conn) {
+  let buf = ''
+  conn.on('data', (chunk) => {
+    buf += chunk.toString()
+    let idx
+    while ((idx = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, idx)
+      buf = buf.slice(idx + 1)
+      let msg
+      try { msg = JSON.parse(line) } catch { continue }
+      if (msg.magic !== CTRL_MAGIC) continue
+      if (msg.cmd === 'redeem') {
+        const keys = loadKeys()
+        const k = keys.find(x => x.token === msg.token)
+        if (!k) { controlSend(conn, { magic: CTRL_MAGIC, cmd: 'redeemResult', ok: false, why: 'unknown' }); continue }
+        if (k.state === 'revoked') { controlSend(conn, { magic: CTRL_MAGIC, cmd: 'redeemResult', ok: false, why: 'revoked' }); continue }
+        if (k.state === 'used') { controlSend(conn, { magic: CTRL_MAGIC, cmd: 'redeemResult', ok: false, why: 'already-used' }); continue }
+        k.state = 'used'
+        k.usedBy = msg.memberName || 'Unknown'
+        k.usedAt = Date.now()
+        saveKeys(keys)
+        send({ evt: 'memberJoined', token: k.token, name: k.usedBy, role: k.role })
+        controlSend(conn, { magic: CTRL_MAGIC, cmd: 'redeemResult', ok: true, primaryKey: store.primaryKey.toString('hex'), role: k.role })
+      } else if (msg.cmd === 'ping') {
+        controlSend(conn, { magic: CTRL_MAGIC, cmd: 'pong' })
+      }
+    }
+  })
+}
+
+// Joiner side: collect control replies.
+const controlWaiters = []
+function controlFeed(conn) {
+  let buf = ''
+  conn.on('data', (chunk) => {
+    buf += chunk.toString()
+    let idx
+    while ((idx = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, idx)
+      buf = buf.slice(idx + 1)
+      let msg
+      try { msg = JSON.parse(line) } catch { continue }
+      if (msg.magic !== CTRL_MAGIC) continue
+      if (msg.cmd === 'redeemResult') {
+        const waiter = controlWaiters.shift()
+        if (waiter) waiter(msg)
+      }
+    }
+  })
+}
+
+// Joiner: dial the control topic, present the token, await the result.
+async function redeemToken(driveKeyHex, token, memberName) {
+  const ctrlTopic = crypto.createHash('sha256').update(Buffer.concat([b4a.from(driveKeyHex, 'hex'), b4a.from(':control')])).digest()
+  const ctrlSwarm = new Hyperswarm()
+  swarms.push(ctrlSwarm)
+  ctrlSwarm.on('connection', (conn) => {
+    conn.on('error', (e) => send({ evt: 'log', msg: 'ctrl: ' + (e.code || e.message) }))
+    controlFeed(conn)
+    controlSend(conn, { magic: CTRL_MAGIC, cmd: 'redeem', token, memberName })
+  })
+  ctrlSwarm.join(ctrlTopic, { server: false, client: true })
+  const result = await new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve({ ok: false, why: 'timeout — is the owner online?' }), 20000)
+    controlWaiters.push((msg) => { clearTimeout(timeout); resolve(msg) })
+  })
+  await ctrlSwarm.flush().catch(() => {})
+  return result
+}
+
+
+// --- Admin restore + joiner v2 ---
+
+const PK_STORE_PATH = () => path.join(storageRoot, 'primary-key.hex')
+
+// Admin: reopen the WRITER store from the locally persisted primary key.
+// The primary key file never leaves this device.
+async function restoreAdmin() {
+  if (drive) return
+  let pkHex
+  try { pkHex = fs.readFileSync(PK_STORE_PATH(), 'utf8').trim() } catch { return }
+  if (pkHex.length !== 64) return
+  store = new Corestore(path.join(storageRoot, 'store'), { primaryKey: b4a.from(pkHex, 'hex'), unsafe: true })
+  drive = new Hyperdrive(store)
+  await drive.ready()
+  role = 'writer'
+  announce(drive.key)
+  send({ evt: 'restored', key: drive.key.toString('hex'), writable: true })
+  log('restored admin library ' + drive.key.toString('hex').slice(0, 12))
+  startPolling()
+}
+
+// Joiner: open READ-ONLY by public key, then redeem the token over the
+// control channel. On success, re-open WRITABLE with the dispensed
+// primary key and announce membership.
+async function joinV2(keyHex, token, memberName) {
+  if (drive) return send({ evt: 'error', msg: 'already have a library' })
+  const storePath = path.join(storageRoot, 'store')
+  fs.rmSync(storePath, { recursive: true, force: true })   // fresh join
+  store = new Corestore(storePath)
+  const keyBuf = b4a.from(keyHex, 'hex')
+  drive = new Hyperdrive(store, keyBuf)
+  await drive.ready()
+  role = 'reader'
+  announce(keyBuf)
+  send({ evt: 'joined', key: keyHex, writable: false })
+  log('joined read-only, redeeming token…')
+
+  const result = await redeemToken(keyHex, token, memberName)
+  if (!result.ok) {
+    // Stays read-only — the guest state. Admin sees nothing new.
+    send({ evt: 'redeemFailed', why: result.why })
+    log('token redeem failed: ' + result.why)
+    startPolling()
+    return
   }
-  if (changed) saveKeys(keys)
+  // Success: mark used admin-side already happened; re-open writable.
+  const pkHex = result.primaryKey
+  drive = null
+  store = null
+  fs.rmSync(storePath, { recursive: true, force: true })
+  store = new Corestore(storePath, { primaryKey: b4a.from(pkHex, 'hex'), unsafe: true })
+  drive = new Hyperdrive(store)
+  await drive.ready()
+  role = 'writer'
+  announce(keyBuf)
+  send({ evt: 'joined', key: keyHex, writable: true, role: result.role || 'editor' })
+  log('redeemed — writable as ' + (result.role || 'editor'))
+  await drive.put('/members/' + token + '.json', b4a.from(JSON.stringify({ memberName, joinedAt: Date.now() })))
+  saveLibraryMeta({ key: keyHex, primaryKey: pkHex })
+  startPolling()
 }
 
 // Poll drives for changes — same shape as spike2, but reports per-type
@@ -406,15 +537,18 @@ function feed(chunk) {
         restoreLibrary().catch(e => send({ evt: 'error', msg: 'restore failed: ' + e.message }))
         break
       case 'create': createLibrary(msg.library).catch(e => send({ evt: 'error', msg: 'create failed: ' + e.message })); break
-      case 'join': joinLibrary(msg.key, msg.primaryKey).catch(e => send({ evt: 'error', msg: e.message })); break
+      // Admin restore: reopen the writer store from the LOCAL primary
+      // key file (never sent over IPC by the worklet itself).
+      case 'restore': restoreAdmin().catch(e => send({ evt: 'error', msg: 'restore failed: ' + e.message })); break
+      // Joiner: read-only open + token redemption handshake.
+      case 'joinV2': joinV2(msg.key, msg.token, msg.memberName).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'listen': listenTcp(msg.port || 8787); break
       case 'connect': connectTcp(msg.host, msg.port || 8787); break
       case 'putRaw': putRaw(msg.path, msg.data).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'readRaw': readRaw(msg.path).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'generateJoinKey': generateJoinKey(msg.role); break
       case 'listJoinKeys': listJoinKeys(); break
-      case 'revokeJoinKey': revokeJoinKey(msg.code); break
-      case 'announceMembership': announceMembership(msg.code, msg.memberName).catch(e => send({ evt: 'error', msg: e.message })); break
+      case 'revokeJoinKey': revokeJoinKey(msg.token); break
       case 'put': putDoc(msg.path, msg.data).catch(e => send({ evt: 'error', msg: e.message })); break
       case 'list': listAll().catch(e => send({ evt: 'error', msg: e.message })); break
       case 'read': readDoc(msg.path).catch(e => send({ evt: 'error', msg: e.message })); break

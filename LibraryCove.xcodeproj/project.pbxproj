@@ -8,52 +8,82 @@
 
 /* Begin PBXBuildFile section */
 		006E1D19CA0376B4CB0BC8E7 /* SyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6F7F346D75B7A64BF0FEDAB /* SyncTests.swift */; };
+		0175307141C217195AB5B427 /* bare-dns.2.2.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5375F33808E3726ED3A26D1E /* bare-dns.2.2.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		03573280A6566BDDF955A015 /* LibraryPDFExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59D7FF358C6E993C9532C22D /* LibraryPDFExport.swift */; };
+		03AE6E30640420480FAE4198 /* bare-fs.4.8.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1B680C8856DAD7DF4EC2090A /* bare-fs.4.8.1.xcframework */; };
+		0741B572CDA1DD6304F839DC /* bare-tcp.2.6.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 774B27564AA5B7E83F359853 /* bare-tcp.2.6.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		075B5DFDF32C339D2F80A48A /* SyncCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = C29BC837621AF27DC2775241 /* SyncCoordinator.swift */; };
+		0775CC6C43F4F7AC161C58B8 /* rocksdb-native.3.18.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 098A511A3D58D9148FB4C617 /* rocksdb-native.3.18.1.xcframework */; };
 		078C797EE89C2CA8CFF3AD00 /* AIAskView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA04E88EA8596412A10827BF /* AIAskView.swift */; };
 		08316716F806FF6C12C4311B /* LibraryMembersSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BC9615B358E8F3660EF2BA0 /* LibraryMembersSheet.swift */; };
 		08481702354F5FDE99A16202 /* SharedLibraryEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7439A924A23529C8EB8A6F87 /* SharedLibraryEngine.swift */; };
 		0D35714F2D17C778EF03B4D1 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38C4C27CCDAE0A942651A19 /* WelcomeView.swift */; };
+		0DFDA63BEC805FA62B7F2CF1 /* bare-os.3.9.3.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4E23F05A3624E559FDD0BD39 /* bare-os.3.9.3.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		0E8625D6A74DA882D4108BC1 /* bare-signals.5.0.0.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 548EB2575FD52A75299705E7 /* bare-signals.5.0.0.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		105377F7288FA64310147BF6 /* LibraryDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93F50C84CAADE351A33A75EA /* LibraryDataServiceTests.swift */; };
 		115466A47AC1572A946E79D0 /* Note.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3204E211191D7838B846B5 /* Note.swift */; };
+		11C638700209FC66B8994D1F /* pears-sim.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 7063BE2B7F2AE0B61B709E63 /* pears-sim.bundle */; };
 		13816A00FBC090525B76F612 /* SharedLibraryMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = D43D6E17D5675CDD7C76A052 /* SharedLibraryMirror.swift */; };
 		154AC76B4EF91DB6A7EAC5F3 /* LibraryContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF06E540D41058875FF285F9 /* LibraryContext.swift */; };
 		15CCFF7D779DD928E43019F0 /* WebSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE81543984D7068E79C68613 /* WebSearch.swift */; };
+		1C7CEA6BEA214690B736D71B /* bare-os.3.9.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4E23F05A3624E559FDD0BD39 /* bare-os.3.9.3.xcframework */; };
 		1CE91B973CFDCE7C522E2B67 /* DeleteEverythingShareTeardownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56326C93D69B8DF41AEC2E38 /* DeleteEverythingShareTeardownTests.swift */; };
 		1E7AC6132CAF0D31BFA425E2 /* GreetingRenameTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3648AC227DE66F1955A2954 /* GreetingRenameTests.swift */; };
 		1F938106147677D56A0E4692 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63692AC5935AA581F65A494E /* AuthService.swift */; };
 		20CCCD758E10C89DACBE559B /* BackupDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E9E94650797FC4FF53FF470 /* BackupDetailView.swift */; };
 		218A1C024D2299D73924C5BA /* CoverImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 613A860A534A8684B30EA259 /* CoverImageStore.swift */; };
 		2258029820ED360F7ED9EB0A /* AppleIntelligenceProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A1E789F05B1CE6BEF28BAE /* AppleIntelligenceProvider.swift */; };
+		23F1BEB555BFB1B51C633757 /* bare-fs.4.8.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1B680C8856DAD7DF4EC2090A /* bare-fs.4.8.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		262D6F608BDD7C2E74B41E44 /* bare-url.2.5.4.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 163551DB6D323CEE72432D22 /* bare-url.2.5.4.xcframework */; };
+		2693FA512A01474B9C5E00F7 /* bare-type-stripper.0.1.7.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 52E682E1B005343914778D7C /* bare-type-stripper.0.1.7.xcframework */; };
 		3204DC79AC1E225302FF1CF9 /* MasteringAndClassifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9385EE72F524938D7844319D /* MasteringAndClassifierTests.swift */; };
+		33A5C210CD4A6561A80C778B /* bare-type.1.1.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4FF2C56B1BBE933B92B5E5FA /* bare-type.1.1.1.xcframework */; };
 		3415684FA322B72A6DC1E471 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9A41FBBC13349A8560B10A /* AboutView.swift */; };
+		3656C7162029DCA077FCBF9C /* bare-posix.1.0.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2690117D1C0B649123E00232 /* bare-posix.1.0.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		3A9841CBAE496E1F8B01E604 /* SharedLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA3814C7AF96A700B1B181B3 /* SharedLibraryTests.swift */; };
 		3D0FA7C7D2211BF147C9C012 /* PerLibraryShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E74EC67B67A342BEFD12052 /* PerLibraryShareTests.swift */; };
+		3D46A8107F63547636222EF8 /* bare-path.3.1.2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FEA5D24CBEB3F38C3E19107C /* bare-path.3.1.2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		408232ECE5E9C1F012AAB46E /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 879330D2640D53E6B07D1D12 /* BookDetailView.swift */; };
 		40A539875C869D7D39CF1F99 /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38019619FEE54D8B6CFB1153 /* User.swift */; };
 		415E354779E93196CDF86AC6 /* AITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B75CBF3F8BA0D3FA87E87611 /* AITests.swift */; };
 		42205CB1D580DB5218E23F3A /* LibraryRetriever.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8D4A0258B8050B44A8A615 /* LibraryRetriever.swift */; };
 		429A8A062BD4FD2E69362281 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2926F23B1B3B74D735ECF300 /* LibraryViewModel.swift */; };
 		448C6FDC0D27A83531106DA8 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF9D78B1E6B59239F3253BD9 /* SettingsView.swift */; };
+		453A83C031851E718ECB8AA4 /* bare-type.1.1.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4FF2C56B1BBE933B92B5E5FA /* bare-type.1.1.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		46EDC7F45E5FD88AB67D893D /* bare-tcp.2.6.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 774B27564AA5B7E83F359853 /* bare-tcp.2.6.1.xcframework */; };
 		481487D23023264A3DC3393E /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = C6E521F99961E68EE93C794F /* CHANGELOG.md */; };
+		48D7A83102576B54DB08C08C /* bare-pipe.4.3.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 7ADBC5BA517B2EF29B8482F0 /* bare-pipe.4.3.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		494F4395B081E3900FEA2EB9 /* LibraryScope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CAFF6830211A8E81775F4DD /* LibraryScope.swift */; };
 		4A843E6085F086F61B90897D /* AIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57AA09FBA363FDDCE982E523 /* AIConfig.swift */; };
+		4B0F044822F4D7399C5770EE /* sodium-native.5.1.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 09719A5D0FB7FA81AB122FB6 /* sodium-native.5.1.0.xcframework */; };
+		4B127D98D20F2228FABCEF11 /* bare-signals.5.0.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 548EB2575FD52A75299705E7 /* bare-signals.5.0.0.xcframework */; };
 		4B9516D72CF280A4ED8C4696 /* BackupStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C9A9AD04A8389EB7D1C1C30 /* BackupStore.swift */; };
+		4C8FE8D872E717F6266265E0 /* bare-pipe.4.3.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7ADBC5BA517B2EF29B8482F0 /* bare-pipe.4.3.1.xcframework */; };
+		4D3AE0C3B500610295EDD794 /* bare-type-stripper.0.1.7.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 52E682E1B005343914778D7C /* bare-type-stripper.0.1.7.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		582A2CD27D76F6494B202BEA /* WebSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C867BC5A92C34F8C7107E9BC /* WebSearchTests.swift */; };
 		59AD650EB81B3D08B3486871 /* AddBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FD65D90180DE8F7F0C0C6E /* AddBookView.swift */; };
 		59B9A453268C8B6042902097 /* HardcoverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B65B7E70D54CFB4A58B1C8 /* HardcoverService.swift */; };
+		5A246B4758760F9C3648C54A /* bare-tty.5.1.2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3A8BA8452FD6F40CBB5B5493 /* bare-tty.5.1.2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		5DED280E9022BA22AF2BCBAB /* bare-module-lexer.1.6.7.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E35F6FA38DFDF2D9CF5108C1 /* bare-module-lexer.1.6.7.xcframework */; };
 		5F14895C0AEC0944D2B0D132 /* LibrarySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = F71D73D6B03EFC6FD3FA58B0 /* LibrarySync.swift */; };
 		6232AFFCDC756947FC756F94 /* BackupsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44869DF584EC707A877F252 /* BackupsView.swift */; };
 		62F278C766B0837F09ED8660 /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B8DFA70E147182B2DF5B70B /* AIService.swift */; };
 		63C01F8E41EEC314F6D23D87 /* GenreCleanupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 092D43C18016AEAE255215A3 /* GenreCleanupView.swift */; };
 		64AA32DA2F8F2D21220EC6B3 /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA8F1D81A354EF33EDF40841 /* Persistence.swift */; };
 		6536D73E660E13DF24F4256F /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE34E9552373F09A16F784A /* AIModels.swift */; };
+		66BA9C6BD1374C87EECDAD89 /* bare-url.2.5.4.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 163551DB6D323CEE72432D22 /* bare-url.2.5.4.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		67374DB984295CE6881B89EE /* LibraryCoveApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58C947C02C0CACC2809FB34C /* LibraryCoveApp.swift */; };
+		67BF1E37CB278C537788A576 /* PearsSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7702E3A542417286E548D81A /* PearsSyncEngine.swift */; };
+		6806035EA748F187BAEAFF04 /* rabin-native.2.0.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FF3B55E6D5F76F1062235482 /* rabin-native.2.0.0.xcframework */; };
 		68228A44B582DE42CDBEC915 /* ProviderSwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B83BE27057A2D7D5510732D /* ProviderSwitcher.swift */; };
 		687FA0D8F238AD7269653F59 /* BookDateRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */; };
 		69AB41ABD1AF3A18FBE7C5F0 /* BookFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 420CC7481F27D37D90912C4A /* BookFormView.swift */; };
 		6A80E115A00F2B1F56DF5FDE /* OpenAICompatibleProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293D31F3988AD1CD6BE3398B /* OpenAICompatibleProvider.swift */; };
 		6D5E3BBD794062BE5E34B6AE /* ExportFormatGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D710F3248A8B830BA85A4AB /* ExportFormatGuide.swift */; };
+		70F6C73965CEEF5CE35B930B /* bare-module.7.0.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A719B42D1693280515B59474 /* bare-module.7.0.3.xcframework */; };
+		71B280F55B0A1D5E2539C1C9 /* bare-path.3.1.2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = FEA5D24CBEB3F38C3E19107C /* bare-path.3.1.2.xcframework */; };
+		7249657378632875FD83D74C /* quickbit-native.2.4.9.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 89A1217EFAAD716C6BF6A782 /* quickbit-native.2.4.9.xcframework */; };
+		7618DFE565EE665F0E47EE54 /* bare-inspect.3.1.10.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0847D15D82A2F332F824ABBD /* bare-inspect.3.1.10.xcframework */; };
 		7641284B6EC5A7F64408529A /* ScanQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFE56940DCBA01F21E07DD18 /* ScanQueueStore.swift */; };
 		76EE4A78DB4BE0C9C1B0465D /* DuplicatePreservationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9F42B2AF197F90F7EE95B46 /* DuplicatePreservationTests.swift */; };
 		77155B1A3685C6D28C37221B /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE5A7F56050D2EA97A2F5292 /* Book.swift */; };
@@ -64,12 +94,22 @@
 		81D36BEDDFC9EEEE5315FC08 /* SharedLibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C90AA78140D70FC0FF92009 /* SharedLibraryModels.swift */; };
 		868F8D72F7D13A480E0854B6 /* LocationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 631B01076AF533DED7FBA13A /* LocationStore.swift */; };
 		881DCB56743F76CF038108FE /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 251BB09509CE032E1C9352E8 /* LibraryView.swift */; };
+		88DE1BC7E3D7C8380CED5FB8 /* bare-subprocess.6.2.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A64EAC977BD4639E4DD55582 /* bare-subprocess.6.2.0.xcframework */; };
 		88EDB84780193EFB279EBE70 /* LibraryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37E1EE92E51BDBDBC6CAA824 /* LibraryListView.swift */; };
 		8B0978549ED6D63608822913 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = E5BB8990A333EC21F123A841 /* MarkdownUI */; };
+		8BB21571C4F7C3D5DC6EFB2B /* BareKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 57496178F1174E47D4909E2B /* BareKit.xcframework */; };
 		8BC3805BEC3442DB8989D8AC /* BookMastering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 572B0E293B7CC81FB4F4ED14 /* BookMastering.swift */; };
+		8C8F0B77C7F23FA091953373 /* bare-stdio.1.0.3.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = CB459E2B2397A2134865A4FF /* bare-stdio.1.0.3.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		8E84E0730613C9D9019C773A /* bare-abort.2.0.13.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1292386536283BD3F8684E20 /* bare-abort.2.0.13.xcframework */; };
 		8F8EDBF92BAE196C11A99FCE /* ZipArchive.swift in Sources */ = {isa = PBXBuildFile; fileRef = C011F248612BA0A3A5916731 /* ZipArchive.swift */; };
+		9110B24EC8BB2C7E4EEBD830 /* bare-structured-clone.2.0.0.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C27D72E88ACDA8364A3F11A7 /* bare-structured-clone.2.0.0.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		9311A5087FF37BCED31EA77C /* BareKit.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 57496178F1174E47D4909E2B /* BareKit.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		942C512B188D9E8E941C6236 /* bare-subprocess.5.2.2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 690DBE7DCBE3C92EE291E78F /* bare-subprocess.5.2.2.xcframework */; };
 		96C27A2A506075F9B9B98700 /* MultiSelectFilterSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81CD28209B51158D53D2CE77 /* MultiSelectFilterSheet.swift */; };
+		9725D279BD51A0703E74D527 /* bare-subprocess.5.2.2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 690DBE7DCBE3C92EE291E78F /* bare-subprocess.5.2.2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		9B45BBFDB41ACFA4216C37C4 /* fs-native-extensions.1.5.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C59A1CBA7E6A7B74DBB5FA65 /* fs-native-extensions.1.5.1.xcframework */; };
 		9F75747BF40F76516B82ABD5 /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C7C31947A3C7A5C490EA5A7 /* Connection.swift */; };
+		A0278AAF7B9A9E4DE96623CF /* sodium-native.5.1.0.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 09719A5D0FB7FA81AB122FB6 /* sodium-native.5.1.0.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A224A1AE89BB0852B0916DC2 /* AIFeaturesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E8A330E97780B2885797AF /* AIFeaturesTests.swift */; };
 		A2CFEE49C97A1B58B5056225 /* ISBNScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1F68A46FAA41AC80D5C0E10 /* ISBNScannerView.swift */; };
 		A9CA8C180FB47CD5D80F1F2C /* MultiLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F1A152E8DDB9AE14B20469 /* MultiLibraryTests.swift */; };
@@ -77,32 +117,57 @@
 		AB4DFB776DC440C18A4B5EB3 /* GenreCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 293CD375A57C5A7D57C513C7 /* GenreCleanup.swift */; };
 		AB9642FF9D4FEB12D157230E /* LibraryCoveUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CC5909E8FACB6C9C6B85631 /* LibraryCoveUITests.swift */; };
 		B34E809EC7201B78809C6979 /* MANUAL-TESTING.md in Resources */ = {isa = PBXBuildFile; fileRef = 5E1C6D16E83835E543DF54F2 /* MANUAL-TESTING.md */; };
+		B3D5DB5D1EFC52B3301515D4 /* bare-module.7.0.3.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A719B42D1693280515B59474 /* bare-module.7.0.3.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B43286294A6E05E7E9E1931D /* ScanQueueStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 805FF4BF819A9897737AB444 /* ScanQueueStoreTests.swift */; };
 		B4365F596EAFE3AE5487A9EE /* CopyDeletePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F69E85506FC987A4E642A1D6 /* CopyDeletePicker.swift */; };
 		B65CA5149E373620C70AF2C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 800C85F705062F215824B67B /* Assets.xcassets */; };
+		B730A9DC375BA764E26BE884 /* fs-native-extensions.1.5.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = C59A1CBA7E6A7B74DBB5FA65 /* fs-native-extensions.1.5.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B880151FCDB82C06B5D6DE72 /* SyncSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF52B777835B4B62203D509E /* SyncSettings.swift */; };
+		B9C1D6C85B13DE49C2CE30CE /* bare-hrtime.2.1.2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 28DC684A1FC08B6D35A0D008 /* bare-hrtime.2.1.2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		BA8DF5DFEF3C5CD61085B02E /* PhotoCropView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A29DC06FD5BA7010411123D2 /* PhotoCropView.swift */; };
 		C1CC389D5ACAB142279EA0C4 /* ConversationMemory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86870DD9F76E5AAFCF889635 /* ConversationMemory.swift */; };
 		C20CB78D594627DF7BD71EA7 /* SharedLibraryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */; };
+		C40B79047F8340BDC356AF63 /* bare-structured-clone.2.0.0.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = C27D72E88ACDA8364A3F11A7 /* bare-structured-clone.2.0.0.xcframework */; };
 		C4772301455409DB9EA18D41 /* LibraryCoveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FE4618EA580CEA09D2B2145 /* LibraryCoveTests.swift */; };
+		C50BA77715EC5077EABDEA6E /* rabin-native.2.0.0.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = FF3B55E6D5F76F1062235482 /* rabin-native.2.0.0.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C60D33D1F93290DCE16AA814 /* bare-buffer.3.7.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5F97EBA3EB650342DE5D9E77 /* bare-buffer.3.7.1.xcframework */; };
+		C9D787D507A250C7E1066A39 /* pears-ios.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 5DC36D5EE6345D9395759942 /* pears-ios.bundle */; };
+		CA8B1A8082846572CEE5EBF3 /* bare-posix.1.0.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2690117D1C0B649123E00232 /* bare-posix.1.0.1.xcframework */; };
 		CDF419E694EF0BE0D1385A02 /* GenreStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BB0D4B843CB0997D5F3BB94 /* GenreStore.swift */; };
 		D095EA55BEFEB2AA6CEB7DC8 /* SharedLibraryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407C83ACA28E442EADA6E456 /* SharedLibraryCoordinator.swift */; };
+		D10AD63A54AC71FD59F86338 /* rocksdb-native.3.18.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 098A511A3D58D9148FB4C617 /* rocksdb-native.3.18.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D24A30A1D37E97E9BF3C8EC5 /* AskSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9D70D16F6CB326CD2BBFE8E /* AskSuggestions.swift */; };
 		D31770FBFD6E3A897AA295DE /* CloudSyncMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18B465AE596AF5E778C09A4 /* CloudSyncMonitor.swift */; };
 		D793B9297FBCB7F9F2F3B63B /* LibraryDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */; };
 		D86F7752E2772295D9338A70 /* FictionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */; };
 		D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D432F92F737332E449E2D8 /* ReadingList.swift */; };
+		D991E8D4DF28C7B44D570E8E /* simdle-native.1.3.9.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6D3D7A18CDE47D0A155FF5CA /* simdle-native.1.3.9.xcframework */; };
+		DA45D2F5A2A9E325C511763A /* bare-dns.2.2.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5375F33808E3726ED3A26D1E /* bare-dns.2.2.1.xcframework */; };
+		DA8300F0223AF35B69788E44 /* udx-native.1.21.3.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4C8BE06C7DEA46D5EF4007DC /* udx-native.1.21.3.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		DDD8405B7154553EC7252C5B /* bare-buffer.3.7.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 5F97EBA3EB650342DE5D9E77 /* bare-buffer.3.7.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		DDEAFB6EC8F5A295BE927AF4 /* BookDuplicateRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C60EF49D4A2E46BBE98C6C1 /* BookDuplicateRepair.swift */; };
 		DFA0C7EE016465DA638EFB92 /* ShareLibrarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57EBBAD49D6951041A2D944B /* ShareLibrarySheet.swift */; };
 		DFDB118EFC683216D9AD832B /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C64026BA61B06F5581ECC18A /* AdvancedSettingsView.swift */; };
 		E0ED3582C37823043D0AA5B5 /* AssignValuesSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6309B9D98181B8495D02410 /* AssignValuesSheet.swift */; };
+		E19A4D82502CA193741D212D /* bare-module-lexer.1.6.7.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = E35F6FA38DFDF2D9CF5108C1 /* bare-module-lexer.1.6.7.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E234ECECA27A71F571863FCC /* bare-inspect.3.1.10.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 0847D15D82A2F332F824ABBD /* bare-inspect.3.1.10.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E50EC66F719DFD6E89D853B7 /* DeleteLibrarySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFAA49DC8B172DAA6B5ECA8D /* DeleteLibrarySheet.swift */; };
 		E5229796998C84B6F53CA74E /* BookIDRepair.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */; };
 		E7814E33AA443721EF1CCFAB /* StopSharingMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB5118C5C5776F2484EC0C06 /* StopSharingMigrationTests.swift */; };
+		E7CF0E22737BA192810C076B /* bare-stdio.1.0.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB459E2B2397A2134865A4FF /* bare-stdio.1.0.3.xcframework */; };
+		EAA3409CB96B6F7B3ADAA038 /* simdle-native.1.3.9.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6D3D7A18CDE47D0A155FF5CA /* simdle-native.1.3.9.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		EC4D34C9B4F3CF171FEA7047 /* bare-subprocess.6.2.0.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A64EAC977BD4639E4DD55582 /* bare-subprocess.6.2.0.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		EC6B4F5E3217832234CFDA58 /* AILog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60568F8C2FF9B25112988E02 /* AILog.swift */; };
+		EFCE563C3666751548531772 /* bare-crypto.1.15.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1CAD3B09FA17BC9A65D01B1B /* bare-crypto.1.15.3.xcframework */; };
 		F2EE5C81D5B49CD370F0E923 /* FictionClassifierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819810B792B9D8D8081CCC84 /* FictionClassifierView.swift */; };
 		F3083778201C5DA7FC1738A2 /* CatalogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 474C8AAAAA2E23371D030C8D /* CatalogService.swift */; };
+		F3D467686AD2334292131D18 /* bare-tty.5.1.2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A8BA8452FD6F40CBB5B5493 /* bare-tty.5.1.2.xcframework */; };
+		F72BF24C0855EBBFD9E8A593 /* bare-hrtime.2.1.2.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 28DC684A1FC08B6D35A0D008 /* bare-hrtime.2.1.2.xcframework */; };
+		F89A9D6066058E49E4835E80 /* bare-crypto.1.15.3.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1CAD3B09FA17BC9A65D01B1B /* bare-crypto.1.15.3.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		F90715CC5CA30B3EB8E4ED1C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD45ABE9C8B08DD85A4F26DE /* RootView.swift */; };
+		FC220E14C8A80F824CB7A5B7 /* udx-native.1.21.3.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4C8BE06C7DEA46D5EF4007DC /* udx-native.1.21.3.xcframework */; };
+		FC7ABE89B9B52F570D176D70 /* quickbit-native.2.4.9.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 89A1217EFAAD716C6BF6A782 /* quickbit-native.2.4.9.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		FE53B39FF6249661C11BB9BB /* bare-abort.2.0.13.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1292386536283BD3F8684E20 /* bare-abort.2.0.13.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,16 +187,70 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		4858DF7F29975942490603CD /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				9311A5087FF37BCED31EA77C /* BareKit.xcframework in Embed Frameworks */,
+				FE53B39FF6249661C11BB9BB /* bare-abort.2.0.13.xcframework in Embed Frameworks */,
+				DDD8405B7154553EC7252C5B /* bare-buffer.3.7.1.xcframework in Embed Frameworks */,
+				F89A9D6066058E49E4835E80 /* bare-crypto.1.15.3.xcframework in Embed Frameworks */,
+				0175307141C217195AB5B427 /* bare-dns.2.2.1.xcframework in Embed Frameworks */,
+				23F1BEB555BFB1B51C633757 /* bare-fs.4.8.1.xcframework in Embed Frameworks */,
+				B9C1D6C85B13DE49C2CE30CE /* bare-hrtime.2.1.2.xcframework in Embed Frameworks */,
+				E234ECECA27A71F571863FCC /* bare-inspect.3.1.10.xcframework in Embed Frameworks */,
+				E19A4D82502CA193741D212D /* bare-module-lexer.1.6.7.xcframework in Embed Frameworks */,
+				B3D5DB5D1EFC52B3301515D4 /* bare-module.7.0.3.xcframework in Embed Frameworks */,
+				0DFDA63BEC805FA62B7F2CF1 /* bare-os.3.9.3.xcframework in Embed Frameworks */,
+				3D46A8107F63547636222EF8 /* bare-path.3.1.2.xcframework in Embed Frameworks */,
+				48D7A83102576B54DB08C08C /* bare-pipe.4.3.1.xcframework in Embed Frameworks */,
+				3656C7162029DCA077FCBF9C /* bare-posix.1.0.1.xcframework in Embed Frameworks */,
+				0E8625D6A74DA882D4108BC1 /* bare-signals.5.0.0.xcframework in Embed Frameworks */,
+				8C8F0B77C7F23FA091953373 /* bare-stdio.1.0.3.xcframework in Embed Frameworks */,
+				9110B24EC8BB2C7E4EEBD830 /* bare-structured-clone.2.0.0.xcframework in Embed Frameworks */,
+				9725D279BD51A0703E74D527 /* bare-subprocess.5.2.2.xcframework in Embed Frameworks */,
+				EC4D34C9B4F3CF171FEA7047 /* bare-subprocess.6.2.0.xcframework in Embed Frameworks */,
+				0741B572CDA1DD6304F839DC /* bare-tcp.2.6.1.xcframework in Embed Frameworks */,
+				5A246B4758760F9C3648C54A /* bare-tty.5.1.2.xcframework in Embed Frameworks */,
+				4D3AE0C3B500610295EDD794 /* bare-type-stripper.0.1.7.xcframework in Embed Frameworks */,
+				453A83C031851E718ECB8AA4 /* bare-type.1.1.1.xcframework in Embed Frameworks */,
+				66BA9C6BD1374C87EECDAD89 /* bare-url.2.5.4.xcframework in Embed Frameworks */,
+				B730A9DC375BA764E26BE884 /* fs-native-extensions.1.5.1.xcframework in Embed Frameworks */,
+				FC7ABE89B9B52F570D176D70 /* quickbit-native.2.4.9.xcframework in Embed Frameworks */,
+				C50BA77715EC5077EABDEA6E /* rabin-native.2.0.0.xcframework in Embed Frameworks */,
+				D10AD63A54AC71FD59F86338 /* rocksdb-native.3.18.1.xcframework in Embed Frameworks */,
+				EAA3409CB96B6F7B3ADAA038 /* simdle-native.1.3.9.xcframework in Embed Frameworks */,
+				A0278AAF7B9A9E4DE96623CF /* sodium-native.5.1.0.xcframework in Embed Frameworks */,
+				DA8300F0223AF35B69788E44 /* udx-native.1.21.3.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0847D15D82A2F332F824ABBD /* bare-inspect.3.1.10.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-inspect.3.1.10.xcframework"; path = "Vendor/bare-inspect.3.1.10.xcframework"; sourceTree = "<group>"; };
 		092D43C18016AEAE255215A3 /* GenreCleanupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanupView.swift; sourceTree = "<group>"; };
+		09719A5D0FB7FA81AB122FB6 /* sodium-native.5.1.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "sodium-native.5.1.0.xcframework"; path = "Vendor/sodium-native.5.1.0.xcframework"; sourceTree = "<group>"; };
+		098A511A3D58D9148FB4C617 /* rocksdb-native.3.18.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "rocksdb-native.3.18.1.xcframework"; path = "Vendor/rocksdb-native.3.18.1.xcframework"; sourceTree = "<group>"; };
 		0F26E6B5D3205241081F15F7 /* BookIDRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookIDRepair.swift; sourceTree = "<group>"; };
+		1292386536283BD3F8684E20 /* bare-abort.2.0.13.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-abort.2.0.13.xcframework"; path = "Vendor/bare-abort.2.0.13.xcframework"; sourceTree = "<group>"; };
+		163551DB6D323CEE72432D22 /* bare-url.2.5.4.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-url.2.5.4.xcframework"; path = "Vendor/bare-url.2.5.4.xcframework"; sourceTree = "<group>"; };
+		1B680C8856DAD7DF4EC2090A /* bare-fs.4.8.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-fs.4.8.1.xcframework"; path = "Vendor/bare-fs.4.8.1.xcframework"; sourceTree = "<group>"; };
 		1BB0D4B843CB0997D5F3BB94 /* GenreStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreStore.swift; sourceTree = "<group>"; };
+		1CAD3B09FA17BC9A65D01B1B /* bare-crypto.1.15.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-crypto.1.15.3.xcframework"; path = "Vendor/bare-crypto.1.15.3.xcframework"; sourceTree = "<group>"; };
 		251BB09509CE032E1C9352E8 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		2690117D1C0B649123E00232 /* bare-posix.1.0.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-posix.1.0.1.xcframework"; path = "Vendor/bare-posix.1.0.1.xcframework"; sourceTree = "<group>"; };
+		28DC684A1FC08B6D35A0D008 /* bare-hrtime.2.1.2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-hrtime.2.1.2.xcframework"; path = "Vendor/bare-hrtime.2.1.2.xcframework"; sourceTree = "<group>"; };
 		2926F23B1B3B74D735ECF300 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 		293CD375A57C5A7D57C513C7 /* GenreCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanup.swift; sourceTree = "<group>"; };
 		293D31F3988AD1CD6BE3398B /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
 		37E1EE92E51BDBDBC6CAA824 /* LibraryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryListView.swift; sourceTree = "<group>"; };
 		38019619FEE54D8B6CFB1153 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
+		3A8BA8452FD6F40CBB5B5493 /* bare-tty.5.1.2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-tty.5.1.2.xcframework"; path = "Vendor/bare-tty.5.1.2.xcframework"; sourceTree = "<group>"; };
 		3C7C31947A3C7A5C490EA5A7 /* Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
 		3C90AA78140D70FC0FF92009 /* SharedLibraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryModels.swift; sourceTree = "<group>"; };
 		3CAFF6830211A8E81775F4DD /* LibraryScope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryScope.swift; sourceTree = "<group>"; };
@@ -140,10 +259,17 @@
 		420CC7481F27D37D90912C4A /* BookFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormView.swift; sourceTree = "<group>"; };
 		474C8AAAAA2E23371D030C8D /* CatalogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogService.swift; sourceTree = "<group>"; };
 		4C60EF49D4A2E46BBE98C6C1 /* BookDuplicateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDuplicateRepair.swift; sourceTree = "<group>"; };
+		4C8BE06C7DEA46D5EF4007DC /* udx-native.1.21.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "udx-native.1.21.3.xcframework"; path = "Vendor/udx-native.1.21.3.xcframework"; sourceTree = "<group>"; };
 		4D710F3248A8B830BA85A4AB /* ExportFormatGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFormatGuide.swift; sourceTree = "<group>"; };
+		4E23F05A3624E559FDD0BD39 /* bare-os.3.9.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-os.3.9.3.xcframework"; path = "Vendor/bare-os.3.9.3.xcframework"; sourceTree = "<group>"; };
 		4FE4618EA580CEA09D2B2145 /* LibraryCoveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoveTests.swift; sourceTree = "<group>"; };
+		4FF2C56B1BBE933B92B5E5FA /* bare-type.1.1.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-type.1.1.1.xcframework"; path = "Vendor/bare-type.1.1.1.xcframework"; sourceTree = "<group>"; };
+		52E682E1B005343914778D7C /* bare-type-stripper.0.1.7.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-type-stripper.0.1.7.xcframework"; path = "Vendor/bare-type-stripper.0.1.7.xcframework"; sourceTree = "<group>"; };
+		5375F33808E3726ED3A26D1E /* bare-dns.2.2.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-dns.2.2.1.xcframework"; path = "Vendor/bare-dns.2.2.1.xcframework"; sourceTree = "<group>"; };
+		548EB2575FD52A75299705E7 /* bare-signals.5.0.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-signals.5.0.0.xcframework"; path = "Vendor/bare-signals.5.0.0.xcframework"; sourceTree = "<group>"; };
 		56326C93D69B8DF41AEC2E38 /* DeleteEverythingShareTeardownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteEverythingShareTeardownTests.swift; sourceTree = "<group>"; };
 		572B0E293B7CC81FB4F4ED14 /* BookMastering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookMastering.swift; sourceTree = "<group>"; };
+		57496178F1174E47D4909E2B /* BareKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BareKit.xcframework; path = Vendor/BareKit.xcframework; sourceTree = "<group>"; };
 		57AA09FBA363FDDCE982E523 /* AIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIConfig.swift; sourceTree = "<group>"; };
 		57EBBAD49D6951041A2D944B /* ShareLibrarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareLibrarySheet.swift; sourceTree = "<group>"; };
 		58C947C02C0CACC2809FB34C /* LibraryCoveApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoveApp.swift; sourceTree = "<group>"; };
@@ -152,17 +278,25 @@
 		5BC9615B358E8F3660EF2BA0 /* LibraryMembersSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryMembersSheet.swift; sourceTree = "<group>"; };
 		5C938D002EF97DE5DEC8EACE /* SyncProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncProvider.swift; sourceTree = "<group>"; };
 		5C9A9AD04A8389EB7D1C1C30 /* BackupStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupStore.swift; sourceTree = "<group>"; };
+		5DC36D5EE6345D9395759942 /* pears-ios.bundle */ = {isa = PBXFileReference; lastKnownFileType = wrapper.cfbundle; path = "pears-ios.bundle"; sourceTree = "<group>"; };
 		5E1C6D16E83835E543DF54F2 /* MANUAL-TESTING.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "MANUAL-TESTING.md"; sourceTree = "<group>"; };
+		5F97EBA3EB650342DE5D9E77 /* bare-buffer.3.7.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-buffer.3.7.1.xcframework"; path = "Vendor/bare-buffer.3.7.1.xcframework"; sourceTree = "<group>"; };
 		60568F8C2FF9B25112988E02 /* AILog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AILog.swift; sourceTree = "<group>"; };
 		613A860A534A8684B30EA259 /* CoverImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverImageStore.swift; sourceTree = "<group>"; };
 		631B01076AF533DED7FBA13A /* LocationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationStore.swift; sourceTree = "<group>"; };
 		63692AC5935AA581F65A494E /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		690DBE7DCBE3C92EE291E78F /* bare-subprocess.5.2.2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-subprocess.5.2.2.xcframework"; path = "Vendor/bare-subprocess.5.2.2.xcframework"; sourceTree = "<group>"; };
 		6C8D4A0258B8050B44A8A615 /* LibraryRetriever.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryRetriever.swift; sourceTree = "<group>"; };
 		6CC5909E8FACB6C9C6B85631 /* LibraryCoveUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryCoveUITests.swift; sourceTree = "<group>"; };
+		6D3D7A18CDE47D0A155FF5CA /* simdle-native.1.3.9.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "simdle-native.1.3.9.xcframework"; path = "Vendor/simdle-native.1.3.9.xcframework"; sourceTree = "<group>"; };
 		6DE34E9552373F09A16F784A /* AIModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIModels.swift; sourceTree = "<group>"; };
 		6E74EC67B67A342BEFD12052 /* PerLibraryShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerLibraryShareTests.swift; sourceTree = "<group>"; };
+		7063BE2B7F2AE0B61B709E63 /* pears-sim.bundle */ = {isa = PBXFileReference; lastKnownFileType = wrapper.cfbundle; path = "pears-sim.bundle"; sourceTree = "<group>"; };
 		730DFB529064FDA2653849B2 /* LibraryCoveTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = LibraryCoveTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		7439A924A23529C8EB8A6F87 /* SharedLibraryEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryEngine.swift; sourceTree = "<group>"; };
+		7702E3A542417286E548D81A /* PearsSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearsSyncEngine.swift; sourceTree = "<group>"; };
+		774B27564AA5B7E83F359853 /* bare-tcp.2.6.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-tcp.2.6.1.xcframework"; path = "Vendor/bare-tcp.2.6.1.xcframework"; sourceTree = "<group>"; };
+		7ADBC5BA517B2EF29B8482F0 /* bare-pipe.4.3.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-pipe.4.3.1.xcframework"; path = "Vendor/bare-pipe.4.3.1.xcframework"; sourceTree = "<group>"; };
 		800C85F705062F215824B67B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		805FF4BF819A9897737AB444 /* ScanQueueStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQueueStoreTests.swift; sourceTree = "<group>"; };
 		819810B792B9D8D8081CCC84 /* FictionClassifierView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FictionClassifierView.swift; sourceTree = "<group>"; };
@@ -172,6 +306,7 @@
 		86870DD9F76E5AAFCF889635 /* ConversationMemory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationMemory.swift; sourceTree = "<group>"; };
 		879330D2640D53E6B07D1D12 /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
 		88A1E789F05B1CE6BEF28BAE /* AppleIntelligenceProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligenceProvider.swift; sourceTree = "<group>"; };
+		89A1217EFAAD716C6BF6A782 /* quickbit-native.2.4.9.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "quickbit-native.2.4.9.xcframework"; path = "Vendor/quickbit-native.2.4.9.xcframework"; sourceTree = "<group>"; };
 		8E9E94650797FC4FF53FF470 /* BackupDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDetailView.swift; sourceTree = "<group>"; };
 		8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryDataService.swift; sourceTree = "<group>"; };
 		9378B61813092CA7718B0309 /* LibraryDataService+ArchiveBooks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LibraryDataService+ArchiveBooks.swift"; sourceTree = "<group>"; };
@@ -182,6 +317,8 @@
 		A1B65B7E70D54CFB4A58B1C8 /* HardcoverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardcoverService.swift; sourceTree = "<group>"; };
 		A29DC06FD5BA7010411123D2 /* PhotoCropView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCropView.swift; sourceTree = "<group>"; };
 		A38C4C27CCDAE0A942651A19 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		A64EAC977BD4639E4DD55582 /* bare-subprocess.6.2.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-subprocess.6.2.0.xcframework"; path = "Vendor/bare-subprocess.6.2.0.xcframework"; sourceTree = "<group>"; };
+		A719B42D1693280515B59474 /* bare-module.7.0.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-module.7.0.3.xcframework"; path = "Vendor/bare-module.7.0.3.xcframework"; sourceTree = "<group>"; };
 		AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FictionClassifier.swift; sourceTree = "<group>"; };
 		B1F68A46FAA41AC80D5C0E10 /* ISBNScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISBNScannerView.swift; sourceTree = "<group>"; };
 		B3648AC227DE66F1955A2954 /* GreetingRenameTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GreetingRenameTests.swift; sourceTree = "<group>"; };
@@ -192,8 +329,10 @@
 		C02087037FD461D4D7D1D0E3 /* BookDateRepair.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDateRepair.swift; sourceTree = "<group>"; };
 		C068D85C2730FF4AA6CB4583 /* LibraryCove.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = LibraryCove.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1652A6F35E18E6459BCA5D8 /* SharedLibraryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryRecord.swift; sourceTree = "<group>"; };
+		C27D72E88ACDA8364A3F11A7 /* bare-structured-clone.2.0.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-structured-clone.2.0.0.xcframework"; path = "Vendor/bare-structured-clone.2.0.0.xcframework"; sourceTree = "<group>"; };
 		C29BC837621AF27DC2775241 /* SyncCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncCoordinator.swift; sourceTree = "<group>"; };
 		C44869DF584EC707A877F252 /* BackupsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupsView.swift; sourceTree = "<group>"; };
+		C59A1CBA7E6A7B74DBB5FA65 /* fs-native-extensions.1.5.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "fs-native-extensions.1.5.1.xcframework"; path = "Vendor/fs-native-extensions.1.5.1.xcframework"; sourceTree = "<group>"; };
 		C64026BA61B06F5581ECC18A /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		C6E521F99961E68EE93C794F /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
 		C6E8A330E97780B2885797AF /* AIFeaturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIFeaturesTests.swift; sourceTree = "<group>"; };
@@ -203,12 +342,14 @@
 		C867BC5A92C34F8C7107E9BC /* WebSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearchTests.swift; sourceTree = "<group>"; };
 		C9F42B2AF197F90F7EE95B46 /* DuplicatePreservationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DuplicatePreservationTests.swift; sourceTree = "<group>"; };
 		CA3814C7AF96A700B1B181B3 /* SharedLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryTests.swift; sourceTree = "<group>"; };
+		CB459E2B2397A2134865A4FF /* bare-stdio.1.0.3.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-stdio.1.0.3.xcframework"; path = "Vendor/bare-stdio.1.0.3.xcframework"; sourceTree = "<group>"; };
 		CF9D78B1E6B59239F3253BD9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D18B465AE596AF5E778C09A4 /* CloudSyncMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSyncMonitor.swift; sourceTree = "<group>"; };
 		D43D6E17D5675CDD7C76A052 /* SharedLibraryMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedLibraryMirror.swift; sourceTree = "<group>"; };
 		DA04E88EA8596412A10827BF /* AIAskView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIAskView.swift; sourceTree = "<group>"; };
 		DFAA49DC8B172DAA6B5ECA8D /* DeleteLibrarySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteLibrarySheet.swift; sourceTree = "<group>"; };
 		E2FD65D90180DE8F7F0C0C6E /* AddBookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddBookView.swift; sourceTree = "<group>"; };
+		E35F6FA38DFDF2D9CF5108C1 /* bare-module-lexer.1.6.7.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-module-lexer.1.6.7.xcframework"; path = "Vendor/bare-module-lexer.1.6.7.xcframework"; sourceTree = "<group>"; };
 		EA8F1D81A354EF33EDF40841 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		EAB88FA372525745721C68B6 /* LibraryCove.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = LibraryCove.entitlements; sourceTree = "<group>"; };
 		EE81543984D7068E79C68613 /* WebSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSearch.swift; sourceTree = "<group>"; };
@@ -222,7 +363,9 @@
 		FB5118C5C5776F2484EC0C06 /* StopSharingMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StopSharingMigrationTests.swift; sourceTree = "<group>"; };
 		FD45ABE9C8B08DD85A4F26DE /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		FE5A7F56050D2EA97A2F5292 /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
+		FEA5D24CBEB3F38C3E19107C /* bare-path.3.1.2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-path.3.1.2.xcframework"; path = "Vendor/bare-path.3.1.2.xcframework"; sourceTree = "<group>"; };
 		FF06E540D41058875FF285F9 /* LibraryContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryContext.swift; sourceTree = "<group>"; };
+		FF3B55E6D5F76F1062235482 /* rabin-native.2.0.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "rabin-native.2.0.0.xcframework"; path = "Vendor/rabin-native.2.0.0.xcframework"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -231,6 +374,37 @@
 			buildActionMask = 2147483647;
 			files = (
 				8B0978549ED6D63608822913 /* MarkdownUI in Frameworks */,
+				8BB21571C4F7C3D5DC6EFB2B /* BareKit.xcframework in Frameworks */,
+				8E84E0730613C9D9019C773A /* bare-abort.2.0.13.xcframework in Frameworks */,
+				C60D33D1F93290DCE16AA814 /* bare-buffer.3.7.1.xcframework in Frameworks */,
+				EFCE563C3666751548531772 /* bare-crypto.1.15.3.xcframework in Frameworks */,
+				DA45D2F5A2A9E325C511763A /* bare-dns.2.2.1.xcframework in Frameworks */,
+				03AE6E30640420480FAE4198 /* bare-fs.4.8.1.xcframework in Frameworks */,
+				F72BF24C0855EBBFD9E8A593 /* bare-hrtime.2.1.2.xcframework in Frameworks */,
+				7618DFE565EE665F0E47EE54 /* bare-inspect.3.1.10.xcframework in Frameworks */,
+				5DED280E9022BA22AF2BCBAB /* bare-module-lexer.1.6.7.xcframework in Frameworks */,
+				70F6C73965CEEF5CE35B930B /* bare-module.7.0.3.xcframework in Frameworks */,
+				1C7CEA6BEA214690B736D71B /* bare-os.3.9.3.xcframework in Frameworks */,
+				71B280F55B0A1D5E2539C1C9 /* bare-path.3.1.2.xcframework in Frameworks */,
+				4C8FE8D872E717F6266265E0 /* bare-pipe.4.3.1.xcframework in Frameworks */,
+				CA8B1A8082846572CEE5EBF3 /* bare-posix.1.0.1.xcframework in Frameworks */,
+				4B127D98D20F2228FABCEF11 /* bare-signals.5.0.0.xcframework in Frameworks */,
+				E7CF0E22737BA192810C076B /* bare-stdio.1.0.3.xcframework in Frameworks */,
+				C40B79047F8340BDC356AF63 /* bare-structured-clone.2.0.0.xcframework in Frameworks */,
+				942C512B188D9E8E941C6236 /* bare-subprocess.5.2.2.xcframework in Frameworks */,
+				88DE1BC7E3D7C8380CED5FB8 /* bare-subprocess.6.2.0.xcframework in Frameworks */,
+				46EDC7F45E5FD88AB67D893D /* bare-tcp.2.6.1.xcframework in Frameworks */,
+				F3D467686AD2334292131D18 /* bare-tty.5.1.2.xcframework in Frameworks */,
+				2693FA512A01474B9C5E00F7 /* bare-type-stripper.0.1.7.xcframework in Frameworks */,
+				33A5C210CD4A6561A80C778B /* bare-type.1.1.1.xcframework in Frameworks */,
+				262D6F608BDD7C2E74B41E44 /* bare-url.2.5.4.xcframework in Frameworks */,
+				9B45BBFDB41ACFA4216C37C4 /* fs-native-extensions.1.5.1.xcframework in Frameworks */,
+				7249657378632875FD83D74C /* quickbit-native.2.4.9.xcframework in Frameworks */,
+				6806035EA748F187BAEAFF04 /* rabin-native.2.0.0.xcframework in Frameworks */,
+				0775CC6C43F4F7AC161C58B8 /* rocksdb-native.3.18.1.xcframework in Frameworks */,
+				D991E8D4DF28C7B44D570E8E /* simdle-native.1.3.9.xcframework in Frameworks */,
+				4B0F044822F4D7399C5770EE /* sodium-native.5.1.0.xcframework in Frameworks */,
+				FC220E14C8A80F824CB7A5B7 /* udx-native.1.21.3.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -275,9 +449,11 @@
 			isa = PBXGroup;
 			children = (
 				C6E521F99961E68EE93C794F /* CHANGELOG.md */,
+				6256E7EF771B4FA616D1153D /* bare-ios-spike */,
 				C52295B8D94F11539C4DBF52 /* LibraryCove */,
 				07412073F274A4DDF7C0527A /* LibraryCoveTests */,
 				FEFD7A78554311F7F208F23E /* LibraryCoveUITests */,
+				81E13863742850D86A18A326 /* Frameworks */,
 				9D656A39BCD370DD1DF07E17 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -295,6 +471,24 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		5DE9C8AFF22AE4A33F8DDCDA /* Pears */ = {
+			isa = PBXGroup;
+			children = (
+				7702E3A542417286E548D81A /* PearsSyncEngine.swift */,
+			);
+			path = Pears;
+			sourceTree = "<group>";
+		};
+		6256E7EF771B4FA616D1153D /* bare-ios-spike */ = {
+			isa = PBXGroup;
+			children = (
+				5DC36D5EE6345D9395759942 /* pears-ios.bundle */,
+				7063BE2B7F2AE0B61B709E63 /* pears-sim.bundle */,
+			);
+			name = "bare-ios-spike";
+			path = "spikes/bare-ios-spike";
+			sourceTree = "<group>";
+		};
 		6A136C6AFAF97BBCFCAC4E6C /* Sync */ = {
 			isa = PBXGroup;
 			children = (
@@ -304,6 +498,7 @@
 				C29BC837621AF27DC2775241 /* SyncCoordinator.swift */,
 				5C938D002EF97DE5DEC8EACE /* SyncProvider.swift */,
 				EF52B777835B4B62203D509E /* SyncSettings.swift */,
+				5DE9C8AFF22AE4A33F8DDCDA /* Pears */,
 				944D29EF181BD30FA31DAB21 /* SharedLibrary */,
 			);
 			path = Sync;
@@ -315,6 +510,44 @@
 				2926F23B1B3B74D735ECF300 /* LibraryViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		81E13863742850D86A18A326 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1292386536283BD3F8684E20 /* bare-abort.2.0.13.xcframework */,
+				5F97EBA3EB650342DE5D9E77 /* bare-buffer.3.7.1.xcframework */,
+				1CAD3B09FA17BC9A65D01B1B /* bare-crypto.1.15.3.xcframework */,
+				5375F33808E3726ED3A26D1E /* bare-dns.2.2.1.xcframework */,
+				1B680C8856DAD7DF4EC2090A /* bare-fs.4.8.1.xcframework */,
+				28DC684A1FC08B6D35A0D008 /* bare-hrtime.2.1.2.xcframework */,
+				0847D15D82A2F332F824ABBD /* bare-inspect.3.1.10.xcframework */,
+				E35F6FA38DFDF2D9CF5108C1 /* bare-module-lexer.1.6.7.xcframework */,
+				A719B42D1693280515B59474 /* bare-module.7.0.3.xcframework */,
+				4E23F05A3624E559FDD0BD39 /* bare-os.3.9.3.xcframework */,
+				FEA5D24CBEB3F38C3E19107C /* bare-path.3.1.2.xcframework */,
+				7ADBC5BA517B2EF29B8482F0 /* bare-pipe.4.3.1.xcframework */,
+				2690117D1C0B649123E00232 /* bare-posix.1.0.1.xcframework */,
+				548EB2575FD52A75299705E7 /* bare-signals.5.0.0.xcframework */,
+				CB459E2B2397A2134865A4FF /* bare-stdio.1.0.3.xcframework */,
+				C27D72E88ACDA8364A3F11A7 /* bare-structured-clone.2.0.0.xcframework */,
+				690DBE7DCBE3C92EE291E78F /* bare-subprocess.5.2.2.xcframework */,
+				A64EAC977BD4639E4DD55582 /* bare-subprocess.6.2.0.xcframework */,
+				774B27564AA5B7E83F359853 /* bare-tcp.2.6.1.xcframework */,
+				3A8BA8452FD6F40CBB5B5493 /* bare-tty.5.1.2.xcframework */,
+				52E682E1B005343914778D7C /* bare-type-stripper.0.1.7.xcframework */,
+				4FF2C56B1BBE933B92B5E5FA /* bare-type.1.1.1.xcframework */,
+				163551DB6D323CEE72432D22 /* bare-url.2.5.4.xcframework */,
+				57496178F1174E47D4909E2B /* BareKit.xcframework */,
+				C59A1CBA7E6A7B74DBB5FA65 /* fs-native-extensions.1.5.1.xcframework */,
+				89A1217EFAAD716C6BF6A782 /* quickbit-native.2.4.9.xcframework */,
+				FF3B55E6D5F76F1062235482 /* rabin-native.2.0.0.xcframework */,
+				098A511A3D58D9148FB4C617 /* rocksdb-native.3.18.1.xcframework */,
+				6D3D7A18CDE47D0A155FF5CA /* simdle-native.1.3.9.xcframework */,
+				09719A5D0FB7FA81AB122FB6 /* sodium-native.5.1.0.xcframework */,
+				4C8BE06C7DEA46D5EF4007DC /* udx-native.1.21.3.xcframework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		83C6B7F727B178209F1CC674 /* AI */ = {
@@ -499,6 +732,7 @@
 				E45918EFA815645604B53B8C /* Sources */,
 				3E1568E0747E147B42C3C938 /* Resources */,
 				07BEF9F1A46CC0FB5FA3CAE3 /* Frameworks */,
+				4858DF7F29975942490603CD /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -579,6 +813,8 @@
 				B65CA5149E373620C70AF2C6 /* Assets.xcassets in Resources */,
 				481487D23023264A3DC3393E /* CHANGELOG.md in Resources */,
 				B34E809EC7201B78809C6979 /* MANUAL-TESTING.md in Resources */,
+				C9D787D507A250C7E1066A39 /* pears-ios.bundle in Resources */,
+				11C638700209FC66B8994D1F /* pears-sim.bundle in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -675,6 +911,7 @@
 				96C27A2A506075F9B9B98700 /* MultiSelectFilterSheet.swift in Sources */,
 				115466A47AC1572A946E79D0 /* Note.swift in Sources */,
 				6A80E115A00F2B1F56DF5FDE /* OpenAICompatibleProvider.swift in Sources */,
+				67BF1E37CB278C537788A576 /* PearsSyncEngine.swift in Sources */,
 				64AA32DA2F8F2D21220EC6B3 /* Persistence.swift in Sources */,
 				BA8DF5DFEF3C5CD61085B02E /* PhotoCropView.swift in Sources */,
 				68228A44B582DE42CDBEC915 /* ProviderSwitcher.swift in Sources */,
@@ -834,6 +1071,10 @@
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = 5F86DRD856;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor\"",
+				);
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LibraryCove;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
@@ -856,6 +1097,10 @@
 				CODE_SIGN_ENTITLEMENTS = LibraryCove/LibraryCove.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				DEVELOPMENT_TEAM = 5F86DRD856;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"Vendor\"",
+				);
 				INFOPLIST_FILE = LibraryCove/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LibraryCove;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";

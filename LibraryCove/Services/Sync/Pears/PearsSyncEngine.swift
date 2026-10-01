@@ -36,9 +36,6 @@ final class PearsSyncEngine: ObservableObject {
 
     private var worklet: BareWorklet?
     private var ipc: BareIPC?
-    private var readBuffer = Data()
-    /// Serialized drain: BareKit.IPC concurrent read() segfaults.
-    private var draining = false
 
     /// The active library this engine instance syncs. v1: one library per
     /// device session (matches the mirror's provider-slot model).
@@ -92,7 +89,7 @@ final class PearsSyncEngine: ObservableObject {
         ipc = nil
         worklet = nil
         isRunning = false
-        readBuffer.removeAll()
+        ipcLineBuffer.reset()
     }
 
     private func bundleSource() throws -> String {
@@ -134,31 +131,29 @@ final class PearsSyncEngine: ObservableObject {
 
     // MARK: - IPC
 
+    /// Callback-thread line buffer. BareIPC.read fires on an ARBITRARY
+    /// queue — this buffer and the line-splitting must NOT touch
+    /// MainActor-isolated state. Parsed events hop to MainActor.
+    private let ipcLineBuffer = IPCLineBuffer()
+
     private func readLoop() {
         ipc?.read { [weak self] data, error in
             guard let self else { return }
-            if let data {
-                if data.isEmpty {
-                    self.lastError = "Pears worklet stream closed"
-                    return
+            guard let data, !data.isEmpty else {
+                if data?.isEmpty == true {
+                    Task { @MainActor in self.lastError = "Pears worklet stream closed" }
                 }
-                self.readBuffer.append(data)
-                self.drainBuffer()
+                return
+            }
+            let events = self.ipcLineBuffer.appendAndExtract(data)
+            guard !events.isEmpty else {
+                self.readLoop()
+                return
+            }
+            Task { @MainActor in
+                for event in events { self.handle(event: event) }
             }
             self.readLoop()
-        }
-    }
-
-    private func drainBuffer() {
-        guard !draining else { return }
-        draining = true
-        defer { draining = false }
-        while let range = readBuffer.range(of: Data("\n".utf8)) {
-            let lineData = readBuffer.subdata(in: readBuffer.startIndex..<range.lowerBound)
-            readBuffer.removeSubrange(readBuffer.startIndex..<range.upperBound)
-            guard let line = String(data: lineData, encoding: .utf8),
-                  let event = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else { continue }
-            handle(event: event)
         }
     }
 
@@ -329,4 +324,35 @@ struct PearsJoinKey: Codable, Equatable, Identifiable {
     var usedAt: Date?
 
     var id: String { code }
+}
+
+/// Thread-safe NDJSON line splitter for the BareIPC callback thread.
+/// `appendAndExtract` and `reset` are the only mutation surfaces; they
+/// serialize on an NSLock so the arbitrary-queue read callback can never
+/// race a reset or a second in-flight read.
+final class IPCLineBuffer {
+    private let lock = NSLock()
+    private var buffer = Data()
+
+    /// Appends bytes and returns every COMPLETE line parsed as a JSON
+    /// dictionary. Partial trailing bytes stay buffered.
+    func appendAndExtract(_ data: Data) -> [[String: Any]] {
+        lock.lock()
+        defer { lock.unlock() }
+        buffer.append(data)
+        var events: [[String: Any]] = []
+        while let nl = buffer.firstIndex(of: 0x0A) {
+            let lineData = buffer.subdata(in: buffer.startIndex..<nl)
+            buffer.removeSubrange(buffer.startIndex...nl)
+            guard let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any] else { continue }
+            events.append(obj)
+        }
+        return events
+    }
+
+    func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        buffer.removeAll()
+    }
 }

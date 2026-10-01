@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "bundle": "bare-pack entry.js --host ios-arm64 --linked --defer fs --defer path -o bare-ios.bundle && bare-pack entry.js --host ios-arm64-simulator --linked --defer fs --defer path -o bare-ios-sim.bundle",
-    "bundle:spike2": "bare-pack entry-spike2.js --host ios-arm64 --linked --defer fs --defer path -o spike2-ios.bundle && bare-pack entry-spike2.js --host ios-arm64-simulator --linked --defer fs --defer path -o spike2-sim.bundle"
+    "bundle:spike2": "bare-pack entry-spike2.js --host ios-arm64 --linked --defer fs --defer path -o spike2-ios.bundle && bare-pack entry-spike2.js --host ios-arm64-simulator --linked --defer fs --defer path -o spike2-sim.bundle",
+    "bundle:spike3": "bare-pack entry-spike3.js --host ios-arm64 --linked --defer fs --defer path -o spike3-ios.bundle && bare-pack entry-spike3.js --host ios-arm64-simulator --linked --defer fs --defer path -o spike3-sim.bundle"
   },
   "dependencies": {
     "autobase": "7.25.1",

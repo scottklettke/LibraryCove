@@ -10,8 +10,10 @@ targets:
     sources:
       - BareSpikeApp.swift
       - path: spike2-sim.bundle
+      - path: spike3-sim.bundle
         buildPhase: resources
       - path: spike2-ios.bundle
+      - path: spike3-ios.bundle
         buildPhase: resources
       - path: bare-ios-sim.bundle
         buildPhase: resources

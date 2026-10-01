@@ -105,11 +105,13 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private func startWorklet() {
         BareWorklet.optimize(forMemory: false)
 
+        // SPIKE_BUNDLE env selects the entry (spike2 default, spike3 for
+        // A1 payload-fidelity tests) — set via scheme env or xcrun simctl.
         #if targetEnvironment(simulator)
-        let bundleName = "spike2-sim"
+        let bundleName = (ProcessInfo.processInfo.environment["SPIKE_BUNDLE"] ?? "spike2") + "-sim"
         let device = "simulator"
         #else
-        let bundleName = "spike2-ios"
+        let bundleName = (ProcessInfo.processInfo.environment["SPIKE_BUNDLE"] ?? "spike2") + "-ios"
         let device = UIDevice.current.name
         #endif
         log("device: \(device)")

@@ -26,15 +26,17 @@ struct RootView: View {
         Group {
             if let currentUser = users.first(where: \.isActive) {
                 MainTabView(user: currentUser)
-            } else if hasAnyMember {
-                // A store with members but no active user is a pre-welcome
-                // install (or post-reset) — legacy login still applies.
-                LoginView()
             } else if !inheritCheckDone {
-                // Fresh store, still checking iCloud for an existing
-                // profile (first-import in flight).
+                // Fresh store (or one holding only stale member rows
+                // re-delivered by CloudKit after a reset), still checking
+                // iCloud for an existing profile (first-import in flight).
                 ProgressView()
             } else {
+                // The welcome flow creates the member — there is no login
+                // step anymore. Stale inactive member rows (re-delivered
+                // by CloudKit after Delete Everything) are inert: the UI
+                // only ever resolves the ACTIVE member, and
+                // repairDuplicateActiveMembersIfNeeded keeps exactly one.
                 WelcomeView(onComplete: {})
             }
         }
@@ -90,8 +92,8 @@ struct RootView: View {
             // provider to the mirror store), then sync the mirror store.
             if SyncSettings.selectedProvider == .sharedLibrary {
                 // A freshly-created mirror store has no User row, which would
-                // show LoginView over the shared library — seed a placeholder
-                // identity first (mirrors LoginView's defaults).
+                // show a login gate over the shared library — seed a placeholder
+                // identity first (the welcome flow's defaults).
                 ensureActiveUser(context: modelContext)
                 await SharedLibraryCoordinator.processPendingAcceptIfNeeded()
                 await SharedLibraryEngine.shared.syncNow(context: modelContext)
@@ -156,7 +158,7 @@ struct RootView: View {
 
     /// Shared-library mirror stores start empty (participants pull everything
     /// from the cloud). Without a User row the login gate would cover the
-    /// shared library with LoginView — seed a placeholder identity (via the
+    /// shared library with a memberless gate — seed a placeholder identity (via the
     /// adopt-or-create helper, so a synced primary row is adopted rather
     /// than a divergent duplicate minted).
     private func ensureActiveUser(context: ModelContext) {
@@ -238,31 +240,6 @@ struct RootView: View {
 
         private enum CodingKeys: String, CodingKey {
             case id, title, authors, isbn, publicationYear, bookDescription, descriptionSource
-        }
-    }
-}
-
-/// Simple placeholder login that creates a local family member.
-struct LoginView: View {
-    @Environment(\.modelContext) private var modelContext
-    @State private var email = ""
-    @State private var displayName = ""
-    @State private var isRegistering = false
-
-    var body: some View {
-        Form {
-            Section("Family member") {
-                TextField("Email", text: $email)
-                    .textContentType(.emailAddress)
-                TextField("Display name", text: $displayName)
-            }
-            Button("Enter library") {
-                _ = SharedLibraryCoordinator.createPrimaryMember(
-                    displayName: displayName.isEmpty ? "Family member" : displayName,
-                    email: email.isEmpty ? "local@librarycove.local" : email,
-                    context: modelContext)
-            }
-            .disabled(!isRegistering == false && email.isEmpty && displayName.isEmpty)
         }
     }
 }

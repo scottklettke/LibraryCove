@@ -181,14 +181,16 @@ struct SettingsView: View {
 
             }
             .navigationTitle("Settings")
-            .sheet(isPresented: $showSharingSheet) {
+            .sheet(isPresented: $showSharingSheet, onDismiss: {
+                shareSheetShare = nil
+                Task { await refreshMembers() }
+            }) {
                 if let share = shareSheetShare,
-                   let libraryID = LibraryScope.shared.activeID(context: modelContext) {
-                    CloudSharingSheet(share: share,
-                                      libraryID: libraryID)
-                        .onDisappear {
-                            Task { await refreshMembers() }
-                        }
+                   let libraryID = LibraryScope.shared.activeID(context: modelContext),
+                   let library = LibraryScope.shared.active(context: modelContext) {
+                    ShareLibrarySheet(library: library, share: share,
+                                      linkRole: SharedLibrarySettings.linkDefaultRole(libraryID: libraryID)) {
+                    }
                 }
             }
             .sheet(isPresented: $showLinkRolePicker) {
@@ -1125,62 +1127,6 @@ struct SettingsView: View {
             }
             isDeleting = false
             openLibraryTab()
-        }
-    }
-}
-
-struct CloudSharingSheet: UIViewControllerRepresentable {
-    let share: CKShare
-    /// The active library at presentation time — its share this sheet
-    /// manages; delegates refresh that library's participants.
-    let libraryID: String
-    let container: CKContainer
-
-    init(share: CKShare, libraryID: String, container: CKContainer = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)) {
-        self.share = share
-        self.libraryID = libraryID
-        self.container = container
-    }
-
-    func makeUIViewController(context: Context) -> UICloudSharingController {
-        let controller = UICloudSharingController(share: share, container: container)
-        controller.availablePermissions = [.allowReadOnly, .allowReadWrite]
-        controller.delegate = context.coordinator
-        return controller
-    }
-
-    func updateUIViewController(_ uiViewController: UICloudSharingController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(libraryID: libraryID) }
-
-    final class Coordinator: NSObject, UICloudSharingControllerDelegate {
-        let libraryID: String
-        init(libraryID: String) { self.libraryID = libraryID }
-
-        func cloudSharingController(_ csc: UICloudSharingController, failedToSaveShareWithError error: Error) {
-            SharedLibraryEngine.shared.reportError(error.localizedDescription)
-        }
-
-        func itemTitle(for csc: UICloudSharingController) -> String? {
-            SharedLibrarySettings.shareTitle
-        }
-
-        func cloudSharingControllerDidSaveShare(_ csc: UICloudSharingController) {
-            Task { await SharedLibraryEngine.shared.refreshParticipants(libraryID: libraryID) }
-        }
-
-        func cloudSharingControllerDidStopSharing(_ csc: UICloudSharingController) {
-            // User tapped "Stop Sharing" inside the system sheet.
-            Task { @MainActor in
-                do {
-                    try await SharedLibraryCoordinator.stopSharing()
-                } catch {
-                    // The private library was left untouched (fail-safe);
-                    // surface why instead of failing silently. Settings
-                    // shows the engine's lastError.
-                    SharedLibraryEngine.shared.reportError(error.localizedDescription)
-                }
-            }
         }
     }
 }

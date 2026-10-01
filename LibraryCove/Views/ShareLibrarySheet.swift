@@ -20,7 +20,6 @@ struct ShareLibrarySheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
-    @State private var showSystemSharingController = false
 
     init(library: LibraryInfo, share: CKShare, linkRole: ShareParticipantRole,
          container: CKContainer = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier),
@@ -75,9 +74,6 @@ struct ShareLibrarySheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showSystemSharingController) {
-                CloudSharingSheet(share: share, libraryID: library.id, container: container)
-            }
         }
         .presentationDetents([.medium, .large])
     }
@@ -124,12 +120,6 @@ struct ShareLibrarySheet: View {
             } else {
                 Label("Send link…", systemImage: "paperplane")
                     .foregroundStyle(.secondary)
-            }
-
-            Button {
-                showSystemSharingController = true
-            } label: {
-                Label("Manage participants…", systemImage: "person.2")
             }
         } footer: {
             Text("Send the link however you like — text, email, anything. New members appear in Members after they accept and sync once.")

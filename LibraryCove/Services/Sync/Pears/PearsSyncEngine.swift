@@ -201,6 +201,28 @@ final class PearsSyncEngine: ObservableObject {
         case "counts":
             // Payload counts changed — run the sync cycle.
             Task { await syncNow() }
+        case "data":
+            // readRaw reply: resume the awaiting pull continuation.
+            if let path = event["path"] as? String,
+               let b64 = event["data"] as? String,
+               let bytes = Data(base64Encoded: b64),
+               let continuation = pendingReads.removeValue(forKey: path) {
+                continuation.resume(returning: bytes)
+            }
+        case "written":
+            // putRaw reply (also fires for legacy puts — path-keyed, so
+            // only awaited paths resume).
+            if let path = event["path"] as? String,
+               let continuation = pendingPuts.removeValue(forKey: path) {
+                continuation.resume()
+            }
+        case "paths":
+            // 'list' reply: resolve the discovery continuation.
+            if let paths = event["paths"] as? [String],
+               let continuation = listCompletion {
+                listCompletion = nil
+                continuation.resume(returning: paths)
+            }
         case "joinKeys":
             if let keysData = try? JSONSerialization.data(withJSONObject: event["keys"] ?? []),
                let keys = try? JSONDecoder().decode([PearsJoinKey].self, from: keysData) {
@@ -293,17 +315,115 @@ final class PearsSyncEngine: ObservableObject {
         send(json: ["cmd": "joinV2", "key": parts[1], "token": parts[2], "memberName": memberName])
     }
 
-    // MARK: - Payload pipeline (wired in the codec phase)
+    // MARK: - Payload pipeline
+    //
+    // Push: every Book row in the active library → SharedBook DTO (the
+    // mirror's mapping — same field for field) → JSONEncoder with the
+    // EXACT SharedLibraryRecord settings (msSince1970 + sortedKeys) →
+    // putRaw books/<id>.json. Cover bytes → covers/<id> sibling file.
+    //
+    // Pull: readRaw every books/*.json the peer replicated in, decode,
+    // upsert by the verified conflict rule (record-level LWW on
+    // updatedAt, ties to the INCOMING copy — the mirror's hash-index
+    // rides CKRecord change tokens that P2P doesn't have; record-level
+    // LWW is the correct transport-faithful form and documented).
+
+    /// Outstanding readRaw continuations, keyed by path (the worklet
+    /// replies {evt:'data',path,data:base64}).
+    private var pendingReads: [String: CheckedContinuation<Data?, Never>] = [:]
+
+    private func encodePayload<T: Encodable>(_ value: T) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .millisecondsSince1970
+        encoder.outputFormatting = [.sortedKeys]   // mirrors SharedLibraryRecord.setPayload
+        return try encoder.encode(value)
+    }
+
+    private func decodePayload<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .millisecondsSince1970
+        return try decoder.decode(type, from: data)
+    }
+
+    private func readRawAwait(_ path: String) async -> Data? {
+        await withCheckedContinuation { continuation in
+            pendingReads[path] = continuation
+            send(json: ["cmd": "readRaw", "path": path])
+        }
+    }
+
+    private func putRawAwait(_ path: String, bytes: Data) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            pendingPuts[path] = continuation
+            send(json: ["cmd": "putRaw", "path": path, "data": bytes.base64EncodedString()])
+        }
+    }
+
+    private var pendingPuts: [String: CheckedContinuation<Void, Never>] = [:]
 
     private func pushLocalChanges(libraryID: String, context: ModelContext) async throws {
-        // Next phase: scan dirty rows via SharedLibraryMirror semantics,
-        // encode via SharedLibraryRecord encoder settings, putRaw each.
+        let books = (try? context.fetch(FetchDescriptor<Book>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        for book in books {
+            let dto = SharedLibraryMirror.dto(from: book)
+            let path = "/books/\(book.id).json"
+            // Push every row each cycle (v1 simplicity; the drive dedupes
+            // identical blocks — no bytes move unless content changed).
+            try await putRawAwait(path, bytes: encodePayload(dto))
+            // Cover bytes: sibling file, the CKAsset equivalent.
+            if let coverBytes = CoverImageStore.data(forBookID: book.id) {
+                try await putRawAwait("/covers/\(book.id)", bytes: coverBytes)
+            }
+        }
     }
 
     private func pullRemoteChanges(libraryID: String, context: ModelContext) async throws {
-        // Next phase: readRaw peer paths, decode, apply via the mirror's
-        // verified conflict rule (hash-dirty → LWW updatedAt, ties to server).
+        // Discover what the peer has: the worklet's 'paths' event lists
+        // the whole drive; the poll triggers it. For the v1 cycle, ask
+        // for the known books we already track + any in the last listing.
+        let known = await listRemoteBookPaths()
+        var changes: [SharedRecordChange] = []
+        var assets: [String: Data] = [:]
+        let mirror = SharedLibraryMirror()
+        var index = mirror.loadIndex(libraryID: libraryID)
+        let local = mirror.scan(context: context, libraryID: libraryID)
+        let entriesByName = Dictionary(local.map { ($0.recordName, $0) },
+                                       uniquingKeysWith: { first, _ in first })
+        for path in known {
+            // The worklet's drive.list('/') yields keys WITHOUT the
+            // leading slash ('books/x.json') while puts use '/books/…'
+            // — normalize so readRaw paths match.
+            let normalized = path.hasPrefix("/") ? path : "/" + path
+            guard normalized.hasPrefix("/books/"), normalized.hasSuffix(".json") else { continue }
+            guard let data = await readRawAwait(normalized) else { continue }
+            guard let dto = try? decodePayload(SharedBook.self, from: data) else { continue }
+            let recordName = SharedLibraryRecord.recordName(type: .book, id: dto.id)
+            changes.append(SharedRecordChange(kind: .book(dto)))
+            if let cover = await readRawAwait("/covers/\(dto.id)") {
+                assets[recordName] = cover
+            }
+        }
+        guard !changes.isEmpty else { return }
+        let applied = mirror.apply(changes: changes,
+                                   assets: assets,
+                                   entriesByName: entriesByName,
+                                   index: &index,
+                                   libraryID: libraryID,
+                                   context: context)
+        mirror.saveIndex(index, libraryID: libraryID)
+        if applied > 0 { onRemoteChange?() }
     }
+
+    /// Lists /books/*.json via the worklet's 'list' command (reply: paths).
+    private func listRemoteBookPaths() async -> [String] {
+        await withCheckedContinuation { (continuation: CheckedContinuation<[String], Never>) in
+            listCompletion = continuation
+            send(json: ["cmd": "list"])
+        }
+    }
+
+    private var listCompletion: CheckedContinuation<[String], Never>?
 }
 
 enum PearsError: LocalizedError {

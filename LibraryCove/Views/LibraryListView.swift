@@ -21,6 +21,12 @@ struct LibraryListView: View {
     /// ("grants write access" vs view-only wording).
     @State private var shareSheetLinkRole: ShareParticipantRole = .editor
     @State private var showShareSheet = false
+    /// P2P sheet (admin mode from the context menu, join mode from a
+    /// stashed librarycove://join URL).
+    @State private var pearsSheetLibrary: LibraryInfo?
+    @State private var pearsMode: PearsSyncSheet.Mode = .admin
+    @State private var showPearsSheet = false
+    @State private var pearsPendingKey: String?
     @State private var membersSheetLibrary: LibraryInfo?
     @State private var shareActionError: String?
     @State private var leaveConfirmLibrary: LibraryInfo?
@@ -111,6 +117,12 @@ struct LibraryListView: View {
                             }
                         } else {
                             Button {
+                                pearsSheetLibrary = library
+                                pearsMode = .admin
+                            } label: {
+                                Label("P2P Sync (beta)", systemImage: "antenna.radiowaves.left.and.right")
+                            }
+                            Button {
                                 Task { await shareOrMembers(library) }
                             } label: {
                                 Label("Share library", systemImage: "person.crop.square.badge.plus")
@@ -136,7 +148,17 @@ struct LibraryListView: View {
         }
         .navigationTitle("Libraries")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { reload() }
+        .onAppear {
+            reload()
+            // A librarycove://join URL stashed at launch (or while the app
+            // was open) presents the joiner sheet with the invite filled.
+            if let key = PearsPendingJoin.shared.consume() {
+                pearsMode = .joiner
+                pearsSheetLibrary = LibraryInfo(id: "join", name: "Join", isActive: false, createdAt: Date())
+                pearsPendingKey = key
+                showPearsSheet = true
+            }
+        }
         // Remote folds (another device's rename/create/delete) post
         // librariesChangedNotification without this view leaving the
         // screen — refresh the visible list instead of showing a stale
@@ -151,6 +173,14 @@ struct LibraryListView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(createError ?? "")
+        }
+        .sheet(isPresented: $showPearsSheet, onDismiss: {
+            pearsSheetLibrary = nil
+            pearsPendingKey = nil
+        }) {
+            if let library = pearsSheetLibrary {
+                PearsSyncSheet(mode: pearsMode, library: library, prefillInvite: pearsPendingKey)
+            }
         }
         .sheet(isPresented: $showShareSheet, onDismiss: {
             shareSheetShare = nil

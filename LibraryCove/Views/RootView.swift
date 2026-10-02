@@ -26,6 +26,14 @@ struct RootView: View {
         Group {
             if let currentUser = users.first(where: \.isActive) {
                 MainTabView(user: currentUser)
+                    .onOpenURL { url in
+                        // librarycove://join?key=lc1.<driveKey>.<token>
+                        guard url.scheme == "librarycove",
+                              url.host == "join",
+                              let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                              let key = comps.queryItems?.first(where: { $0.name == "key" })?.value else { return }
+                        PearsPendingJoin.shared.stash(key)
+                    }
             } else if !inheritCheckDone {
                 // Fresh store (or one holding only stale member rows
                 // re-delivered by CloudKit after a reset), still checking

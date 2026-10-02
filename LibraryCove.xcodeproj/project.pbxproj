@@ -61,6 +61,7 @@
 		4C8FE8D872E717F6266265E0 /* bare-pipe.4.3.1.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7ADBC5BA517B2EF29B8482F0 /* bare-pipe.4.3.1.xcframework */; };
 		4D3AE0C3B500610295EDD794 /* bare-type-stripper.0.1.7.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 52E682E1B005343914778D7C /* bare-type-stripper.0.1.7.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		582A2CD27D76F6494B202BEA /* WebSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C867BC5A92C34F8C7107E9BC /* WebSearchTests.swift */; };
+		59A30CF5F001930C22B4CB2D /* PearsSyncSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37F80B1A10E512F6983C456E /* PearsSyncSheet.swift */; };
 		59AD650EB81B3D08B3486871 /* AddBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2FD65D90180DE8F7F0C0C6E /* AddBookView.swift */; };
 		59B9A453268C8B6042902097 /* HardcoverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B65B7E70D54CFB4A58B1C8 /* HardcoverService.swift */; };
 		5A246B4758760F9C3648C54A /* bare-tty.5.1.2.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 3A8BA8452FD6F40CBB5B5493 /* bare-tty.5.1.2.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -138,6 +139,7 @@
 		D10AD63A54AC71FD59F86338 /* rocksdb-native.3.18.1.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 098A511A3D58D9148FB4C617 /* rocksdb-native.3.18.1.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		D24A30A1D37E97E9BF3C8EC5 /* AskSuggestions.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9D70D16F6CB326CD2BBFE8E /* AskSuggestions.swift */; };
 		D31770FBFD6E3A897AA295DE /* CloudSyncMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = D18B465AE596AF5E778C09A4 /* CloudSyncMonitor.swift */; };
+		D776D4A88F181819A81EB329 /* PearsPendingJoin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 557A31EB06FA244608A4D40F /* PearsPendingJoin.swift */; };
 		D793B9297FBCB7F9F2F3B63B /* LibraryDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FC97C06B67C3FBD45AD6941 /* LibraryDataService.swift */; };
 		D86F7752E2772295D9338A70 /* FictionClassifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD105B59F812DF5EB0445B87 /* FictionClassifier.swift */; };
 		D936167CD4C8E7B46E84E1AC /* ReadingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82D432F92F737332E449E2D8 /* ReadingList.swift */; };
@@ -249,6 +251,7 @@
 		293CD375A57C5A7D57C513C7 /* GenreCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenreCleanup.swift; sourceTree = "<group>"; };
 		293D31F3988AD1CD6BE3398B /* OpenAICompatibleProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatibleProvider.swift; sourceTree = "<group>"; };
 		37E1EE92E51BDBDBC6CAA824 /* LibraryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryListView.swift; sourceTree = "<group>"; };
+		37F80B1A10E512F6983C456E /* PearsSyncSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearsSyncSheet.swift; sourceTree = "<group>"; };
 		38019619FEE54D8B6CFB1153 /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		3A8BA8452FD6F40CBB5B5493 /* bare-tty.5.1.2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-tty.5.1.2.xcframework"; path = "Vendor/bare-tty.5.1.2.xcframework"; sourceTree = "<group>"; };
 		3C7C31947A3C7A5C490EA5A7 /* Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
@@ -267,6 +270,7 @@
 		52E682E1B005343914778D7C /* bare-type-stripper.0.1.7.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-type-stripper.0.1.7.xcframework"; path = "Vendor/bare-type-stripper.0.1.7.xcframework"; sourceTree = "<group>"; };
 		5375F33808E3726ED3A26D1E /* bare-dns.2.2.1.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-dns.2.2.1.xcframework"; path = "Vendor/bare-dns.2.2.1.xcframework"; sourceTree = "<group>"; };
 		548EB2575FD52A75299705E7 /* bare-signals.5.0.0.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "bare-signals.5.0.0.xcframework"; path = "Vendor/bare-signals.5.0.0.xcframework"; sourceTree = "<group>"; };
+		557A31EB06FA244608A4D40F /* PearsPendingJoin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PearsPendingJoin.swift; sourceTree = "<group>"; };
 		56326C93D69B8DF41AEC2E38 /* DeleteEverythingShareTeardownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteEverythingShareTeardownTests.swift; sourceTree = "<group>"; };
 		572B0E293B7CC81FB4F4ED14 /* BookMastering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookMastering.swift; sourceTree = "<group>"; };
 		57496178F1174E47D4909E2B /* BareKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = BareKit.xcframework; path = Vendor/BareKit.xcframework; sourceTree = "<group>"; };
@@ -474,6 +478,7 @@
 		5DE9C8AFF22AE4A33F8DDCDA /* Pears */ = {
 			isa = PBXGroup;
 			children = (
+				557A31EB06FA244608A4D40F /* PearsPendingJoin.swift */,
 				7702E3A542417286E548D81A /* PearsSyncEngine.swift */,
 			);
 			path = Pears;
@@ -654,6 +659,7 @@
 				5BC9615B358E8F3660EF2BA0 /* LibraryMembersSheet.swift */,
 				251BB09509CE032E1C9352E8 /* LibraryView.swift */,
 				81CD28209B51158D53D2CE77 /* MultiSelectFilterSheet.swift */,
+				37F80B1A10E512F6983C456E /* PearsSyncSheet.swift */,
 				A29DC06FD5BA7010411123D2 /* PhotoCropView.swift */,
 				FD45ABE9C8B08DD85A4F26DE /* RootView.swift */,
 				CF9D78B1E6B59239F3253BD9 /* SettingsView.swift */,
@@ -911,7 +917,9 @@
 				96C27A2A506075F9B9B98700 /* MultiSelectFilterSheet.swift in Sources */,
 				115466A47AC1572A946E79D0 /* Note.swift in Sources */,
 				6A80E115A00F2B1F56DF5FDE /* OpenAICompatibleProvider.swift in Sources */,
+				D776D4A88F181819A81EB329 /* PearsPendingJoin.swift in Sources */,
 				67BF1E37CB278C537788A576 /* PearsSyncEngine.swift in Sources */,
+				59A30CF5F001930C22B4CB2D /* PearsSyncSheet.swift in Sources */,
 				64AA32DA2F8F2D21220EC6B3 /* Persistence.swift in Sources */,
 				BA8DF5DFEF3C5CD61085B02E /* PhotoCropView.swift in Sources */,
 				68228A44B582DE42CDBEC915 /* ProviderSwitcher.swift in Sources */,

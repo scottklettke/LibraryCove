@@ -20,20 +20,6 @@ enum ShareParticipantRole: String, Codable, CaseIterable {
         case .guest: return "Guest"
         }
     }
-
-    /// CloudKit participation permission for this role (admin maps to
-    /// read-write too — CloudKit has no "manage participants" bit; admin
-    /// powers are enforced by the app over a role record).
-    var ckPermission: CKShare.ParticipantPermission {
-        switch self {
-        case .admin, .editor: return .readWrite
-        case .guest: return .readOnly
-        }
-    }
-
-    static func from(_ permission: CKShare.ParticipantPermission) -> ShareParticipantRole {
-        permission == .readOnly ? .guest : .editor
-    }
 }
 
 /// Roles are stored per library + participant record name in UserDefaults

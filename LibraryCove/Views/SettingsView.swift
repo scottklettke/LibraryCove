@@ -31,14 +31,6 @@ struct SettingsView: View {
     @State private var pendingProviderChange: LibrarySync?
 
     // Shared library
-    @State private var sharedMembers: [SharedLibraryMember] = []
-    @State private var isPreparingShare = false
-    @State private var showSharingSheet = false
-    @State private var shareSheetShare: CKShare?
-    /// First-share role picker: what the LINK grants (admin/editor/guest).
-    @State private var showLinkRolePicker = false
-    @State private var pendingLinkRole: ShareParticipantRole = .editor
-    @State private var pendingShareLibraryID: String?
 
     // AI
     @State private var aiEngine: AIEngine = AIConfig.selectedEngine
@@ -65,7 +57,6 @@ struct SettingsView: View {
     // Feedback
     @State private var lastError: String?
     @State private var showError = false
-    @ObservedObject private var cloudSyncMonitor = CloudSyncMonitor.shared
     /// Bumped whenever the library registry changes (switch/rename) so the
     /// name field re-reads the active library.
     @State private var libraryRegistryTick = 0
@@ -168,7 +159,6 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 profileSection
-                sharedLibrarySection
                 dataSection
 
                 syncSection
@@ -181,58 +171,6 @@ struct SettingsView: View {
 
             }
             .navigationTitle("Settings")
-            .sheet(isPresented: $showSharingSheet, onDismiss: {
-                shareSheetShare = nil
-                Task { await refreshMembers() }
-            }) {
-                if let share = shareSheetShare,
-                   let libraryID = LibraryScope.shared.activeID(context: modelContext),
-                   let library = LibraryScope.shared.active(context: modelContext) {
-                    ShareLibrarySheet(library: library, share: share,
-                                      linkRole: SharedLibrarySettings.linkDefaultRole(libraryID: libraryID)) {
-                    }
-                }
-            }
-            .sheet(isPresented: $showLinkRolePicker) {
-                NavigationStack {
-                    Form {
-                        Section {
-                            Picker("Link access", selection: $pendingLinkRole) {
-                                Text("Admin — full control").tag(ShareParticipantRole.admin)
-                                Text("Editor — can edit").tag(ShareParticipantRole.editor)
-                                Text("Guest — view only").tag(ShareParticipantRole.guest)
-                            }
-                            .pickerStyle(.inline)
-                            .labelsHidden()
-                        } header: {
-                            Text("Who can use this link?")
-                        } footer: {
-                            Text("Anyone who joins through this link gets this role. You can change each member's role later in Members.")
-                        }
-                        Section {
-                            Button {
-                                Task { await createShareWithRole() }
-                            } label: {
-                                if isPreparingShare {
-                                    HStack { Spacer(); ProgressView() }
-                                } else {
-                                    Text("Continue").frame(maxWidth: .infinity)
-                                }
-                            }
-                            .disabled(isPreparingShare)
-                        }
-                    }
-                    .navigationTitle("Share Library")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Cancel") { showLinkRolePicker = false }
-                        }
-                    }
-                    .interactiveDismissDisabled(isPreparingShare)
-                }
-                .presentationDetents([.medium])
-            }
             .sheet(isPresented: $showDeleteLibraryConfirm) {
                 DeleteLibrarySheet(
                     sharingActive: SharedLibraryMembershipGate.membership != .none,
@@ -245,13 +183,10 @@ struct SettingsView: View {
                 createLibrarySheet
             }
             .task {
-                cloudSyncMonitor.start()
-                await refreshMembers()
             }
             .onReceive(NotificationCenter.default.publisher(for: LibraryScope.librariesChangedNotification)) { _ in
                 libraryRegistryTick += 1
                 // The active library may have switched — its members differ.
-                Task { await refreshMembers() }
             }
             .alert("Library name already used", isPresented: Binding(
                 get: { duplicateNameWarning != nil },
@@ -260,9 +195,6 @@ struct SettingsView: View {
                 Button("Continue anyway", role: .cancel) {}
             } message: {
                 Text(duplicateNameWarning ?? "")
-            }
-            .onChange(of: syncProvider) { _, newValue in
-                switchSyncProvider(to: newValue)
             }
             .task(id: aiConfigSignature) {
                 aiAvailability = await AIService.shared.availability()
@@ -390,183 +322,18 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Shared library (Notes-style sharing)
-
-    @ViewBuilder
-    private var iCloudSyncStatusRow: some View {
-        if let activity = cloudSyncMonitor.activity {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(activity.kind.displayName)
-                    .font(.callout)
-                ProgressView()
-                    .progressViewStyle(.linear)
+    private var syncSection: some View {
+        Section {
+            LabeledContent("Device sync", value: "Pears P2P")
+            NavigationLink {
+                PearsSheetRouter()
+            } label: {
+                Label("P2P Sync", systemImage: "antenna.radiowaves.left.and.right")
             }
-            .padding(.vertical, 2)
-        } else if let lastError = cloudSyncMonitor.lastError {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Sync problem")
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                Text(lastError)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 2)
-        } else {
-            LabeledContent("Status", value: "Synced with iCloud")
-        }
-    }
-
-    private func syncStatusText(_ provider: LibrarySync) -> String {
-        switch provider {
-        case .localOnly: return "Stored on this device"
-        case .iCloud: return "Syncing via iCloud"
-        case .sharedLibrary: return "Sharing via iCloud"
-        }
-    }
-
-    /// Warns when the active library's (typed) name matches ANOTHER
-    /// library's — duplicate names make the Libraries list ambiguous.
-    private func checkDuplicateName() {
-        guard let typed = LibraryScope.shared.activeName(
-            context: modelContext,
-            memberName: user.displayName),
-              let activeID = LibraryScope.shared.activeID(context: modelContext)
-        else { return }
-        if let clash = LibraryScope.shared.all(context: modelContext).first(where: {
-            $0.id != activeID
-                && $0.name.compare(typed, options: .caseInsensitive) == .orderedSame
-        }) {
-            duplicateNameWarning = "Another library is already named “\(clash.name)”. Two libraries with the same name can be confusing in Backups and switching — consider a distinct name."
-        }
-    }
-
-
-    /// Share (first time) or manage (existing share) the ACTIVE library —
-    /// the same flow as the Libraries-list long-press: fetch the share,
-    /// creating it when absent, and present the sharing sheet.
-    private func shareOrManageActive() async {
-        guard let active = LibraryScope.shared.active(context: modelContext) else { return }
-        do {
-            if let share = try await SharedLibraryEngine.shared.currentShare(libraryID: active.id) {
-                shareSheetShare = share
-                showSharingSheet = true
-            } else {
-                // First share: let the owner pick what the LINK grants
-                // (admin/editor/guest) before the system sheet offers the
-                // contact/link options. The choice is written into the
-                // zone's roles record by makeShare, so joiners adopt it.
-                pendingLinkRole = SharedLibrarySettings.linkDefaultRole(libraryID: active.id)
-                pendingShareLibraryID = active.id
-                showLinkRolePicker = true
-            }
-        } catch {
-            lastError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    /// Called from the role pre-sheet's Continue: creates the share with
-    /// the picked link role and presents the system sharing sheet.
-    private func createShareWithRole() async {
-        guard let libraryID = pendingShareLibraryID else { return }
-        isPreparingShare = true
-        defer { isPreparingShare = false }
-        do {
-            SharedLibrarySettings.setLinkDefaultRole(pendingLinkRole, libraryID: libraryID)
-            shareSheetShare = try await SharedLibraryCoordinator.beginShare(
-                currentTitle: LibraryScope.shared.active(context: modelContext)?.name ?? "Library",
-                libraryID: libraryID,
-                linkRole: pendingLinkRole)
-            showLinkRolePicker = false
-            showSharingSheet = true
-        } catch {
-            lastError = error.localizedDescription
-            showError = true
-        }
-    }
-
-    private func refreshMembers() async {
-        // Clear first: while the fetch runs, showing the PREVIOUS active
-        // library's members would be wrong.
-        sharedMembers = []
-        if let libraryID = LibraryScope.shared.activeID(context: modelContext) {
-            await SharedLibraryEngine.shared.refreshParticipants(libraryID: libraryID)
-        }
-        sharedMembers = SharedLibraryEngine.shared.members
-    }
-    private func switchSyncProvider(to new: LibrarySync) {
-        guard new != SyncSettings.selectedProvider else { return }
-        // A share is active: switching to another provider stops sharing it
-        // with everyone. Confirm before tearing anything down.
-        if SharedLibraryMembershipGate.membership != .none {
-            pendingProviderChange = new
-            return
-        }
-        performSwitch(to: new)
-    }
-
-    private func performSwitch(to new: LibrarySync) {
-        guard new.isAvailableNow else {
-            // Not implemented providers: show why and revert the picker.
-            lastError = LibrarySyncError.notImplementedFor(new).errorDescription
-            showError = true
-            syncProvider = SyncSettings.selectedProvider
-            return
-        }
-        guard !isSwitchingSync else { return }
-        isSwitchingSync = true
-        Task { @MainActor in
-            defer { isSwitchingSync = false }
-            do {
-                try await ProviderSwitcher.perform(to: new)
-                syncProvider = new
-            } catch let error as LibrarySyncError {
-                // Known, explained conditions (e.g. iCloudStillSyncing):
-                // show their own message instead of the generic one.
-                syncProvider = SyncSettings.selectedProvider
-                lastError = error.errorDescription
-                showError = true
-            } catch {
-                // Nothing changed (the switcher rolls back atomically).
-                syncProvider = SyncSettings.selectedProvider
-                lastError = "Couldn't move your library to the new store. Nothing changed."
-                showError = true
-            }
-        }
-    }
-
-    /// Confirmed: switching providers while a share is active stops sharing
-    /// the library with everyone. Tear the share down properly (owner: the
-    /// zone + share are removed and books return home; participant: leaves
-    /// with a copy), then apply the requested provider switch.
-    private func confirmedProviderChange() {
-        guard let target = pendingProviderChange else { return }
-        pendingProviderChange = nil
-        // Revert the picker immediately; the teardown/switch below sets it
-        // to the final state.
-        syncProvider = SyncSettings.selectedProvider
-        Task { @MainActor in
-            do {
-                switch SharedLibraryMembershipGate.membership {
-                case .owner:
-                    try await SharedLibraryCoordinator.stopSharing()
-                case .participant:
-                    try await SharedLibraryCoordinator.leave(keepCopy: true)
-                case .none:
-                    break
-                }
-            } catch {
-                lastError = error.localizedDescription
-                showError = true
-                return
-            }
-            // Teardown restored the pre-share provider; if the user asked
-            // for a different one, run the normal switch on top.
-            syncProvider = SyncSettings.selectedProvider
-            if target != SyncSettings.selectedProvider {
-                performSwitch(to: target)
-            }
+        } header: {
+            Text("Sync")
+        } footer: {
+            Text("Books sync device-to-device over Pears (encrypted, no server). Create a join link here and send it to your other device; each link works once.")
         }
     }
 
@@ -604,6 +371,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+
     private var profileSection: some View {
                 Section {
                     HStack {
@@ -709,85 +477,29 @@ struct SettingsView: View {
     /// currentShare(libraryID:)/beginShare(currentTitle:libraryID:) flow as
     /// the Libraries-list long-press. Stop/Leave stay in the Libraries list
     /// until the coordinator gains libraryID-scoped destructive flows.
-    private var sharedLibrarySection: some View {
-        Section {
-            let active = LibraryScope.shared.active(context: modelContext)
-            let membership = active.map {
-                SharedLibrarySettings.membership(libraryID: $0.id)
-            } ?? .none
-            let role = active.map {
-                SharedLibraryEngine.shared.myRole(libraryID: $0.id)
-            } ?? .guest
-            switch membership {
-            case .none:
-                Button {
-                    Task { await shareOrManageActive() }
-                } label: {
-                    Label("Share Library", systemImage: "person.2")
-                }
-                .disabled(isPreparingShare || isSwitchingSync || active == nil)
-                if isPreparingShare {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                        Text("Preparing your shared library…")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            case .owner:
-                Button {
-                    Task { await shareOrManageActive() }
-                } label: {
-                    Label("Manage Shared Library", systemImage: "person.2")
-                }
-            case .participant:
-                LabeledContent("Shared Library",
-                               value: active?.name.isEmpty == false
-                                      ? (active?.name ?? "Active")
-                                      : "Active")
-                // Admins and editors can share links (guests can't — the
-                // sheet's permission is read-only for them anyway).
-                if role != .guest {
-                    Button {
-                        Task { await shareOrManageActive() }
-                    } label: {
-                        Label("Share Link", systemImage: "link")
-                    }
-                }
-            }
 
-            if membership != .none && !sharedMembers.isEmpty {
-                ForEach(sharedMembers) { member in
-                    HStack {
-                        Image(systemName: member.isOwner ? "crown" : "person")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading) {
-                            Text(member.isCurrentUser ? "\(member.name) (you)" : member.name)
-                            Text("\(member.acceptanceStatusDescription) · \(member.permissionDescription)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+    private var dataSection: some View {
+                Section {
+                    Button(role: .destructive) {
+                        showDeleteLibraryConfirm = true
+                    } label: {
+                        Label("Delete Library", systemImage: "trash")
                     }
+                    .disabled(isDeleting || activeLibrary == nil)
+
+                    NavigationLink {
+                        BackupsView()
+                    } label: {
+                        Label("Backups", systemImage: "externaldrive")
+                    }
+                } header: {
+                    Text("Data")
+                } footer: {
+                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes this library — every book (with notes and lists) in it — and takes it off your Libraries list. Your member profile is kept. An empty library is removed too, leaving the Libraries list without it.")
                 }
-            }
-            if let syncError = SharedLibraryEngine.shared.lastError {
-                Text(syncError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-        } header: {
-            Text("Shared Library")
-        } footer: {
-            Text(SharedLibrarySettings.membership(
-                     libraryID: LibraryScope.shared.activeID(context: modelContext) ?? "") == .none
-                 ? "Share this library with other people via iCloud. Everyone with access can add, edit, and remove books — changes sync to all members."
-                 : "This library is shared via iCloud. Changes made by any member sync to everyone with access.")
-        }
     }
 
-    /// Create-library sheet (no-library state in Settings, or a fresh
-    /// install): a name field and a Create button. Extracted into its own
-    /// property so the giant body expression type-checks in reasonable
-    /// time.
+
     private var createLibrarySheet: some View {
         NavigationStack {
             Form {
@@ -826,82 +538,25 @@ struct SettingsView: View {
         .presentationDetents([.medium])
     }
 
-    private var dataSection: some View {
-                Section {
-                    Button(role: .destructive) {
-                        showDeleteLibraryConfirm = true
-                    } label: {
-                        Label("Delete Library", systemImage: "trash")
-                    }
-                    .disabled(isDeleting || activeLibrary == nil)
 
-                    NavigationLink {
-                        BackupsView()
-                    } label: {
-                        Label("Backups", systemImage: "externaldrive")
-                    }
-                } header: {
-                    Text("Data")
-                } footer: {
-                    Text("Export and Import live under Backups, together with your saved backups. Delete Library removes this library — every book (with notes and lists) in it — and takes it off your Libraries list. Your member profile is kept. An empty library is removed too, leaving the Libraries list without it.")
-                }
+    private func checkDuplicateName() {
+        guard let typed = LibraryScope.shared.activeName(
+            context: modelContext,
+            memberName: user.displayName),
+              let activeID = LibraryScope.shared.activeID(context: modelContext)
+        else { return }
+        if let clash = LibraryScope.shared.all(context: modelContext).first(where: {
+            $0.id != activeID
+                && $0.name.compare(typed, options: .caseInsensitive) == .orderedSame
+        }) {
+            duplicateNameWarning = "Another library is already named “\(clash.name)”. Two libraries with the same name can be confusing in Backups and switching — consider a distinct name."
+        }
     }
 
-    private var syncSection: some View {
-                Section {
-                    // While a share is active the provider IS the shared
-                    // mirror; the picker (which excludes .sharedLibrary)
-                    // would render blank. Show read-only status and route
-                    // any change through the Stop Sharing confirmation.
-                    if SharedLibrarySettings.membership(
-                           libraryID: LibraryScope.shared.activeID(context: modelContext) ?? "") != .none {
-                        LabeledContent("Sync provider", value: "Shared Library")
-                        LabeledContent("Status", value: syncStatusText(syncProvider))
-                    } else if syncProvider == .iCloud {
-                        Picker("Sync provider", selection: $syncProvider) {
-                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary && $0 != .localOnly }) { provider in
-                                Text(provider.isAvailableNow
-                                     ? provider.displayName
-                                     : "\(provider.displayName) (coming soon)")
-                                    .tag(provider)
-                            }
-                        }
-                        iCloudSyncStatusRow
-                    } else {
-                        Picker("Sync provider", selection: $syncProvider) {
-                            ForEach(LibrarySync.allCases.filter { $0 != .sharedLibrary && $0 != .localOnly }) { provider in
-                                Text(provider.isAvailableNow
-                                     ? provider.displayName
-                                     : "\(provider.displayName) (coming soon)")
-                                    .tag(provider)
-                            }
-                        }
-                        LabeledContent("Status", value: syncStatusText(syncProvider))
-                        .confirmationDialog(
-                            "Stop sharing this library?",
-                            isPresented: Binding(
-                                get: { pendingProviderChange != nil },
-                                set: { if !$0 { pendingProviderChange = nil; syncProvider = SyncSettings.selectedProvider } }
-                            ),
-                            titleVisibility: .visible
-                        ) {
-                            Button("Stop Sharing & Switch", role: .destructive) {
-                                confirmedProviderChange()
-                            }
-                            Button("Cancel", role: .cancel) {
-                                pendingProviderChange = nil
-                                syncProvider = SyncSettings.selectedProvider
-                            }
-                        } message: {
-                            Text("Changing the sync provider while a library is shared stops sharing it with everyone. Your books stay in your library — choose where to sync them next.")
-                        }
-                    }
-                } header: {
-                    Text("Sync")
-                } footer: {
-                    Text("Local only keeps everything on this device. iCloud Sync stores your library in your private iCloud database and keeps devices in sync.")
-                }
-    }
+
+    /// Share (first time) or manage (existing share) the ACTIVE library —
+    /// the same flow as the Libraries-list long-press: fetch the share,
+    /// creating it when absent, and present the sharing sheet.
 
     private var aiEngineSection: some View {
                 Section {

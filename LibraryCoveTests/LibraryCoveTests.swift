@@ -826,7 +826,7 @@ extension HardcoverServiceTests {
         context.insert(iPhone)
         try context.save()
 
-        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+        MemberIdentity.repairDuplicateActiveMembersIfNeeded(context: context)
 
         let users = try context.fetch(FetchDescriptor<User>())
         #expect(users.count == 1, "legacy rows must be deleted, not just deactivated")
@@ -852,7 +852,7 @@ extension HardcoverServiceTests {
         context.insert(legacy)
         try context.save()
 
-        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+        MemberIdentity.repairDuplicateActiveMembersIfNeeded(context: context)
 
         let users = try context.fetch(FetchDescriptor<User>())
         #expect(users.count == 1)
@@ -874,7 +874,7 @@ extension HardcoverServiceTests {
         context.insert(note)
         try context.save()
 
-        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+        MemberIdentity.repairDuplicateActiveMembersIfNeeded(context: context)
 
         let fetchedBook = try #require(try context.fetch(FetchDescriptor<Book>()).first)
         #expect(fetchedBook.ownerID == LibraryScope.primaryMemberID)
@@ -893,7 +893,7 @@ extension HardcoverServiceTests {
         try context.save()
 
         // The second device's welcome flow typed "Test".
-        let member = SharedLibraryCoordinator.createPrimaryMember(
+        let member = MemberIdentity.createPrimaryMember(
             displayName: "Test", email: "local@librarycove.local", context: context)
 
         #expect(member.id == LibraryScope.primaryMemberID)
@@ -912,7 +912,7 @@ extension HardcoverServiceTests {
         context.insert(legacy)
         try context.save()
 
-        SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: context)
+        MemberIdentity.repairDuplicateActiveMembersIfNeeded(context: context)
 
         let users = try context.fetch(FetchDescriptor<User>())
         #expect(users.count == 1)

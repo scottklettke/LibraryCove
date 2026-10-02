@@ -12,7 +12,12 @@ import SwiftData
     /// LibraryCoveTests/StopSharingMigrationTests/MultiLibraryTests all use
     /// it), and an interleaving suite touching the shared store during this
     /// test's export await crashed the store connection (reproduced twice).
-    private static let container = try! ModelContainerForTesting.inMemory()
+    private static let container: ModelContainer = {
+        let schema = Schema([Book.self, Note.self, ReadingList.self,
+                             ReadingListItem.self, Connection.self, User.self])
+        return try! ModelContainer(for: schema,
+                                   configurations: [ModelConfiguration(isStoredInMemoryOnly: true)])
+    }()
 
     private func baseContext() -> ModelContext {
         ModelContext(Self.container)

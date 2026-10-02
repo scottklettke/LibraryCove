@@ -118,20 +118,16 @@ final class LibraryScope: ObservableObject {
     /// failure so the next pull falls back to a full enumeration.
     private static let registryChangeTokenKey = "LibraryCoveRegistryChangeToken"
 
-    private static func loadRegistryChangeToken() -> CKServerChangeToken? {
-        guard let data = UserDefaults.standard.data(forKey: registryChangeTokenKey) else { return nil }
-        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self,
-                                                       from: data) as? CKServerChangeToken
+    private static func loadRegistryChangeToken() -> Data? {
+        UserDefaults.standard.data(forKey: registryChangeTokenKey)
     }
 
-    private static func saveRegistryChangeToken(_ token: CKServerChangeToken?) {
+    private static func saveRegistryChangeToken(_ token: Data?) {
         guard let token else {
             UserDefaults.standard.removeObject(forKey: registryChangeTokenKey)
             return
         }
-        let data = try? NSKeyedArchiver.archivedData(withRootObject: token,
-                                                     requiringSecureCoding: true)
-        UserDefaults.standard.set(data, forKey: registryChangeTokenKey)
+        UserDefaults.standard.set(token, forKey: registryChangeTokenKey)
     }
 
     /// Set by `deleteAllLibraries()`, cleared ONLY when the wipe publish
@@ -177,26 +173,9 @@ final class LibraryScope: ObservableObject {
                 self?.pullRegistryFromCloud()
             }
         }
-        // CloudKit import events: the content store (books/notes/lists)
-        // mirrors into CloudKit continuously; when its importer lands
-        // remote rows the registry mirror may have changed remotely too.
-        // No container filter: hot-swap replaces the container and a
-        // captured reference would go stale.
-        NotificationCenter.default.addObserver(
-            forName: NSPersistentCloudKitContainer.eventChangedNotification,
-            object: nil, queue: .main
-        ) { [weak self] note in
-            guard let event = note.userInfo?[NSPersistentCloudKitContainer.eventNotificationUserInfoKey]
-                    as? NSPersistentCloudKitContainer.Event,
-                  event.type == .import,
-                  event.succeeded,
-                  event.endDate != nil else { return }
-            MainActor.assumeIsolated {
-                self?.pullRegistryFromCloud()
-            }
-        }
-        // Catch-all poll: registry-only changes produce no content import,
-        // and APNs is unreliable in the simulator. Cheap, in-flight-guarded.
+        // Catch-all poll: registry-only changes produce no content import.
+        // (Registry sync is now local-only — pullRegistryFromCloud is a
+        // no-op — but the timer keeps the no-op cheap and harmless.)
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.pullRegistryFromCloud()
@@ -540,162 +519,8 @@ final class LibraryScope: ObservableObject {
     /// name = library id, own zone, so devices converge on the same
     /// records and a factory reset can drop the zone in one call).
     func pushRegistryToCloud() {
-        guard !registrySyncInFlight else {
-            registrySyncPending = true
-            return
-        }
-        registrySyncInFlight = true
-        let snapshot = loadRegistry()
-        Task { @MainActor in
-            defer {
-                registrySyncInFlight = false
-                drainPendingRegistryWork()
-            }
-            let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-            let database = container.privateCloudDatabase
-            do {
-                guard try await container.accountStatus() == .available else { return }
-                let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
-                                             ownerName: CKCurrentUserDefaultName)
-                // CloudKit does not auto-create custom zones: without this
-                // the first push/pull into the mirror zone fails
-                // (partialFailure/zoneNotFound) and names never leave the
-                // device.
-                _ = try? await database.modifyRecordZones(saving: [CKRecordZone(zoneID: zoneID)],
-                                                         deleting: [])
-                ensureRegistrySubscription()
-                // Pull-and-fold FIRST, then publish the MERGED snapshot: a
-                // stale local snapshot pushed blind would clobber a rename
-                // the other device just landed (an empty recreated default
-                // overwriting "My Library"). A pending wipe skips the fold
-                // entirely — folding pre-wipe remote state into a wiped
-                // registry would re-populate it before the wipe publishes.
-                if !Self.wipePending {
-                    if await pullAndFoldRegistry() {
-                        // The fold may have adopted a remote rename/active
-                        // switch before publish; refresh the UI now instead
-                        // of waiting for the next pull.
-                        notifyChanged()
-                    }
-                }
-                let snapshot = loadRegistry()
-                if Self.wipePending {
-                    // Wipe pending (delete-everything, possibly re-populated
-                    // locally before the publish confirmed): delete every
-                    // library record and save the wipedAt marker in ONE
-                    // atomic modifyRecords. The marker ID is NOT in the
-                    // delete list — a same-ID save+delete pair in one batch
-                    // is unsupported and could leave the zone markerless or
-                    // fail the item (retry loop); the .allKeys save of the
-                    // new meta alone overwrites any prior marker, atomically
-                    // with the stale deletes. Cleared ONLY when the server
-                    // confirms every item; any failure leaves the flag set
-                    // so the next push retries (the willEnterForeground
-                    // handler re-pushes), instead of the wipe silently
-                    // vanishing.
-                    // Stamped BEFORE the enumeration await: a name entered
-                    // while the publish runs must stamp AFTER the cutoff,
-                    // or the next fold's wipe filter would delete the
-                    // user's freshly typed name.
-                    let wipeStamp = Date()
-                    do {
-                        let fetched = try await fetchRegistryZone(previousToken: nil)
-                        let deleting = fetched.entries.map { entry in
-                            CKRecord.ID(recordName: "library-\(entry.dto.id)", zoneID: zoneID)
-                        }
-                        let meta = CKRecord(recordType: Self.registryRecordType,
-                                            recordID: CKRecord.ID(recordName: Self.registryMetaRecordName,
-                                                                  zoneID: zoneID))
-                        meta["wipedAt"] = wipeStamp
-                        let result = try await database.modifyRecords(
-                            saving: [meta], deleting: deleting, savePolicy: .allKeys)
-                        var failures: [Error] = result.saveResults.values.compactMap {
-                            if case .failure(let e) = $0 { return e } else { return nil }
-                        } + result.deleteResults.values.compactMap {
-                            if case .failure(let e) = $0 { return e } else { return nil }
-                        }
-                        if failures.isEmpty {
-                            Self.wipePending = false
-                        } else {
-                            libraryLog.error("Wipe publish had failures, will retry: \(String(describing: failures), privacy: .public)")
-                        }
-                    } catch {
-                        libraryLog.error("Wipe publish failed, will retry: \(String(describing: error), privacy: .public)")
-                    }
-                    return
-                }
-                if snapshot.isEmpty {
-                    // Registry empty locally and NO wipe pending: the user
-                    // deleted their last library on THIS device. Delete any
-                    // stale library records (belt and braces beside
-                    // deleteRegistryRecord) but write NO wipedAt marker —
-                    // the cutoff would erase OTHER devices' libraries on
-                    // their next full pull, including libraries this device
-                    // never touched. Peers learn the deletion via the
-                    // record-delete delta; an empty remote set leaves a
-                    // peer's populated registry intact (absence-removal
-                    // only fires on a populated remote set).
-                    do {
-                        let fetched = try await fetchRegistryZone(previousToken: nil)
-                        let deleting = fetched.entries.map { entry in
-                            CKRecord.ID(recordName: "library-\(entry.dto.id)", zoneID: zoneID)
-                        }
-                        if !deleting.isEmpty {
-                            let result = try await database.modifyRecords(
-                                saving: [], deleting: deleting, savePolicy: .allKeys)
-                            // partialFailure hides per-record deletes that
-                            // failed; surface them like the wipe publish.
-                            let failures = result.deleteResults.values.compactMap {
-                                if case .failure(let e) = $0 { return e } else { return nil }
-                            }
-                            if !failures.isEmpty {
-                                libraryLog.error("Empty-registry push had delete failures: \(String(describing: failures), privacy: .public)")
-                            }
-                        }
-                    } catch {
-                        libraryLog.error("Empty-registry push failed: \(String(describing: error), privacy: .public)")
-                    }
-                    return
-                }
-                let records = snapshot.compactMap { info -> CKRecord? in
-                    // An empty name is a locally-recreated default that was
-                    // never named by the user. Publishing it with allKeys
-                    // overwrites the record server-side and ERASES the
-                    // other device's rename (the two devices then ping-pong
-                    // empty names forever). Skip it — the fold's empty-
-                    // local-name repair adopts the remote name instead.
-                    guard !info.name.isEmpty else { return nil }
-                    let record = CKRecord(
-                        recordType: Self.registryRecordType,
-                        recordID: CKRecord.ID(recordName: "library-\(info.id)", zoneID: zoneID))
-                    record["dto"] = try! JSONEncoder().encode(
-                        LibraryRegistryDTO(id: info.id, name: info.name, createdAt: info.createdAt,
-                                           modifiedAt: info.modifiedAt ?? info.createdAt,
-                                           isActive: info.isActive,
-                                           share: info.share,
-                                           shareClearedAt: info.shareClearedAt))
-                    return record
-                }
-                // allKeys, not changedKeys: these CKRecords were synthesized
-                // locally with no server change tags, so changedKeys
-                // diffing is undefined and can silently drop the renamed
-                // dto field. allKeys overwrites the record wholesale —
-                // correct for a full-snapshot publisher.
-                _ = try await database.modifyRecords(saving: records, deleting: [],
-                                                     savePolicy: .allKeys)
-                // The wipe marker (meta record with wipedAt) MUST persist
-                // after this push: it is the cutoff that lets later full
-                // pulls discard pre-wipe state. Deleting it here would let
-                // stale pre-wipe records resurrect on the next full pull.
-            } catch {
-                // Offline/no-account/transient failures must not surface as
-                // UI errors. No kill-switch: the willEnterForeground handler
-                // re-pushes (queued behind a fresh pull), so a failed
-                // publish retries on every foreground instead of being
-                // silenced for the whole launch.
-                libraryLog.error("Registry push failed: \(String(describing: error), privacy: .public)")
-            }
-        }
+        // RETIRED (no iCloud): the local registry file is the registry.
+        notifyChanged()
     }
 
     /// Pulls the mirror and folds it into the local registry. Per-library
@@ -723,172 +548,15 @@ final class LibraryScope: ObservableObject {
         }
     }
 
-    /// One `CKFetchRecordZoneChangesOperation` pass over the registry zone.
-    /// Caller decides what the collected records mean (delta fold vs. wipe
-    /// enumeration). Pass `previousToken: nil` for a full enumeration. On
-    /// success returns the fresh server token; the caller decides whether
-    /// to persist it.
-    private struct RegistryZoneFetch {
-        var entries: [(dto: LibraryRegistryDTO, modDate: Date)] = []
-        var deletions: [String] = []
-        var wipedAt: Date?
-        var serverChangeToken: CKServerChangeToken?
-    }
-
-    private func fetchRegistryZone(previousToken: CKServerChangeToken?) async throws -> RegistryZoneFetch {
-        let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-        let database = container.privateCloudDatabase
-        let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
-                                     ownerName: CKCurrentUserDefaultName)
-        let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
-        config.previousServerChangeToken = previousToken
-        // Zone holds a handful of records; a limit guards against a
-        // runaway loop.
-        config.resultsLimit = 400
-        let op = CKFetchRecordZoneChangesOperation(
-            recordZoneIDs: [zoneID],
-            configurationsByRecordZoneID: [zoneID: config])
-
-        var fetched = RegistryZoneFetch()
-
-        op.recordWasChangedBlock = { recordID, result in
-            guard case .success(let record) = result else {
-                // Never re-fetched while the change token persists: log so
-                // a persistent per-record failure is visible in Console.
-                if case .failure(let error) = result {
-                    libraryLog.error("Registry record fetch failed (\(recordID.recordName, privacy: .public)): \(String(describing: error), privacy: .public)")
-                }
-                return
-            }
-            if record.recordID.recordName == Self.registryMetaRecordName {
-                fetched.wipedAt = record["wipedAt"] as? Date
-                return
-            }
-            guard let data = record["dto"] as? Data,
-                  let dto = try? JSONDecoder().decode(LibraryRegistryDTO.self, from: data)
-            else {
-                // Same: a corrupt/partial dto is dropped permanently under
-                // a persisted token — surface it.
-                libraryLog.error("Registry record has undecodable dto (\(record.recordID.recordName, privacy: .public))")
-                return
-            }
-            fetched.entries.append((dto, record.modificationDate ?? .distantPast))
-        }
-        op.recordWithIDWasDeletedBlock = { recordID, _ in
-            // "library-<uuid>" record gone remotely → that library was
-            // deleted on another device.
-            let name = recordID.recordName
-            if name.hasPrefix("library-"), name != Self.registryMetaRecordName {
-                fetched.deletions.append(String(name.dropFirst("library-".count)))
-            }
-        }
-
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var resumed = false
-            let finish: (Result<Void, Error>) -> Void = { outcome in
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(with: outcome)
-            }
-            op.recordZoneFetchResultBlock = { _, result in
-                if case .success(let payload) = result {
-                    fetched.serverChangeToken = payload.serverChangeToken
-                } else if case .failure(let error) = result {
-                    // Per-zone errors surface here too (zoneNotFound,
-                    // tokenExpired); resume so the caller can classify
-                    // them.
-                    finish(.failure(error))
-                }
-            }
-            op.fetchRecordZoneChangesResultBlock = { result in
-                switch result {
-                case .failure(let error):
-                    finish(.failure(error))
-                case .success:
-                    finish(.success(()))
-                }
-            }
-            database.add(op)
-        }
-
-        return fetched
-    }
-
-    /// Fetches the registry zone and folds it into the local registry.
-    /// Shared by the pull path and the push path (which folds BEFORE
-    /// publishing so a stale local snapshot never clobbers a remote
-    /// rename). Returns whether the fold changed local state.
-    ///
-    /// Uses `CKFetchRecordZoneChangesOperation` (not CKQuery): record-type
-    /// queries need promoted queryable indexes and fail in Production if
-    /// never promoted — every pull error would otherwise be swallowed and
-    /// the registry never converges. A persisted server change token makes
-    /// follow-up pulls deltas; any failure clears it so the next pull
-    /// re-enumerates the whole (tiny) zone.
-    @discardableResult
     private func pullAndFoldRegistry() async -> Bool {
-        // A pending wipe must never fold remote state: pre-wipe records
-        // pulled mid-wipe would re-populate the wiped registry (and get
-        // pushed back) before the wipe publish confirms. The publish path
-        // re-checks the flag after its awaits.
-        guard !Self.wipePending else { return false }
-        let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-        do {
-            guard try await container.accountStatus() == .available else { return false }
-            let savedToken = Self.loadRegistryChangeToken()
-            let fetched = try await fetchRegistryZone(previousToken: savedToken)
-
-            Self.saveRegistryChangeToken(fetched.serverChangeToken)
-
-            // A delta fetch reports only what changed since the token; the
-            // fold's wholesale-adoption / absence-removal / default-recreation
-            // steps assume a FULL remote set. Deltas only rename/append/apply
-            // deletions.
-            let fullSnapshot = (savedToken == nil)
-            return foldRemoteRegistry(fetched.entries, wipedAt: fetched.wipedAt,
-                                      deletions: fetched.deletions,
-                                      fullSnapshot: fullSnapshot)
-        } catch let error as CKError
-        where error.isZoneNotFound || error.code == .unknownItem {
-            // Zone not created yet (fresh account / other device hasn't
-            // pushed): nothing remote to fold, not an error.
-            Self.saveRegistryChangeToken(nil)
-            return false
-        } catch {
-            // No account, offline, or transient CloudKit failure: stay
-            // local, drop the token so the next pull re-enumerates fully.
-            Self.saveRegistryChangeToken(nil)
-            libraryLog.error("Registry pull failed: \(String(describing: error), privacy: .public)")
-            return false
-        }
+        // RETIRED (no iCloud): nothing remote to fold.
+        return false
     }
 
     /// Idempotently (re)registers a silent CloudKit subscription on the
     /// registry zone so a rename/create on one device wakes the other via
     /// APNs. Fixed subscription id — saving is an upsert; without a
     /// subscription the remote-notification delivery path never engages.
-    private func ensureRegistrySubscription() {
-        // Fire-and-forget: runs inside the push's in-flight window, so it
-        // must NOT touch registrySyncInFlight (its defer would clobber the
-        // flag mid-push and let a queued op interleave).
-        Task { @MainActor in
-            let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-            let database = container.privateCloudDatabase
-            do {
-                guard try await container.accountStatus() == .available else { return }
-                let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
-                                             ownerName: CKCurrentUserDefaultName)
-                let sub = CKRecordZoneSubscription(zoneID: zoneID,
-                                                   subscriptionID: Self.registrySubscriptionID)
-                let info = CKSubscription.NotificationInfo()
-                info.shouldSendContentAvailable = true
-                sub.notificationInfo = info
-                _ = try await database.modifySubscriptions(saving: [sub], deleting: [])
-            } catch {
-                libraryLog.error("Registry subscription save failed: \(String(describing: error), privacy: .public)")
-            }
-        }
-    }
 
     /// Removes ONE library's mirror record (deletion propagation). Without
     /// this, a deleted library's record would linger in the zone and the
@@ -896,33 +564,7 @@ final class LibraryScope: ObservableObject {
     /// coalesced re-push: a full push that ran first would resurrect the
     /// record this delete is meant to remove.
     func deleteRegistryRecord(id: String) {
-        guard !registrySyncInFlight else {
-            registrySyncPending = true
-            // Replay the delete when the in-flight op drains, not just the
-            // push — a pending push alone would re-publish the deleted
-            // library's record.
-            registryPendingDeletes.append(id)
-            return
-        }
-        registrySyncInFlight = true
-        Task { @MainActor in
-            defer {
-                registrySyncInFlight = false
-                drainPendingRegistryWork()
-            }
-            let container = CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-            let database = container.privateCloudDatabase
-            do {
-                guard try await container.accountStatus() == .available else { return }
-                let zoneID = CKRecordZone.ID(zoneName: Self.registryZoneName,
-                                             ownerName: CKCurrentUserDefaultName)
-                let recordID = CKRecord.ID(recordName: "library-\(id)", zoneID: zoneID)
-                _ = try? await database.modifyRecords(saving: [], deleting: [recordID],
-                                                      savePolicy: .allKeys)
-            } catch {
-                // Best-effort; the other device re-pushes its own registry.
-            }
-        }
+        // RETIRED (no iCloud).
     }
 
     /// Runs coalesced work after an in-flight mirror op finishes: queued

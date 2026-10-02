@@ -81,39 +81,18 @@ struct RootView: View {
             // Pour a provider-switch snapshot into the fresh store so the
             // library into the newly selected provider's store.
             SyncCoordinator.finishPendingMigrationIfNeeded(context: modelContext)
-            // CloudKit stores can deliver older identity records alongside
-            // the current one; keep exactly one active member so the login
-            // gate and greeting resolve deterministically.
-            SharedLibraryCoordinator.repairDuplicateActiveMembersIfNeeded(context: modelContext)
-            // Clear sharing state orphaned by older builds (provider switched
-            // away without tearing the share down) — otherwise Settings
-            // shows Share Library controls under Local only.
-            await SharedLibraryCoordinator.repairOrphanedMembershipIfNeeded()
-            // Embed any still file-only covers as data URLs so iCloud Sync
-            // pushes cover images to other devices. Skipped in shared mode:
-            // the mirror's covers are fingerprint-tracked CKAsset copies and
-            // must not be re-encoded as data: URLs.
-            if SyncSettings.selectedProvider != .sharedLibrary {
-                LibraryDataService.materializeLocalCovers(context: modelContext)
-            }
-            // Shared-library hooks: join a pending invitation (flips the
-            // provider to the mirror store), then sync the mirror store.
-            if SyncSettings.selectedProvider == .sharedLibrary {
-                // A freshly-created mirror store has no User row, which would
-                // show a login gate over the shared library — seed a placeholder
-                // identity first (the welcome flow's defaults).
-                ensureActiveUser(context: modelContext)
-                await SharedLibraryCoordinator.processPendingAcceptIfNeeded()
-                await SharedLibraryEngine.shared.syncNow(context: modelContext)
-            } else if SharedLibrarySettings.pendingAcceptMetadata != nil {
-                // Invitation accepted through the system prompt while the app
-                // was on a private store: join now and hot-swap the running
-                // app onto the mirror store in the same session — the old
-                // design waited for the next launch, which read as "nothing
-                // happened" after accepting.
-                if let joinedID = await SharedLibraryCoordinator.processPendingAcceptIfNeeded() {
-                    await SharedLibraryCoordinator.adoptSharedStoreInSession(joinedLibraryID: joinedID)
-                }
+            // Keep exactly one active member so the login gate and greeting
+            // resolve deterministically.
+            MemberIdentity.repairDuplicateActiveMembersIfNeeded(context: modelContext)
+            // Materialize file-only covers so they travel to the member
+            // devices (the Pears drive carries cover bytes as sibling
+            // files, exactly like the mirror's assets did).
+            LibraryDataService.materializeLocalCovers(context: modelContext)
+            // Pears P2P: the only sync path. Starts the worklet for the
+            // active library (restore-or-create is the worklet's decision).
+            if let active = LibraryScope.shared.active(context: modelContext),
+               let member = users.first(where: \.isActive) {
+                PearsSyncEngine.shared.start(libraryID: active.id, memberName: member.displayName)
             }
             // Fix books whose dates were never stamped (sentinel 2001-01-01),
             // which rendered "date added" as 12/31/00.
@@ -124,13 +103,6 @@ struct RootView: View {
         // A share invitation accepted while the app was OPEN arrives here
         // (stash → notification): join now and hot-swap onto the mirror
         // store in the same session, mirroring the launch path above.
-        .onReceive(NotificationCenter.default.publisher(for: .sharedLibraryInviteArrived)) { _ in
-            guard SyncSettings.selectedProvider != .sharedLibrary else { return }
-            Task { @MainActor in
-                guard let joinedID = await SharedLibraryCoordinator.processPendingAcceptIfNeeded() else { return }
-                await SharedLibraryCoordinator.adoptSharedStoreInSession(joinedLibraryID: joinedID)
-            }
-        }
     }
 
     /// Fresh-store inheritance: when the iCloud account already holds this
@@ -151,12 +123,9 @@ struct RootView: View {
             inheritCheckDone = true
             return
         }
-        let status = (try? await CKContainer(identifier: SwiftDataiCloudSync.containerIdentifier)
-            .accountStatus()) ?? .couldNotDetermine
-        guard status == .available else {
-            inheritCheckDone = true
-            return
-        }
+        // P2P: the peer's member row arrives via the Pears sync the engine
+        // drives on start. Give it a bounded window before falling back to
+        // the welcome flow (same contract as the old CloudKit import wait).
         for _ in 0..<3 {
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             if !users.isEmpty { break }
@@ -172,7 +141,7 @@ struct RootView: View {
     private func ensureActiveUser(context: ModelContext) {
         let users = (try? context.fetch(FetchDescriptor<User>())) ?? []
         guard !users.contains(where: \.isActive) else { return }
-        _ = SharedLibraryCoordinator.createPrimaryMember(
+        _ = MemberIdentity.createPrimaryMember(
             displayName: SharedLibrarySettings.shareTitle ?? "Shared Library",
             email: "shared@librarycove.local",
             context: context)

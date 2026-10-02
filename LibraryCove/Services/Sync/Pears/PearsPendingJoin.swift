@@ -18,3 +18,21 @@ final class PearsPendingJoin: ObservableObject {
         return pendingKey
     }
 }
+
+import SwiftUI
+
+/// Settings entry: routes to the admin Pears sheet for the active
+/// library (the sync section is a NavigationLink because Settings is a
+/// Form — the sheet variant is used from the Libraries list).
+struct PearsSheetRouter: View {
+    @Environment(\.modelContext) private var modelContext
+
+    var body: some View {
+        if let library = LibraryScope.shared.active(context: modelContext) {
+            PearsSyncSheet(mode: .admin, library: library)
+        } else {
+            Text("No library yet — create one first.")
+                .foregroundStyle(.secondary)
+        }
+    }
+}

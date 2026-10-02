@@ -17,9 +17,11 @@ import SwiftData
 enum BackupStore {
     /// The iCloud Drive container root. Nil when iCloud Drive is
     /// unavailable (no account, or the container hasn't materialized yet).
+    /// Backups are USER-INITIATED exports — independent of the retired
+    /// sync systems; the identifier matches the app's iCloud container
+    /// (same as the old sync's, so existing backups remain discoverable).
     static var ubiquityRoot: URL? {
-        FileManager.default.url(forUbiquityContainerIdentifier:
-            SwiftDataiCloudSync.containerIdentifier)?
+        FileManager.default.url(forUbiquityContainerIdentifier: nil)?
             .appendingPathComponent("Documents", isDirectory: true)
     }
 

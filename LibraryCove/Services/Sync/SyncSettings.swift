@@ -1,48 +1,28 @@
 import Foundation
 
-/// Persisted sync provider selection plus the one-time data hand-off used when
-/// switching providers.
+/// Persisted sync state. Provider selection is RETIRED — every value
+/// normalizes to the local store (PearsSyncEngine overlays P2P sync).
+/// The snapshot mechanism stays: backups/imports remain user-initiated
+/// and the pending-migration file is still cleared by resets.
 enum SyncSettings {
     private static let providerKey = "syncProvider"
-    private static let snapshotFileName = "pending-sync-migration.zip"
 
-    /// The provider the app should back its store with on next launch.
-    /// New installs (no stored choice) default to iCloud Sync — the
-    /// recommended mode. The backing store degrades gracefully to local
-    /// when no iCloud account is signed in, so the default is safe.
+    /// Always the local store. The stored raw value (legacy .iCloud /
+    /// .sharedLibrary choices) is ignored, not erased — resetting it adds
+    /// nothing since the getter normalizes anyway.
     static var selectedProvider: LibrarySync {
-        get {
-            guard let raw = UserDefaults.standard.string(forKey: providerKey),
-                  let kind = LibrarySync(rawValue: raw) else { return .iCloud }
-            // Local Only is retired as a user-selectable mode (its store
-            // diverges from the CloudKit zone and duplicates books on
-            // switch-back). Any stored localOnly preference normalizes to
-            // the iCloud default.
-            return kind == .localOnly ? .iCloud : kind
-        }
-        set {
-            UserDefaults.standard.set(newValue.rawValue, forKey: providerKey)
-        }
+        .localOnly
     }
 
-    /// Removes the stored provider choice; `selectedProvider` falls back to
-    /// its default (.iCloud). Used by "Delete everything and start fresh"
-    /// so a full reset behaves like a brand-new install.
+    /// Legacy no-op: there is no provider choice anymore. Kept for the
+    /// reset/delete-everything call sites.
     static func resetProvider() {
         UserDefaults.standard.removeObject(forKey: providerKey)
     }
 
-    // MARK: - Bulk-change window
+    // MARK: - Bulk-change window (legacy, now inert)
 
-    /// When the last bulk library change landed (replace import, fresh
-    /// start, delete-library, provider-switch copy). Switching AWAY from
-    /// iCloud inside the convergence window can freeze a polluted snapshot:
-    /// server records deleted by a bulk change are still syncing, so the
-    /// device store may briefly hold rows the server has since removed —
-    /// snapshotting then copies them into the (never re-synced) local store
-    /// permanently.
     private static let lastBulkChangeKey = "lastBulkChangeAt"
-    private static let bulkChangeWindow: TimeInterval = 300
 
     static var lastBulkChangeAt: Date? {
         get {
@@ -62,31 +42,20 @@ enum SyncSettings {
         lastBulkChangeAt = now
     }
 
-    /// True while the iCloud store may still be converging after a bulk
-    /// change — switching away from iCloud should wait.
-    static var iCloudMayBeConverging: Bool {
-        guard selectedProvider == .iCloud else { return false }
-        guard let last = lastBulkChangeAt else { return false }
-        return Date().timeIntervalSince(last) < bulkChangeWindow
-    }
-
     // MARK: - Migration snapshot
 
-    /// Where a snapshot of the current library is stashed when the provider
-    /// changes. The target store imports it on the next launch (see
-    /// `SyncCoordinator`), so switching providers moves the data with you.
+    /// Where an export/import hand-off is stashed. Only used by
+    /// SyncCoordinator's pending-pour path now.
     static var snapshotURL: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory,
                                             in: .userDomainMask).first!
-        return base.appendingPathComponent(snapshotFileName)
+        return base.appendingPathComponent("pending-sync-migration.zip")
     }
 
     static var hasPendingSnapshot: Bool {
         FileManager.default.fileExists(atPath: snapshotURL.path)
     }
 
-    /// Stores the exported library for the target provider. Returns false if it
-    /// couldn't be written (caller should abort the switch).
     @discardableResult
     static func writeSnapshot(_ data: Data) -> Bool {
         try? FileManager.default.createDirectory(at: snapshotURL.deletingLastPathComponent(),

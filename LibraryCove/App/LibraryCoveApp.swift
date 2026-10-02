@@ -1,82 +1,21 @@
-import CloudKit
 import SwiftData
 import SwiftUI
 import UIKit
 
-/// Receives CloudKit share invitations (user tapped a share link while the
-/// app was installed). The metadata is stashed; the join itself completes on
-/// the next RootView appearance, because joining flips the store provider and
-/// the mirror store must exist before syncing starts.
-final class ShareAcceptDelegate: NSObject, UIApplicationDelegate {
-    /// Routes scene connections to `ShareAcceptSceneDelegate` so the
-    /// non-deprecated `windowScene(_:userDidAcceptCloudKitShareWith:)` hook
-    /// fires (the UIApplicationDelegate variant is deprecated since iOS 26
-    /// and may not be invoked under the SwiftUI scene lifecycle).
-    func application(_ application: UIApplication,
-                     configurationForConnecting connectingSceneSession: UISceneSession,
-                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
-        let configuration = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
-        configuration.delegateClass = ShareAcceptSceneDelegate.self
-        return configuration
-    }
-
-    /// Fallback for iOS versions where the app-level callback still fires.
-    func application(_ application: UIApplication,
-                     userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
-        Self.stash(metadata)
-    }
-
-    static func stash(_ metadata: CKShare.Metadata) {
-        Task { @MainActor in
-            SharedLibraryCoordinator.storePendingAcceptIfAny(metadata: metadata)
-            NotificationCenter.default.post(name: .sharedLibraryInviteArrived, object: nil)
-        }
-    }
-
-    /// CloudKit delivers the registry zone's silent subscription through
-    /// APNs; forward it so library renames made on one device reach an
-    /// already-running app on the other. Content-row mirroring has its own
-    /// import path; this only funnels into the registry pull.
+/// App delegate: remote-notification registration only (Pears does not
+/// use it today, but removing it changes background-mode plumbing; the
+/// registration is harmless). All CloudKit share-accept plumbing is
+/// retired with iCloud sharing.
+final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        application.registerForRemoteNotifications()
         return true
-    }
-
-    func application(_ application: UIApplication,
-                     didReceiveRemoteNotification userInfo: [AnyHashable: Any],
-                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
-        if CKNotification(fromRemoteNotificationDictionary: userInfo) != nil {
-            Task { @MainActor in
-                LibraryScope.shared.pullRegistryFromCloud()
-            }
-        }
-        completionHandler(.noData)
-    }
-}
-
-/// Scene-level share-accept hook (the supported path since iOS 26).
-final class ShareAcceptSceneDelegate: NSObject, UIWindowSceneDelegate {
-    func windowScene(_ windowScene: UIWindowScene,
-                     userDidAcceptCloudKitShareWith metadata: CKShare.Metadata) {
-        ShareAcceptDelegate.stash(metadata)
-    }
-
-    /// Cold launch through the link: the metadata rides the connection
-    /// options, NOT the accepted-callback (which only fires when a scene
-    /// already exists). Without this, the first open of a share link on a
-    /// device where the app wasn't running is silently dropped.
-    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
-               options connectionOptions: UIScene.ConnectionOptions) {
-        if let metadata = connectionOptions.cloudKitShareMetadata {
-            ShareAcceptDelegate.stash(metadata)
-        }
     }
 }
 
 @main
 struct LibraryCoveApp: App {
-    @UIApplicationDelegateAdaptor(ShareAcceptDelegate.self) private var shareAcceptDelegate
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var shareAcceptDelegate
     // @State so SwiftUI re-renders the scene when the store is hot-swapped
     // after a sync-provider switch (Persistence.swapShared posts
     // .syncStoreSwapped; the onReceive below picks up the new container).
@@ -95,34 +34,10 @@ struct LibraryCoveApp: App {
                         container = Persistence.shared
                     }
             } else {
+                // No CloudKit store to probe anymore — the local store
+                // opens unconditionally (Pears overlays sync).
                 Color.clear
                     .task {
-                        // A brand-new install on a device without a signed-in
-                        // iCloud session opens the CloudKit-backed store by
-                        // default (the provider default), and its mirroring
-                        // setup throws uncaught exceptions that abort saves —
-                        // observed as "library was created but couldn't be
-                        // saved" immediately after onboarding. Degrade to the
-                        // local store until an iCloud account is actually
-                        // available; the provider switch path moves data into
-                        // the cloud store once the user signs in.
-                        // UI tests skip the accountStatus() probe entirely:
-                        // it can stall for the whole test in the XCUITest
-                        // sandbox (empty Color.clear window), and offline-
-                        // deterministic tests want the local store anyway.
-                        // ANY UI_TEST_* env marks a test launch — the
-                        // persistence-relaunch test needs the skip without
-                        // the reset seam.
-                        if SyncSettings.selectedProvider == .iCloud {
-                            let isUITest = ProcessInfo.processInfo.environment.keys
-                                .contains { $0.hasPrefix("UI_TEST_") }
-                            let hasAccount = isUITest ? true
-                                : await SharedLibraryEngine.shared.hasICloudAccount()
-                            if !hasAccount {
-                                Persistence.degradeToLocal()
-                                container = Persistence.shared
-                            }
-                        }
                         storeReady = true
                     }
             }

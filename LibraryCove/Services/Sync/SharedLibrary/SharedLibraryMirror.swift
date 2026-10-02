@@ -527,14 +527,3 @@ final class SharedLibraryMirror {
     }
 }
 
-private extension SharedLibraryRecord.RecordType {
-    /// Apply order for pulled changes (books before their children).
-    var rank: Int {
-        switch self {
-        case .book: return 0
-        case .note: return 1
-        case .readingList: return 2
-        case .readingListItem: return 3
-        }
-    }
-}

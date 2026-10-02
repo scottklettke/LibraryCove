@@ -134,7 +134,7 @@ struct WelcomeView: View {
         // same iCloud account reuses the synced identity instead of minting
         // a diverging duplicate (the root cause of names disagreeing
         // between devices).
-        _ = SharedLibraryCoordinator.createPrimaryMember(
+        _ = MemberIdentity.createPrimaryMember(
             displayName: trimmedName,
             email: "local@librarycove.local",
             context: modelContext)

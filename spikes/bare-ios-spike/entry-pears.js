@@ -455,7 +455,6 @@ function startPolling() {
         lastCounts = sig
         send({ evt: 'counts', counts })
       }
-      await reconcileMembers()
     } catch {}
   }
   check()

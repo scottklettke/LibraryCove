@@ -3,6 +3,42 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
+## 0.6.0 (2026-10-02)
+
+### Changed — Sync is now P2P (Pears), iCloud sync removed
+
+- **LibraryCove no longer uses iCloud for syncing.** All device-to-device
+  sync — your own devices and shared libraries alike — now runs over
+  Pears: a peer-to-peer system where devices talk to each other directly,
+  encrypted end-to-end, with no server and no iCloud round-trip.
+- **Sharing is a join link.** The owner creates a link (choosing what it
+  grants: editor or guest), sends it any way they like, and the recipient
+  taps it to join. Each link works exactly once.
+- **You control membership.** The owner's P2P screen lists every join
+  link — pending, used (with the member's name), and revoked. A revoked
+  link can never be used; members who already joined keep access.
+- **The owner must be online when someone joins.** Joining hands the
+  new member their access key directly, owner-to-member — that's what
+  makes single-use links enforceable. After joining, sync works whenever
+  both devices are running the app.
+- **Sync happens while the app is open.** Open LibraryCove and changes
+  flow both ways; the app doesn't sync in the background yet.
+- **Your books didn't move.** Everything already on each device stays;
+  the iCloud copy simply stops being written to.
+
+### Fixed — Sync reliability and sharing bugs
+
+- **Duplicate books no longer pile up.** The reset/reinstall cycle could
+  re-deliver books from iCloud on every launch, compounding copies. The
+  cause is gone, existing duplicates are cleaned in one tap
+  (Settings → Advanced → Remove duplicate books), and cleanup is safe
+  even if run on two devices.
+- **The Libraries list checkmark is honest.** A library created on
+  another device no longer arrives pre-checked with a stuck checkmark.
+- **The old "Family member" login page is gone.** Reinstalling the app
+  used to route back to it with no way forward; the welcome screen is
+  now the only entry.
+
 ## 0.5.4 (2026-09-30)
 
 ### Fixed — Sync status diagnosis

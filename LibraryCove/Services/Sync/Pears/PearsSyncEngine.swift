@@ -119,24 +119,10 @@ final class PearsSyncEngine: ObservableObject {
     enum Role { case none, writer, reader }
     private(set) var role: Role = .none
 
-    struct PersistedIdentity: Codable {
-        var driveKey: String
-        var primaryKey: String
-    }
-
-    private func identityDefaultsKey(libraryID: String) -> String {
-        "pears.\(libraryID).identity"
-    }
-
-    private func loadPersistedIdentity(libraryID: String) -> PersistedIdentity? {
-        guard let data = UserDefaults.standard.data(forKey: identityDefaultsKey(libraryID: libraryID)) else { return nil }
-        return try? JSONDecoder().decode(PersistedIdentity.self, from: data)
-    }
-
-    private func savePersistedIdentity(libraryID: String, driveKey: String, primaryKey: String) {
-        let identity = PersistedIdentity(driveKey: driveKey, primaryKey: primaryKey)
-        UserDefaults.standard.set(try? JSONEncoder().encode(identity), forKey: identityDefaultsKey(libraryID: libraryID))
-    }
+    // v2: identity persists in the WORKLET — the admin's primary key is a
+    // local credential file (primary-key.hex), member sessions live in
+    // the worklet's library-meta.json. The engine holds only the drive
+    // public key (currentDriveKey, from created/restored events).
 
     // MARK: - IPC
 

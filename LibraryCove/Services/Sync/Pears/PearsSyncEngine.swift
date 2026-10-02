@@ -237,8 +237,11 @@ final class PearsSyncEngine: ObservableObject {
         defer { isSyncing = false }
         let context = Persistence.shared.mainContext
         do {
-            try await pushLocalChanges(libraryID: libraryID, context: context)
+            // PULL FIRST: a member's local core must hold the peer's
+            // blocks before appending its own, or the append forks
+            // (host-proven: write-before-sync = silent divergence).
             try await pullRemoteChanges(libraryID: libraryID, context: context)
+            try await pushLocalChanges(libraryID: libraryID, context: context)
         } catch {
             lastError = error.localizedDescription
         }

@@ -41,11 +41,23 @@ final class PearsSyncEngine: ObservableObject {
     /// device session (matches the mirror's provider-slot model).
     private(set) var activeLibraryID: String?
 
+    /// The admin device's drive public key (from 'created'/'restored'
+    /// events) — the only identity piece invite strings carry.
+    private(set) var currentDriveKey: String?
+
     private var memberName = ""
 
     private init() {}
 
     // MARK: - Lifecycle
+
+    /// Fresh admin: create the library (first-time owner on this device).
+    /// The worklet persists the primary-key credential locally.
+    func createLibrary(name: String, libraryID: String, memberName: String) {
+        self.memberName = memberName
+        role = .writer
+        send(json: ["cmd": "create", "library": name])
+    }
 
     func start(libraryID: String, memberName: String) {
         guard !isRunning else { return }
@@ -69,15 +81,12 @@ final class PearsSyncEngine: ObservableObject {
                     .appendingPathComponent("pears").path
                 try? FileManager.default.createDirectory(atPath: docs, withIntermediateDirectories: true)
                 self.send(json: ["cmd": "init", "storageRoot": docs])
-                // Restore or create follows the caller's intent. A writer
-                // restores its own drive; a first-time creator gets a
-                // create call from the UI path.
-                if let persisted = self.loadPersistedIdentity(libraryID: libraryID) {
-                    self.send(json: ["cmd": "join", "key": persisted.driveKey,
-                                     "primaryKey": persisted.primaryKey, "wipe": false])
-                } else {
-                    self.send(json: ["cmd": "create", "library": libraryID])
-                }
+                // v2 protocol: the worklet decides admin-vs-member itself
+                // (admin = local primary-key credential file exists) and
+                // emits 'restored' (admin) or nothing (fresh). A fresh
+                // admin gets 'create' from the UI path; a member joins
+                // via joinWithKey.
+                self.send(json: ["cmd": "restore"])
                 self.role = .writer
             }
         } catch {
@@ -171,11 +180,22 @@ final class PearsSyncEngine: ObservableObject {
         case "ready", "joined":
             break
         case "created":
-            // Fresh create: persist the identity for future restores.
-            if let key = event["key"] as? String, let primaryKey = event["primaryKey"] as? String,
-               let libraryID = activeLibraryID {
-                savePersistedIdentity(libraryID: libraryID, driveKey: key, primaryKey: primaryKey)
+            // v2: the worklet no longer sends the primaryKey (it persists
+            // it locally as the admin credential). The drive key arrives
+            // here; generateJoinKey uses it for invite strings. The pk
+            // is fetched via the worklet's own restore path — the engine
+            // learns it only through 'restored' events or never.
+            if let key = event["key"] as? String, let libraryID = activeLibraryID {
+                currentDriveKey = key
             }
+        case "restored":
+            // Admin restore: worklet reopened the writer drive locally.
+            if let key = event["key"] as? String { currentDriveKey = key }
+            refreshJoinKeys()
+        case "redeemFailed":
+            // Joiner stayed read-only — surface why (already-used,
+            // revoked, unknown, timeout). Guest onboarding continues.
+            lastError = "Join link not accepted: \(event["why"] ?? "rejected")"
         case "peer":
             peers += 1
         case "counts":
@@ -216,25 +236,30 @@ final class PearsSyncEngine: ObservableObject {
         }
     }
 
-    // MARK: - Join keys
+    // MARK: - Join tokens (v2 redemption protocol)
 
-    /// Generates a single-use key and returns the full join string to send.
+    /// Admin side: generates a single-use token and returns the invite
+    /// string to send — lc1.<driveKey>.<token>. The primary key is NEVER
+    /// part of it; the joiner receives it only via the redemption
+    /// handshake (worklet's serveControl) once the token validates.
     func generateJoinKey(role: PearsJoinKey.Role) -> String? {
-        guard isRunning, case .writer = self.role, let libraryID = activeLibraryID,
-              let identity = loadPersistedIdentity(libraryID: libraryID) else { return nil }
-        let code = PearsJoinKeyGenerator.newCode()
-        let key = PearsJoinKey(code: code, role: role, createdAt: Date(), state: .pending, usedBy: nil, usedAt: nil)
+        guard isRunning, case .writer = self.role, activeLibraryID != nil,
+              let driveKey = currentDriveKey else { return nil }
+        let token = PearsJoinKeyGenerator.newCode()
+        let key = PearsJoinKey(code: token, role: role, createdAt: Date(), state: .pending, usedBy: nil, usedAt: nil)
         joinKeys.append(key)
         persistKeys(joinKeys)
-        publishKeysToWorklet(joinKeys)
-        return "lc1.\(identity.driveKey).\(identity.primaryKey).\(code)"
+        // The worklet persists the token to its local keys.json; the
+        // admin device IS the single writer pre-redemption.
+        send(json: ["cmd": "generateJoinKey", "role": role.rawValue])
+        return "lc1.\(driveKey).\(token)"
     }
 
-    func revokeJoinKey(_ code: String) {
-        guard let idx = joinKeys.firstIndex(where: { $0.code == code }) else { return }
+    func revokeJoinKey(_ token: String) {
+        guard let idx = joinKeys.firstIndex(where: { $0.code == token }) else { return }
         joinKeys[idx].state = .revoked
         persistKeys(joinKeys)
-        publishKeysToWorklet(joinKeys)
+        send(json: ["cmd": "revokeJoinKey", "token": token])
     }
 
     func refreshJoinKeys() {
@@ -248,33 +273,24 @@ final class PearsSyncEngine: ObservableObject {
         }
     }
 
-    private func publishKeysToWorklet(_ keys: [PearsJoinKey]) {
-        // The worklet writes /meta/keys.json; reconcileMembers runs there.
-        guard let data = try? JSONEncoder().encode(keys) else { return }
-        send(json: ["cmd": "putRaw", "path": "/meta/keys.json", "data": data.base64EncodedString()])
-    }
-
-    /// Joiner side: consume a pasted or link-opened join string.
+    /// Joiner side: consume a pasted or link-opened invite —
+    /// lc1.<driveKey>.<token>. Opens read-only, redeems the token over
+    /// the encrypted control channel; the admin dispenses the primary
+    /// key only on a valid redemption. Failure stays read-only (guest).
     func joinWithKey(_ joinString: String, memberName: String) {
         let cleaned = joinString.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "librarycove://join?key=", with: "")
         let parts = cleaned.split(separator: ".").map(String.init)
-        guard parts.count == 4, parts[0] == "lc1",
-              parts[1].count == 64, parts[2].count == 64, parts[3].count == 32,
+        guard parts.count == 3, parts[0] == "lc1",
+              parts[1].count == 64, parts[2].count == 32,
               parts[1].allSatisfy({ $0.isHexDigit }),
-              parts[2].allSatisfy({ $0.isHexDigit }),
-              parts[3].allSatisfy({ $0.isHexDigit }) else {
+              parts[2].allSatisfy({ $0.isHexDigit }) else {
             lastError = PearsError.badJoinKey.errorDescription ?? "Bad join key"
             return
         }
         self.memberName = memberName
-        role = .writer
-        send(json: ["cmd": "join", "key": parts[1], "primaryKey": parts[2]])
-        // Announce membership once the drive is writable (join completes
-        // async in the worklet; announce also re-runs on restore).
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-            self?.send(json: ["cmd": "announceMembership", "code": parts[3], "memberName": memberName])
-        }
+        role = .reader
+        send(json: ["cmd": "joinV2", "key": parts[1], "token": parts[2], "memberName": memberName])
     }
 
     // MARK: - Payload pipeline (wired in the codec phase)

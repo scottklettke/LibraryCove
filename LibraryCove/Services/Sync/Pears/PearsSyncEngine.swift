@@ -351,6 +351,7 @@ final class PearsSyncEngine: ObservableObject {
     private var pendingPuts: [String: CheckedContinuation<Void, Never>] = [:]
 
     private func pushLocalChanges(libraryID: String, context: ModelContext) async throws {
+        // Content: every row of every content type in the active library.
         let books = (try? context.fetch(FetchDescriptor<Book>(
             predicate: #Predicate { $0.libraryID == libraryID }
         ))) ?? []
@@ -365,13 +366,58 @@ final class PearsSyncEngine: ObservableObject {
                 try await putRawAwait("/covers/\(book.id)", bytes: coverBytes)
             }
         }
+        let notes = (try? context.fetch(FetchDescriptor<Note>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        for note in notes {
+            try await putRawAwait("/notes/\(note.id).json",
+                                  bytes: encodePayload(SharedLibraryMirror.dto(from: note)))
+        }
+        let lists = (try? context.fetch(FetchDescriptor<ReadingList>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        for list in lists {
+            try await putRawAwait("/lists/\(list.id).json",
+                                  bytes: encodePayload(SharedLibraryMirror.dto(from: list)))
+        }
+        let items = (try? context.fetch(FetchDescriptor<ReadingListItem>(
+            predicate: #Predicate { $0.libraryID == libraryID }
+        ))) ?? []
+        for item in items {
+            try await putRawAwait("/items/\(item.id).json",
+                                  bytes: encodePayload(SharedLibraryMirror.dto(from: item)))
+        }
+
+        // Profile: the canonical member row (name is what redemptions
+        // record; the peer adopts it on pull). SwiftData @Model classes
+        // aren't Codable — ship a dedicated profile payload.
+        if let user = (try? context.fetch(FetchDescriptor<User>(
+            predicate: #Predicate { $0.isActive }
+        )))?.first {
+            let profile = PearsProfilePayload(id: user.id,
+                                              displayName: user.displayName,
+                                              email: user.email,
+                                              avatarURL: user.avatarURL)
+            try await putRawAwait("/profile/\(user.id).json", bytes: encodePayload(profile))
+        }
+
+        // Settings: library registry (names/active/creates/deletes) + AI
+        // settings. The AI API key lives in the Keychain and NEVER syncs.
+        if let registry = LibraryScope.shared.exportRegistryPayload() {
+            try await putRawAwait("/settings/libraries.json", bytes: registry)
+        }
+        if let ai = AIConfig.exportSyncPayload() {
+            try await putRawAwait("/settings/ai.json", bytes: ai)
+        }
+        // Note: SharedLibrarySettings memberships ride the worklet's own
+        // keys.json / members files — the redemption model owns them.
     }
 
     private func pullRemoteChanges(libraryID: String, context: ModelContext) async throws {
         // Discover what the peer has: the worklet's 'paths' event lists
         // the whole drive; the poll triggers it. For the v1 cycle, ask
         // for the known books we already track + any in the last listing.
-        let known = await listRemoteBookPaths()
+        let known = await listRemotePaths()
         var changes: [SharedRecordChange] = []
         var assets: [String: Data] = [:]
         let mirror = SharedLibraryMirror()
@@ -384,13 +430,26 @@ final class PearsSyncEngine: ObservableObject {
             // leading slash ('books/x.json') while puts use '/books/…'
             // — normalize so readRaw paths match.
             let normalized = path.hasPrefix("/") ? path : "/" + path
-            guard normalized.hasPrefix("/books/"), normalized.hasSuffix(".json") else { continue }
-            guard let data = await readRawAwait(normalized) else { continue }
-            guard let dto = try? decodePayload(SharedBook.self, from: data) else { continue }
-            let recordName = SharedLibraryRecord.recordName(type: .book, id: dto.id)
-            changes.append(SharedRecordChange(kind: .book(dto)))
-            if let cover = await readRawAwait("/covers/\(dto.id)") {
-                assets[recordName] = cover
+            if normalized.hasPrefix("/books/"), normalized.hasSuffix(".json") {
+                guard let data = await readRawAwait(normalized) else { continue }
+                guard let dto = try? decodePayload(SharedBook.self, from: data) else { continue }
+                let recordName = SharedLibraryRecord.recordName(type: .book, id: dto.id)
+                changes.append(SharedRecordChange(kind: .book(dto)))
+                if let cover = await readRawAwait("/covers/\(dto.id)") {
+                    assets[recordName] = cover
+                }
+            } else if normalized.hasPrefix("/notes/"), normalized.hasSuffix(".json") {
+                guard let data = await readRawAwait(normalized),
+                      let dto = try? decodePayload(SharedNote.self, from: data) else { continue }
+                changes.append(SharedRecordChange(kind: .note(dto)))
+            } else if normalized.hasPrefix("/lists/"), normalized.hasSuffix(".json") {
+                guard let data = await readRawAwait(normalized),
+                      let dto = try? decodePayload(SharedReadingList.self, from: data) else { continue }
+                changes.append(SharedRecordChange(kind: .readingList(dto)))
+            } else if normalized.hasPrefix("/items/"), normalized.hasSuffix(".json") {
+                guard let data = await readRawAwait(normalized),
+                      let dto = try? decodePayload(SharedReadingListItem.self, from: data) else { continue }
+                changes.append(SharedRecordChange(kind: .readingListItem(dto)))
             }
         }
         guard !changes.isEmpty else { return }
@@ -402,10 +461,42 @@ final class PearsSyncEngine: ObservableObject {
                                    context: context)
         mirror.saveIndex(index, libraryID: libraryID)
         if applied > 0 { onRemoteChange?() }
+
+        // Full-state sync: profile, library registry, AI settings.
+        let normalized = { (p: String) in p.hasPrefix("/") ? p : "/" + p }
+        if let profileData = await readRawAwait(normalized("/profile/member-primary.json")) {
+            applyRemoteProfile(profileData, context: context)
+        }
+        if let registryData = await readRawAwait(normalized("/settings/libraries.json")) {
+            LibraryScope.shared.importRegistryPayload(registryData)
+        }
+        if let aiData = await readRawAwait(normalized("/settings/ai.json")) {
+            AIConfig.importSyncPayload(aiData)
+        }
     }
 
-    /// Lists /books/*.json via the worklet's 'list' command (reply: paths).
-    private func listRemoteBookPaths() async -> [String] {
+    /// Adopts the peer's canonical member row: name/email/avatar land on
+    /// the local primary row (the id is the stable 'member-primary').
+    private func applyRemoteProfile(_ data: Data, context: ModelContext) {
+        guard let profile = try? decodePayload(PearsProfilePayload.self, from: data) else { return }
+        let existing = (try? context.fetch(FetchDescriptor<User>(
+            predicate: #Predicate { $0.id == profile.id }
+        )))?.first
+        if let existing {
+            if existing.displayName != profile.displayName { existing.displayName = profile.displayName }
+            if existing.email != profile.email { existing.email = profile.email }
+            if existing.avatarURL != profile.avatarURL { existing.avatarURL = profile.avatarURL }
+        } else {
+            context.insert(User(id: profile.id, email: profile.email,
+                                displayName: profile.displayName,
+                                avatarURL: profile.avatarURL))
+        }
+        try? context.save()
+    }
+
+    /// Lists the whole drive via the worklet's 'list' command (reply:
+    /// paths) — the caller filters by directory.
+    private func listRemotePaths() async -> [String] {
         await withCheckedContinuation { (continuation: CheckedContinuation<[String], Never>) in
             listCompletion = continuation
             send(json: ["cmd": "list"])
@@ -480,4 +571,15 @@ final class IPCLineBuffer {
         defer { lock.unlock() }
         buffer.removeAll()
     }
+}
+
+/// Wire payload for the canonical member row — User is a SwiftData
+/// @Model (not Codable), so the profile travels in its own struct.
+/// The id is always LibraryScope.primaryMemberID; other fields are the
+/// identity the peer adopts.
+struct PearsProfilePayload: Codable, Equatable {
+    var id: String
+    var displayName: String
+    var email: String
+    var avatarURL: String?
 }

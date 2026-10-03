@@ -877,3 +877,55 @@ final class LibraryScope: ObservableObject {
         NotificationCenter.default.post(name: Self.librariesChangedNotification, object: nil)
     }
 }
+// MARK: - Pears full-state sync
+
+extension LibraryScope {
+    /// The registry as wire bytes (Pears /settings/libraries.json) — the
+    /// same shape as the local file, so apply is a straight decode+fold.
+    func exportRegistryPayload() -> Data? {
+        let registry = loadRegistry()
+        guard !registry.isEmpty else { return nil }
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return try? encoder.encode(registry)
+    }
+
+    /// Adopts a peer's registry: the same wholesale/delta semantics as the
+    /// retired CloudKit fold — unknown ids append (device-local activeness
+    /// preserved), known ids rename on a strictly newer stamp. Deletions
+    /// are NOT honored from a peer snapshot (a device that deleted a
+    /// library publishes via deleteRegistryRecord semantics, not a
+    /// snapshot absence).
+    func importRegistryPayload(_ data: Data) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let remote = try? decoder.decode([LibraryInfo].self, from: data) else { return }
+        var registry = loadRegistry()
+        var changed = false
+        for dto in remote where dto.id != Self.defaultLibraryID || registry.isEmpty {
+            if let idx = registry.firstIndex(where: { $0.id == dto.id }) {
+                let remoteStamp = dto.modifiedAt ?? dto.createdAt
+                let localStamp = registry[idx].modifiedAt ?? registry[idx].createdAt
+                if remoteStamp > localStamp, registry[idx].name != dto.name, !dto.name.isEmpty {
+                    registry[idx].name = dto.name
+                    registry[idx].modifiedAt = max(localStamp, remoteStamp)
+                    changed = true
+                }
+                if let remoteShare = dto.share, remoteShare.stampedAt > (registry[idx].share?.stampedAt ?? .distantPast) {
+                    registry[idx].share = remoteShare
+                    registry[idx].shareClearedAt = nil
+                    changed = true
+                }
+            } else {
+                registry.append(LibraryInfo(id: dto.id, name: dto.name,
+                                            isActive: false,
+                                            createdAt: dto.createdAt,
+                                            modifiedAt: dto.modifiedAt ?? dto.createdAt,
+                                            share: dto.share,
+                                            shareClearedAt: dto.shareClearedAt))
+                changed = true
+            }
+        }
+        if changed { saveRegistry(registry) }
+    }
+}

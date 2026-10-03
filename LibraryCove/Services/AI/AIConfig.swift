@@ -209,3 +209,45 @@ enum Keychain {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 }
+
+// MARK: - Pears settings sync
+
+extension AIConfig {
+    struct SyncPayload: Codable, Equatable {
+        var engine: AIEngine?
+        var baseURL: String?
+        var model: String?
+        var maxContextTokens: Int?
+        var useWebSearch: Bool?
+        var showTokenRate: Bool?
+        // openAIAPIKey deliberately ABSENT: the Keychain entry never syncs —
+        // each device holds its own credential.
+    }
+
+    /// Settings snapshot for the Pears drive (/settings/ai.json). The API
+    /// key is excluded by construction (not a field of the payload).
+    static func exportSyncPayload() -> Data? {
+        let payload = SyncPayload(engine: selectedEngine,
+                                  baseURL: openAIBaseURL,
+                                  model: openAIModel,
+                                  maxContextTokens: maxContextTokens,
+                                  useWebSearch: AIConfig.webSearchEnabled,
+                                  showTokenRate: showTokenRate)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try? encoder.encode(payload)
+    }
+
+    /// Adopts a peer's settings. Only set fields are applied, and the
+    /// local value wins when it was changed more recently (v1: last
+    /// writer wins per field via non-nil).
+    static func importSyncPayload(_ data: Data) {
+        guard let payload = try? JSONDecoder().decode(SyncPayload.self, from: data) else { return }
+        if let engine = payload.engine { self.selectedEngine = engine }
+        if let baseURL = payload.baseURL { self.openAIBaseURL = baseURL }
+        if let model = payload.model { openAIModel = model }
+        if let maxContextTokens = payload.maxContextTokens { self.maxContextTokens = maxContextTokens }
+        if let useWebSearch = payload.useWebSearch { self.webSearchEnabled = useWebSearch }
+        if let showTokenRate = payload.showTokenRate { self.showTokenRate = showTokenRate }
+    }
+}

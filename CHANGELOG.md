@@ -3,6 +3,34 @@
 Notable user-facing changes, newest first. The same file ships in the app
 (Settings → About & Feedback → Changelog).
 
+## 0.7.1 (2026-10-03)
+
+### Changed — Devices and shared libraries are now separate concepts
+
+- **Two kinds of links.** Connecting your own devices uses a **device
+  link**: your name, AI settings, your library list, and the content of
+  every library you own sync across them. Sharing with someone else
+  uses a **library invite**: it grants exactly one library, and they
+  never see your identity or your other libraries.
+- **A new library starts truly fresh.** Creating a library after a
+  delete no longer resurrects a previous device's name or state — the
+  earlier version kept hidden sync state that survived both the delete
+  and the app update. That state is now wiped on every delete path.
+- **The AI API key never syncs.** AI settings (engine, model, context
+  window, search) travel across your devices; the key stays in each
+  device's own Keychain and must be entered once per device.
+
+### Fixed
+
+- **"Create join link" now works on first open.** The P2P page used to
+  silently do nothing if the sync engine hadn't finished starting; it
+  now starts the engine itself and shows a status while it does.
+- **Deleting the last library no longer leaves hidden sync state** that
+  a later launch could resurrect.
+- **The P2P page has an Advanced section** — engine state, drive key,
+  connected peers, last sync time, and per-directory payload counts —
+  so sync activity is visible instead of invisible.
+
 ## 0.6.0 (2026-10-02)
 
 ### Changed — Sync is now P2P (Pears), iCloud sync removed

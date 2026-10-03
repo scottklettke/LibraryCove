@@ -61,6 +61,7 @@ final class PearsSyncEngine: ObservableObject {
     func createLibrary(name: String, libraryID: String, memberName: String) {
         self.memberName = memberName
         role = .writer
+        isIdentityOriginator = true
         send(json: ["cmd": "create", "library": name])
     }
 
@@ -124,6 +125,13 @@ final class PearsSyncEngine: ObservableObject {
     enum Role { case none, writer, reader }
     private(set) var role: Role = .none
 
+    /// True when THIS device created the library (the identity originator).
+    /// Settings/profile payloads are pushed ONLY by the originator — a
+    /// member pushing its own AIConfig/profile would thrash the owner's
+    /// identity data (last-writer-wins on rows the owner should own).
+    /// Members push only their /members/<token>.json announce.
+    private(set) var isIdentityOriginator = false
+
     // v2: identity persists in the WORKLET — the admin's primary key is a
     // local credential file (primary-key.hex), member sessions live in
     // the worklet's library-meta.json. The engine holds only the drive
@@ -178,10 +186,12 @@ final class PearsSyncEngine: ObservableObject {
             // learns it only through 'restored' events or never.
             if let key = event["key"] as? String, let libraryID = activeLibraryID {
                 currentDriveKey = key
+                isIdentityOriginator = true   // this device created the drive
             }
         case "restored":
             // Admin restore: worklet reopened the writer drive locally.
             if let key = event["key"] as? String { currentDriveKey = key }
+            isIdentityOriginator = true
             refreshJoinKeys()
         case "redeemFailed":
             // Joiner stayed read-only — surface why (already-used,
@@ -396,6 +406,12 @@ final class PearsSyncEngine: ObservableObject {
             try await putRawAwait("/items/\(item.id).json",
                                   bytes: encodePayload(SharedLibraryMirror.dto(from: item)))
         }
+
+        // Identity + settings: pushed by the IDENTITY ORIGINATOR only.
+        // A member pushing its own profile/AIConfig would thrash the
+        // owner's identity data. Members publish /members/<token>.json
+        // (the redemption announce) and pull everything else.
+        guard isIdentityOriginator else { return }
 
         // Profile: the canonical member row (name is what redemptions
         // record; the peer adopts it on pull). SwiftData @Model classes

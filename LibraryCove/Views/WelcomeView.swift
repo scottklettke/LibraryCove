@@ -1,19 +1,35 @@
 import SwiftUI
 import SwiftData
 
-/// First-launch welcome flow: four swipeable pages describing what
-/// LibraryCove does, then a setup form asking for the user's name and their
-/// library's name (prefilled from the name, e.g. "Alex" → "Alex's
-/// Library"). The library name is what appears when the library is shared.
+/// First-launch flow. Three paths, chosen on page 4 (setup):
+///
+/// 1. **Create a new library** — this device becomes the OWNER: the
+///    worklet creates the drive, persists the primary-key credential,
+///    and the member row is minted locally. The library name is the
+///    drive's identity; the member name is what join redemptions record.
+/// 2. **Join with a key** — paste an `lc1.<drive>.<token>` invite.
+///    Redemption over the control channel grants write access; the
+///    member row is written into the replicated store.
+/// 3. **Scan a QR code** — the same invite, delivered as a QR (the
+///    owner's sheet shows "Show QR" alongside Copy/Send).
+///
+/// The old name+library-name form becomes part of path 1: the member
+/// name IS the identity the other devices see; the library name names
+/// the drive.
 struct WelcomeView: View {
     @Environment(\.modelContext) private var modelContext
     /// Called once the profile is created — RootView swaps to the main tabs.
     let onComplete: () -> Void
 
+    enum Path: Hashable { case create, joinKey, joinQR }
+
     @State private var page = 0
     @State private var name = ""
     @State private var libraryName = ""
     @State private var libraryNameEdited = false
+    @State private var selectedPath: Path?
+    @State private var inviteInput = ""
+    @ObservedObject private var engine = PearsSyncEngine.shared
 
     var body: some View {
         NavigationStack {
@@ -32,9 +48,9 @@ struct WelcomeView: View {
                         tag: 1
                     )
                     welcomePage(
-                        icon: "person.2.fill",
-                        title: "Share with family",
-                        text: "Share your library with the people you live with over iCloud — everyone can add, edit, and remove books.",
+                        icon: "antenna.radiowaves.left.and.right",
+                        title: "Sync without a server",
+                        text: "Your devices sync directly to each other, encrypted end-to-end — no account, no cloud middleman. Backups stay yours.",
                         tag: 2
                     )
                     welcomePage(
@@ -48,15 +64,19 @@ struct WelcomeView: View {
                 .tabViewStyle(.page(indexDisplayMode: .automatic))
                 .indexViewStyle(.page(backgroundDisplayMode: .always))
 
-                Button(page < 4 ? "Continue" : "Create My Library") {
+                Button(page < 4 ? "Continue" : primaryButtonTitle) {
                     if page < 4 {
                         withAnimation { page += 1 }
                     } else {
-                        finish()
+                        switch selectedPath {
+                        case .create: finishCreate()
+                        case .joinKey, .joinQR: finishJoin()
+                        case .none: break
+                        }
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(page == 4 && name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(page == 4 && !setupInputValid)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
             }
@@ -66,105 +86,147 @@ struct WelcomeView: View {
         }
     }
 
-    private func welcomePage(icon: String, title: String, text: String, tag: Int) -> some View {
-        VStack(spacing: 18) {
-            Image(systemName: icon)
-                .font(.system(size: 56))
-                .foregroundStyle(.blue)
-                .frame(height: 90)
-            Text(title)
-                .font(.title.bold())
-                .multilineTextAlignment(.center)
-            Text(text)
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
+    private var setupInputValid: Bool {
+        let hasName = !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        switch selectedPath {
+        case .create: return hasName
+        case .joinKey, .joinQR:
+            return hasName && !inviteInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .none: return false
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 90)
-        .tag(tag)
     }
 
+    private var primaryButtonTitle: String {
+        switch selectedPath {
+        case .create: return "Create My Library"
+        case .joinKey, .joinQR: return "Join Library"
+        case .none: return "Continue"
+        }
+    }
+
+    /// The setup page: path choice first, then path-specific fields.
     private var setupPage: some View {
         Form {
             Section("About you") {
                 TextField("Your name", text: $name)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .onChange(of: name) { _, newValue in
-                        // Prefill the library name from the name until the
-                        // user edits the library field themselves.
-                        if !libraryNameEdited {
-                            libraryName = SharedLibrarySettings.defaultShareTitle(for: newValue)
-                        }
-                    }
             }
+
             Section {
-                TextField("Library name", text: $libraryName)
-                    .textInputAutocapitalization(.words)
-                    .autocorrectionDisabled()
-                    .onChange(of: libraryName) { _, newValue in
-                        libraryNameEdited = !newValue.isEmpty &&
-                            newValue != SharedLibrarySettings.defaultShareTitle(for: name)
-                    }
+                Picker("This device will", selection: pathBinding) {
+                    Text("Create a new library").tag(Path.create)
+                    Text("Join an existing library").tag(Path.joinKey)
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
             } header: {
-                Text("Your library")
+                Text("Set up sync")
             } footer: {
-                Text("The library name shows up when you share your library with others. You can create more libraries later in Settings > Libraries.")
+                Text("Sync runs device-to-device over Pears — encrypted, no account. Create here to be the owner, or join a library someone shared.")
+            }
+
+            if selectedPath == .create {
+                Section {
+                    TextField("Library name", text: $libraryName)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Your library")
+                } footer: {
+                    Text("The library name shows up when you share with others. You can create more libraries later in Settings > Libraries.")
+                }
+            }
+
+            if selectedPath == .joinKey || selectedPath == .joinQR {
+                Section {
+                    TextField("Invite (lc1.…)", text: $inviteInput)
+                        .font(.system(size: 12, design: .monospaced))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                    if selectedPath == .joinQR {
+                        Label("Scan the QR code shown on the owner's device, or paste the invite below.", systemImage: "qrcode.viewfinder")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Invite")
+                } footer: {
+                    Text("The owner creates this in their P2P Sync page — each invite works exactly once, and the owner must be online when you join.")
+                }
             }
         }
         .tag(4)
     }
 
-    private func finish() {
+    /// The picker drives the path; QR is join-with-key delivered visually,
+    /// so the camera flow lands in the same invite field.
+    private var pathBinding: Binding<Path> {
+        Binding(
+            get: { selectedPath ?? .create },
+            set: { selectedPath = ($0 == .joinQR) ? .joinKey : $0 }
+        )
+    }
+
+    // MARK: - Actions
+
+    /// Path 1: this device owns a new library.
+    private func finishCreate() {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedLibrary = libraryName.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Fast typing (hardware keyboards, autocorrect, XCUITest typeText)
-        // can coalesce name keystrokes: libraryName is then left holding a
-        // derivation of an earlier PREFIX of the name ("Te's Library" while
-        // name is "Tester") and the onChange pairing flips
-        // libraryNameEdited true from the stale comparison. A library name
-        // that still equals the CURRENT name's derivation was never
-        // hand-edited — treat it as auto-derived.
         let derived = SharedLibrarySettings.defaultShareTitle(for: trimmedName)
-        let handEdited = libraryNameEdited && trimmedLibrary != derived
-        // Adopt-or-create the shared member row: a second device on the
-        // same iCloud account reuses the synced identity instead of minting
-        // a diverging duplicate (the root cause of names disagreeing
-        // between devices).
+        let chosenName = trimmedLibrary.isEmpty ? derived : trimmedLibrary
+
         _ = MemberIdentity.createPrimaryMember(
             displayName: trimmedName,
             email: "local@librarycove.local",
             context: modelContext)
-        // The library name chosen here names the active library. On a
-        // fresh install there is NO library yet (the registry stays empty
-        // until the user acts) — create one instead of renaming a default
-        // that no longer exists. When the typed library name is still the
-        // auto-derivation, the CURRENT name's derivation wins (it may have
-        // out-run the stale prefilled string).
-        let chosenName = handEdited
-            ? (trimmedLibrary.isEmpty ? derived : trimmedLibrary)
-            : derived
+        let library: LibraryInfo
         if let active = LibraryScope.shared.active(context: modelContext) {
-            let localName = active.name
-            // Only stamp the library name when the user actually typed
-            // one, or the local default has no name yet. Blindly renaming
-            // here gives the library a NOW stamp that outranks a rename
-            // the user made on ANOTHER device — onboarding would silently
-            // undo it.
-            if handEdited || localName.isEmpty {
-                LibraryScope.shared.rename(id: active.id, to: chosenName,
-                                    context: modelContext)
+            if active.name.isEmpty {
+                LibraryScope.shared.rename(id: active.id, to: chosenName, context: modelContext)
             }
+            library = active
         } else {
-            _ = try? LibraryScope.shared.create(name: chosenName, makeActive: true,
-                                                context: modelContext)
+            library = (try? LibraryScope.shared.create(name: chosenName, makeActive: true,
+                                                       context: modelContext)) ?? LibraryInfo(
+                id: LibraryScope.defaultLibraryID, name: chosenName,
+                isActive: true, createdAt: Date())
         }
         SharedLibrarySettings.preferredShareTitle = chosenName
         try? modelContext.save()
+        // Boot the engine as OWNER — the worklet creates the drive and
+        // persists its credential. The welcome completes; sync begins.
+        PearsSyncEngine.shared.start(libraryID: library.id, memberName: trimmedName)
         onComplete()
     }
 
+    /// Paths 2/3: join an existing library via the invite (typed or QR).
+    private func finishJoin() {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Mint the local member row (the mirrored store adopts it after
+        // the first pull; the redemption handshake records the name).
+        _ = MemberIdentity.createPrimaryMember(
+            displayName: trimmedName,
+            email: "local@librarycove.local",
+            context: modelContext)
+        try? modelContext.save()
+        PearsSyncEngine.shared.joinWithKey(inviteInput, memberName: trimmedName)
+        onComplete()
+    }
+}
+
+/// One icon+title+text page of the intro carousel.
+private func welcomePage(icon: String, title: String, text: String, tag: Int) -> some View {
+    VStack(spacing: 18) {
+        Image(systemName: icon)
+            .font(.system(size: 56))
+            .foregroundStyle(.blue)
+        Text(title)
+            .font(.title2.bold())
+        Text(text)
+            .font(.body)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+    }
+    .tag(tag)
 }

@@ -32,6 +32,7 @@ struct PearsSyncSheet: View {
                 case .admin: adminSections
                 case .joiner: joinerSections
                 }
+                advancedSection
             }
             .navigationTitle(mode == .admin ? "P2P Sync — \(library.name)" : "Join Library")
             .navigationBarTitleDisplayMode(.inline)
@@ -159,7 +160,33 @@ struct PearsSyncSheet: View {
         }
     }
 
-    // MARK: - Joiner
+    /// Advanced: what the P2P layer is actually doing. Same section for
+    /// admin and joiner — it describes THIS device's engine.
+    private var advancedSection: some View {
+        Section {
+            LabeledContent("Engine", value: engine.isRunning ? "Running" : "Stopped")
+            LabeledContent("Drive key", value: engine.currentDriveKey.map { String($0.prefix(12)) + "…" } ?? "—")
+                .textSelection(.enabled)
+            LabeledContent("Connected peers", value: "\(engine.peers)")
+            LabeledContent("Last sync", value: engine.lastSyncAt.map { $0.formatted(date: .omitted, time: .standard) } ?? "Never")
+            if engine.isSyncing {
+                LabeledContent("Sync now") { ProgressView().controlSize(.small) }
+            }
+            if !engine.counts.isEmpty {
+                ForEach(engine.counts.keys.sorted(), id: \.self) { dir in
+                    LabeledContent(dir, value: "\(engine.counts[dir] ?? 0)")
+                }
+            }
+            if let error = engine.lastError {
+                Text(error).font(.caption).foregroundStyle(.red)
+            }
+        } header: {
+            Text("Advanced — P2P network")
+        } footer: {
+            Text("Counts are what the drive currently holds per directory. Peers = devices connected right now. The engine polls for changes every 1.5s while a peer is connected.")
+        }
+    }
+
 
     @ViewBuilder private var joinerSections: some View {
         Section {

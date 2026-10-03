@@ -24,6 +24,11 @@ final class PearsSyncEngine: ObservableObject {
     @Published private(set) var isSyncing = false
     @Published private(set) var lastError: String?
     @Published private(set) var peers = 0
+    /// Last completed sync cycle (both pull and push).
+    @Published private(set) var lastSyncAt: Date?
+    /// Per-directory payload counts from the worklet's poll — the live
+    /// view of what the drive holds (books/notes/lists/items/covers/...).
+    @Published private(set) var counts: [String: Int] = [:]
     /// Pending/used/revoked keys for the admin surface (active library).
     @Published private(set) var joinKeys: [PearsJoinKey] = []
     /// Set when a member announcement was reconciled — UI surfaces it.
@@ -186,6 +191,7 @@ final class PearsSyncEngine: ObservableObject {
             peers += 1
         case "counts":
             // Payload counts changed — run the sync cycle.
+            if let c = event["counts"] as? [String: Int] { counts = c }
             Task { await syncNow() }
         case "data":
             // readRaw reply: resume the awaiting pull continuation.
@@ -234,7 +240,10 @@ final class PearsSyncEngine: ObservableObject {
         guard isRunning, let libraryID = activeLibraryID else { return }
         guard !isSyncing else { return }
         isSyncing = true
-        defer { isSyncing = false }
+        defer {
+            isSyncing = false
+            lastSyncAt = Date()
+        }
         let context = Persistence.shared.mainContext
         do {
             // PULL FIRST: a member's local core must hold the peer's

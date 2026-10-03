@@ -17,6 +17,8 @@ Every layer is host/device-proven; this is the end-to-end app drive.
    Send link, or paste manually): Libraries → the join sheet appears
    prefilled. On a simulator:
    `xcrun simctl openurl <udid> "librarycove://join?key=<invite>"`
+   (iOS shows an "Open in LibraryCove?" confirmation once — tap Open.
+   That single tap is standard custom-scheme behavior on real devices too.)
 6. Enter your display name → **Join library**. Device A must be online
    (foregrounded) — redemption happens owner-to-member.
 

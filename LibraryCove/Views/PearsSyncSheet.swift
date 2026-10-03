@@ -45,7 +45,19 @@ struct PearsSyncSheet: View {
         .onAppear {
             memberName = currentMemberName()
             if let prefill = prefillInvite { inviteInput = prefill }
-            if mode == .admin { engine.refreshJoinKeys() }
+            if mode == .admin {
+                // The sheet is reachable before the engine boots (fresh
+                // install → Libraries → P2P Sync): start it now, else
+                // generateJoinKey's guards silently return nil — the
+                // reported "Create join link does nothing".
+                if !engine.isRunning, let active = LibraryScope.shared.active(context: modelContext),
+                   let member = (try? modelContext.fetch(FetchDescriptor<User>(
+                       predicate: #Predicate { $0.isActive }
+                   )))?.first {
+                    engine.start(libraryID: active.id, memberName: member.displayName)
+                }
+                engine.refreshJoinKeys()
+            }
         }
     }
 
@@ -60,8 +72,15 @@ struct PearsSyncSheet: View {
             }
             Button {
                 generatedInvite = engine.generateJoinKey(role: pickedRole)
+                if generatedInvite == nil { engine.refreshJoinKeys() }
             } label: {
                 Label("Create join link", systemImage: "link.badge.plus")
+            }
+            .disabled(!engine.isRunning || engine.currentDriveKey == nil)
+            if !engine.isRunning || engine.currentDriveKey == nil {
+                Text(engine.isRunning ? "Starting the sync engine — try again in a moment…" : "The sync engine isn't running yet — it starts when you open this page.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         } header: {
             Text("Invite a member")

@@ -21,6 +21,8 @@ struct PearsSyncSheet: View {
     @State private var generatedInvite: String?
     @State private var pickedRole: PearsJoinKey.Role = .editor
     @State private var copied = false
+    @State private var qrImage: UIImage?
+    @State private var showQR = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var engine = PearsSyncEngine.shared
@@ -110,6 +112,33 @@ struct PearsSyncSheet: View {
                     ShareLink(item: url) {
                         Label("Send link...", systemImage: "paperplane")
                     }
+                }
+                Button {
+                    qrImage = PearsQR.image(for: invite)
+                    showQR = qrImage != nil
+                } label: {
+                    Label("Show QR code", systemImage: "qrcode")
+                }
+                .sheet(isPresented: $showQR) {
+                    VStack(spacing: 16) {
+                        Text("Scan with the joining device")
+                            .font(.headline)
+                        if let qrImage {
+                            Image(uiImage: qrImage)
+                                .interpolation(.none)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 260)
+                                .accessibilityLabel("Join QR code")
+                        }
+                        Text(invite)
+                            .font(.system(size: 10, design: .monospaced))
+                            .lineLimit(2)
+                            .textSelection(.enabled)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(24)
+                    .presentationDetents([.medium])
                 }
             } header: {
                 Text("Send this - works once")

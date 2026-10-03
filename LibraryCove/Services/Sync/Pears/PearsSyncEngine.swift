@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import BareKit
+import UIKit
 
 /// Pears P2P sync engine: embeds the Bare worklet (Hyperdrive over
 /// Hyperswarm) and mirrors SwiftData rows through it.
@@ -607,4 +608,20 @@ struct PearsProfilePayload: Codable, Equatable {
     var displayName: String
     var email: String
     var avatarURL: String?
+}
+
+import CoreImage.CIFilterBuiltins
+
+/// Renders an invite string as a QR code image (the owner-side "Show QR").
+enum PearsQR {
+    static func image(for invite: String, scale: CGFloat = 8) -> UIImage? {
+        let filter = CIFilter.qrCodeGenerator()
+        filter.message = Data(invite.utf8)
+        filter.correctionLevel = "M"
+        guard let output = filter.outputImage?.transformed(
+            by: CGAffineTransform(scaleX: scale, y: scale)) else { return nil }
+        let context = CIContext()
+        guard let cg = context.createCGImage(output, from: output.extent) else { return nil }
+        return UIImage(cgImage: cg)
+    }
 }

@@ -29,6 +29,7 @@ struct WelcomeView: View {
     @State private var libraryNameEdited = false
     @State private var selectedPath: Path?
     @State private var inviteInput = ""
+    @State private var showScanner = false
     @ObservedObject private var engine = PearsSyncEngine.shared
 
     var body: some View {
@@ -79,6 +80,19 @@ struct WelcomeView: View {
                 .disabled(page == 4 && !setupInputValid)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
+            }
+            .sheet(isPresented: $showScanner) {
+                // The barcode scanner emits ANY machine-readable code; the
+                // join path validates the lc1 format itself. A QR payload
+                // is the full invite (or a librarycove://join URL).
+                ISBNScannerView { code in
+                    let cleaned = code
+                        .replacingOccurrences(of: "librarycove://join?key=", with: "")
+                    if cleaned.hasPrefix("lc1.") {
+                        inviteInput = cleaned
+                        showScanner = false
+                    }
+                }
             }
             .background(Color(uiColor: .systemGroupedBackground))
             .navigationTitle("")
@@ -142,15 +156,15 @@ struct WelcomeView: View {
                         .font(.system(size: 12, design: .monospaced))
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
-                    if selectedPath == .joinQR {
-                        Label("Scan the QR code shown on the owner's device, or paste the invite below.", systemImage: "qrcode.viewfinder")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    Button {
+                        showScanner = true
+                    } label: {
+                        Label("Scan QR code", systemImage: "qrcode.viewfinder")
                     }
                 } header: {
                     Text("Invite")
                 } footer: {
-                    Text("The owner creates this in their P2P Sync page — each invite works exactly once, and the owner must be online when you join.")
+                    Text("The owner creates this in their P2P Sync page — each invite works exactly once, and the owner must be online when you join. Scanning fills the field; the owner's P2P page can show the code.")
                 }
             }
         }

@@ -267,6 +267,10 @@ struct AdvancedSettingsView: View {
         // duplicate-book flood after resets. A factory reset has no
         // migration to finish.
         SyncSettings.clearSnapshot()
+        // The Pears worklet's state (drives, identity credentials, join
+        // keys) lives OUTSIDE UserDefaults — without this the next launch
+        // restores the supposedly-deleted identity.
+        PearsSyncEngine.wipeAllLocalState()
         wipeAIRemnantsAndSearchHistory()
         // Same for Hardcover: the OAuth refresh token (or pasted PAT) must
         // not survive a factory reset in the Keychain. Revoking server-side

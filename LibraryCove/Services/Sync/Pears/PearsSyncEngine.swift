@@ -625,3 +625,22 @@ enum PearsQR {
         return UIImage(cgImage: cg)
     }
 }
+
+extension PearsSyncEngine {
+    /// Factory-reset: stop the engine, delete the worklet's storage root
+    /// (drives, primary-key credentials, library-meta, keys) and the
+    /// engine's UserDefaults state. Without this, "Delete everything"
+    /// leaves Documents/pears/ intact and the next launch RESTORES the
+    /// supposedly-deleted identity — the reported reset-doesn't-stick bug.
+    @MainActor
+    static func wipeAllLocalState() {
+        shared.stop()
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("pears").path
+        try? FileManager.default.removeItem(atPath: docs)
+        let defaults = UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("pears.") {
+            defaults.removeObject(forKey: key)
+        }
+    }
+}

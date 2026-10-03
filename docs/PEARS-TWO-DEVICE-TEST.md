@@ -1,4 +1,4 @@
-# Pears two-device verification (0.6.0)
+# Pears two-device verification (0.7.1)
 
 Every layer is host/device-proven; this is the end-to-end app drive.
 

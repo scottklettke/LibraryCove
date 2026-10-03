@@ -59,15 +59,19 @@ final class PearsSyncEngine: ObservableObject {
 
     /// Fresh admin: create the library (first-time owner on this device).
     /// The worklet persists the primary-key credential locally.
-    func createLibrary(name: String, libraryID: String, memberName: String) {
+    /// `fresh` (welcome path) wipes any prior session first — a NEW
+    /// library must never silently restore an old identity.
+    func createLibrary(name: String, libraryID: String, memberName: String, fresh: Bool = true) {
         self.memberName = memberName
         role = .writer
         isIdentityOriginator = true
+        if fresh { Self.wipeAllLocalState() }
         send(json: ["cmd": "create", "library": name])
     }
 
-    func start(libraryID: String, memberName: String) {
+    func start(libraryID: String, memberName: String, fresh: Bool = false) {
         guard !isRunning else { return }
+        if fresh { Self.wipeAllLocalState() }
         activeLibraryID = libraryID
         self.memberName = memberName
         do {

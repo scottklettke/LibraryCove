@@ -36,7 +36,7 @@ struct PearsSyncSheet: View {
                 }
                 advancedSection
             }
-            .navigationTitle(mode == .admin ? "P2P Sync — \(library.name)" : "Join Library")
+            .navigationTitle(mode == .admin ? "Connect Devices — \(library.name)" : "Connect to a Library")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -86,7 +86,7 @@ struct PearsSyncSheet: View {
                     .foregroundStyle(.secondary)
             }
         } header: {
-            Text("Invite a member")
+            Text("Share a library invite")
         } footer: {
             Text("Each link works exactly once. The owner must be online when the member joins - the key that grants write access is handed over directly, never sent in the message.")
         }
@@ -183,7 +183,7 @@ struct PearsSyncSheet: View {
                 }
             }
         } header: {
-            Text("Join links")
+            Text("Library invites")
         } footer: {
             Text("Revoking stops a link from ever being used. A member who already joined keeps access until the library's keys are rotated.")
         }
@@ -231,7 +231,7 @@ struct PearsSyncSheet: View {
             }
             .disabled(inviteInput.isEmpty || memberName.isEmpty)
         } header: {
-            Text("Join a shared library")
+            Text("Connect to a shared library")
         } footer: {
             Text("Ask the owner to create a join link and send it. The owner needs to be online when you join. If the link was already used or revoked, you will see this library read-only or nothing at all.")
         }

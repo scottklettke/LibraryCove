@@ -779,6 +779,10 @@ struct SettingsView: View {
         } else {
             if let doomed {
                 LibraryScope.shared.delete(doomed, context: modelContext)
+                // Last library gone → the Pears identity dies with it.
+                if LibraryScope.shared.all(context: modelContext).isEmpty {
+                    PearsSyncEngine.wipeAllLocalState()
+                }
             }
             isDeleting = false
             openLibraryTab()

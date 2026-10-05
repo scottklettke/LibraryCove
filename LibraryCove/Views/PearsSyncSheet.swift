@@ -68,6 +68,24 @@ struct PearsSyncSheet: View {
 
     @ViewBuilder private var adminSections: some View {
         Section {
+            LabeledContent("Your identity key", value: engine.currentDriveKey ?? "—")
+                .font(.system(size: 11, design: .monospaced))
+                .textSelection(.enabled)
+            Button {
+                if let key = engine.currentDriveKey {
+                    UIPasteboard.general.string = "lc1.\(key)." + (engine.joinKeys.first(where: { $0.state == .pending })?.code ?? "")
+                }
+            } label: {
+                Label("Copy device-link invite", systemImage: "link")
+            }
+            .disabled(engine.currentDriveKey == nil)
+        } header: {
+            Text("Connect my devices")
+        } footer: {
+            Text("This identity links your OWN devices: your name, AI settings, library list, and all your libraries' content sync. For sharing ONE library with someone else, use 'Share a library invite' below.")
+        }
+
+        Section {
             Picker("Link grants", selection: $pickedRole) {
                 Text("Editor - can edit").tag(PearsJoinKey.Role.editor)
                 Text("Guest - view only").tag(PearsJoinKey.Role.guest)

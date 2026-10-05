@@ -88,12 +88,12 @@ struct RootView: View {
             // devices (the Pears drive carries cover bytes as sibling
             // files, exactly like the mirror's assets did).
             LibraryDataService.materializeLocalCovers(context: modelContext)
-            // Pears P2P: the only sync path. Starts the worklet for the
-            // active library (restore-or-create is the worklet's decision).
-            if let active = LibraryScope.shared.active(context: modelContext),
-               let member = users.first(where: \.isActive) {
-                PearsSyncEngine.shared.start(libraryID: active.id, memberName: member.displayName)
-            }
+            // Pears: the engine is NOT auto-started here. A fresh device
+            // must stay isolated until the user deliberately creates an
+            // identity (welcome) or joins one (welcome join / P2P sheet) —
+            // auto-starting restored prior sessions and leaked state
+            // across devices with no key exchange. The engine starts from:
+            //   WelcomeView.finishCreate/finishJoin, PearsSyncSheet.onAppear.
             // Fix books whose dates were never stamped (sentinel 2001-01-01),
             // which rendered "date added" as 12/31/00.
             if let all = try? modelContext.fetch(LibraryScope.shared.activeBooksDescriptor(context: modelContext)) {

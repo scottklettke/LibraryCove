@@ -30,6 +30,9 @@ final class PearsSyncEngine: ObservableObject {
     /// Per-directory payload counts from the worklet's poll — the live
     /// view of what the drive holds (books/notes/lists/items/covers/...).
     @Published private(set) var counts: [String: Int] = [:]
+    /// Rolling worklet console (the barespike log stream) — the
+    /// Advanced panel renders it for under-the-hood visibility.
+    @Published private(set) var consoleLines: [String] = []
     /// Pending/used/revoked keys for the admin surface (active library).
     @Published private(set) var joinKeys: [PearsJoinKey] = []
     /// Set when a member announcement was reconciled — UI surfaces it.
@@ -211,6 +214,11 @@ final class PearsSyncEngine: ObservableObject {
             // Joiner stayed read-only — surface why (already-used,
             // revoked, unknown, timeout). Guest onboarding continues.
             lastError = "Join link not accepted: \(event["why"] ?? "rejected")"
+        case "log":
+            if let msg = event["msg"] as? String {
+                consoleLines.append(msg)
+                if consoleLines.count > 200 { consoleLines.removeFirst(consoleLines.count - 200) }
+            }
         case "peer":
             peers += 1
         case "counts":

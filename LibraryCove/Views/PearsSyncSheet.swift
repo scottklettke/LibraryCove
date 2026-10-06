@@ -23,6 +23,7 @@ struct PearsSyncSheet: View {
     @State private var copied = false
     @State private var qrImage: UIImage?
     @State private var showQR = false
+    @State private var qrPayload: String = ""
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var engine = PearsSyncEngine.shared
@@ -79,10 +80,27 @@ struct PearsSyncSheet: View {
                 Label("Copy device-link invite", systemImage: "link")
             }
             .disabled(engine.currentDriveKey == nil)
+            Button {
+                if let key = engine.currentDriveKey,
+                   let pending = engine.joinKeys.first(where: { $0.state == .pending }) {
+                    let invite = "lc1.\(key).\(pending.code)"
+                    qrPayload = invite
+                    qrImage = PearsQR.image(for: invite, scale: 8)
+                    showQR = qrImage != nil
+                }
+            } label: {
+                Label("Show device-link QR", systemImage: "qrcode")
+            }
+            .disabled(engine.currentDriveKey == nil || !engine.joinKeys.contains(where: { $0.state == .pending }))
+            if engine.joinKeys.contains(where: { $0.state == .pending }) == false {
+                Text("Create a join link first — the device-link QR wraps it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("Connect my devices")
         } footer: {
-            Text("This identity links your OWN devices: your name, AI settings, library list, and all your libraries' content sync. For sharing ONE library with someone else, use 'Share a library invite' below.")
+            Text("This identity links your OWN devices: your name, AI settings, library list, and all your libraries' content sync. For sharing ONE library with someone else, use 'Share a library invite' below. Create a join link, then show its QR on the new device.")
         }
 
         Section {
@@ -149,7 +167,7 @@ struct PearsSyncSheet: View {
                                 .frame(maxWidth: 260)
                                 .accessibilityLabel("Join QR code")
                         }
-                        Text(invite)
+                        Text(qrPayload)
                             .font(.system(size: 10, design: .monospaced))
                             .lineLimit(2)
                             .textSelection(.enabled)
@@ -227,6 +245,21 @@ struct PearsSyncSheet: View {
             }
             if let error = engine.lastError {
                 Text(error).font(.caption).foregroundStyle(.red)
+            }
+            if !engine.consoleLines.isEmpty {
+                DisclosureGroup("Worklet console (\(engine.consoleLines.count) lines)") {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(Array(engine.consoleLines.enumerated().reversed()), id: \.offset) { _, line in
+                                Text(line)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(maxHeight: 220)
+                }
             }
         } header: {
             Text("Advanced — P2P network")

@@ -214,6 +214,7 @@ struct PearsSyncSheet: View {
             LabeledContent("Engine", value: engine.isRunning ? "Running" : "Stopped")
             LabeledContent("Drive key", value: engine.currentDriveKey.map { String($0.prefix(12)) + "…" } ?? "—")
                 .textSelection(.enabled)
+            LabeledContent("This device", value: engine.deviceTag)
             LabeledContent("Connected peers", value: "\(engine.peers)")
             LabeledContent("Last sync", value: engine.lastSyncAt.map { $0.formatted(date: .omitted, time: .standard) } ?? "Never")
             if engine.isSyncing {

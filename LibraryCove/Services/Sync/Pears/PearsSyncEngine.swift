@@ -50,6 +50,15 @@ final class PearsSyncEngine: ObservableObject {
     /// The admin device's drive public key (from 'created'/'restored'
     /// events) — the only identity piece invite strings carry.
     private(set) var currentDriveKey: String?
+    /// Stable per-device tag for diagnosing cross-device effects
+    /// (persists in UserDefaults; shown in the Advanced panel).
+    private(set) var deviceTag: String = {
+        let k = "pears.deviceTag"
+        if let s = UserDefaults.standard.string(forKey: k) { return s }
+        let s = "dev-" + UUID().uuidString.prefix(8)
+        UserDefaults.standard.set(s, forKey: k)
+        return s
+    }()
 
     private var memberName = ""
 
@@ -259,6 +268,7 @@ final class PearsSyncEngine: ObservableObject {
             isSyncing = false
             lastSyncAt = Date()
         }
+        print("[PEARS-\(deviceTag)] sync cycle starting")
         let context = Persistence.shared.mainContext
         do {
             // PULL FIRST: a member's local core must hold the peer's

@@ -66,7 +66,14 @@ enum SyncStoreRegistry {
             return try ModelContainer(for: schema, configurations: [configuration])
         } catch {
             return try! ModelContainer(for: schema,
-                                       configurations: [ModelConfiguration(isStoredInMemoryOnly: false)])
+                                       configurations: [// cloudKitDatabase(.none) is load-bearing: with the iCloud entitlement
+        // present, SwiftData's .automatic default silently enables
+        // NSPersistentCloudKitContainer mirroring on this store — the
+        // channel that synced name/deletes between devices after iCloud
+        // was "removed". Pears is the only sync path; the local store
+        // must never mirror.
+        ModelConfiguration(isStoredInMemoryOnly: false,
+                           cloudKitDatabase: .none)])
         }
     }
 }
@@ -79,7 +86,14 @@ struct SwiftDataLocalOnlySync: SyncStoreProvider {
     let librarySync: LibrarySync = .localOnly
 
     func makeStoreConfiguration() throws -> ModelConfiguration {
-        ModelConfiguration(isStoredInMemoryOnly: false)
+        // cloudKitDatabase(.none) is load-bearing: with the iCloud entitlement
+        // present, SwiftData's .automatic default silently enables
+        // NSPersistentCloudKitContainer mirroring on this store — the
+        // channel that synced name/deletes between devices after iCloud
+        // was "removed". Pears is the only sync path; the local store
+        // must never mirror.
+        ModelConfiguration(isStoredInMemoryOnly: false,
+                           cloudKitDatabase: .none)
     }
 
     func activateStore() async throws {}

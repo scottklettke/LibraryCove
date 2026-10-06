@@ -72,7 +72,8 @@ enum Persistence {
         let url = base.appendingPathComponent("default-nocloud.store")
         if let container = try? ModelContainer(
             for: schema,
-            configurations: [ModelConfiguration(schema: nil, url: url, allowsSave: true)]
+            configurations: [ModelConfiguration(schema: nil, url: url, allowsSave: true,
+                                                       cloudKitDatabase: .none)]
         ) {
             _sharedLock.lock()
             _shared = container

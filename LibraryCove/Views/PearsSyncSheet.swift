@@ -24,6 +24,7 @@ struct PearsSyncSheet: View {
     @State private var qrImage: UIImage?
     @State private var showQR = false
     @State private var qrPayload: String = ""
+    @State private var identityUnlocked = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var engine = PearsSyncEngine.shared
@@ -69,6 +70,16 @@ struct PearsSyncSheet: View {
 
     @ViewBuilder private var adminSections: some View {
         Section {
+            if !identityUnlocked {
+                Button {
+                    PearsAuth.authenticate(reason: "Unlock device linking — this controls the whole library") { ok in
+                        identityUnlocked = ok
+                    }
+                } label: {
+                    Label("Unlock with Face ID / Touch ID", systemImage: "faceid")
+                }
+            }
+            if identityUnlocked {
             LabeledContent("Your identity key", value: engine.currentDriveKey ?? "—")
                 .font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled)
@@ -96,6 +107,7 @@ struct PearsSyncSheet: View {
                 Text("Create a join link first — the device-link QR wraps it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
             }
         } header: {
             Text("Connect my devices")

@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import SwiftData
 import BareKit
 import UIKit
@@ -74,14 +75,19 @@ final class PearsSyncEngine: ObservableObject {
     /// `fresh` (welcome path) wipes any prior session first — a NEW
     /// library must never silently restore an old identity.
     func createLibrary(name: String, libraryID: String, memberName: String, fresh: Bool = true) {
-        self.memberName = memberName
-        role = .writer
-        isIdentityOriginator = true
-        if fresh { Self.wipeAllLocalState() }
-        send(json: ["cmd": "create", "library": name])
+        // Delegates to start(.create): the worklet must BOOT and receive
+        // init before the create command — sending early dropped it on
+        // the floor (the "drive key —" / silent-buttons report).
+        start(libraryID: libraryID, memberName: memberName, fresh: fresh, mode: .create)
     }
 
-    func start(libraryID: String, memberName: String, fresh: Bool = false) {
+    /// Boot the worklet and either restore an existing session or wait
+    /// for an explicit create. `createLibrary` (welcome path) calls this
+    /// with .create — the OLD createLibrary sent its command before the
+    /// worklet booted and before init, so the command vanished ("pears
+    /// ready — storage: ." with drive key "—" was that bug).
+    enum BootMode { case restore, create }
+    func start(libraryID: String, memberName: String, fresh: Bool = false, mode: BootMode = .restore) {
         guard !isRunning else { return }
         if fresh { Self.wipeAllLocalState() }
         activeLibraryID = libraryID
@@ -104,13 +110,19 @@ final class PearsSyncEngine: ObservableObject {
                     .appendingPathComponent("pears").path
                 try? FileManager.default.createDirectory(atPath: docs, withIntermediateDirectories: true)
                 self.send(json: ["cmd": "init", "storageRoot": docs])
-                // v2 protocol: the worklet decides admin-vs-member itself
-                // (admin = local primary-key credential file exists) and
-                // emits 'restored' (admin) or nothing (fresh). A fresh
-                // admin gets 'create' from the UI path; a member joins
-                // via joinWithKey.
-                self.send(json: ["cmd": "restore"])
-                self.role = .writer
+                switch mode {
+                case .restore:
+                    // v2 protocol: the worklet decides admin-vs-member itself
+                    // (admin = local primary-key credential file exists) and
+                    // emits 'restored' (admin) or nothing (fresh). A member
+                    // joins via joinWithKey.
+                    self.send(json: ["cmd": "restore"])
+                    self.role = .writer
+                case .create:
+                    self.role = .writer
+                    self.isIdentityOriginator = true
+                    self.send(json: ["cmd": "create", "library": libraryID])
+                }
             }
         } catch {
             lastError = "Pears worklet failed to start: \(error.localizedDescription)"
@@ -343,7 +355,12 @@ final class PearsSyncEngine: ObservableObject {
         }
         self.memberName = memberName
         role = .reader
-        send(json: ["cmd": "joinV2", "key": parts[1], "token": parts[2], "memberName": memberName])
+        // Boot the worklet first (same drop-the-command bug as create),
+        // then deliver joinV2 once init has run.
+        start(libraryID: "joining", memberName: memberName, fresh: true, mode: .restore)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.7) { [weak self] in
+            self?.send(json: ["cmd": "joinV2", "key": parts[1], "token": parts[2], "memberName": memberName])
+        }
     }
 
     // MARK: - Payload pipeline
@@ -663,6 +680,28 @@ extension PearsSyncEngine {
         let defaults = UserDefaults.standard
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("pears.") {
             defaults.removeObject(forKey: key)
+        }
+    }
+}
+
+
+/// Biometric gate for identity/admin surfaces — the device-link invite
+/// grants admin control over the whole library, so it stays behind
+/// Face ID / Touch ID.
+enum PearsAuth {
+    static func authenticate(reason: String, completion: @escaping (Bool) -> Void) {
+        let ctx = LAContext()
+        var error: NSError?
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+                || ctx.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            completion(true)   // no passcode/biometrics on device — don't lock the user out
+            return
+        }
+        let policy: LAPolicy = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+            ? .deviceOwnerAuthenticationWithBiometrics
+            : .deviceOwnerAuthentication
+        ctx.evaluatePolicy(policy, localizedReason: reason) { ok, _ in
+            DispatchQueue.main.async { completion(ok) }
         }
     }
 }

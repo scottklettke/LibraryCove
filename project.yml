@@ -65,6 +65,9 @@ targets:
         # Barcode scanning opens the camera (ISBNScannerView). iOS requires
         # this description or the app crashes when the session starts.
         NSCameraUsageDescription: "LibraryCove uses the camera to scan book barcodes so you can add books to your library."
+        # Face ID gates the P2P device-link surface (it grants admin over
+        # the whole library), so linking devices requires biometric consent.
+        NSFaceIDUsageDescription: "LibraryCove uses Face ID to confirm device linking, which grants access to your entire library."
         # HTTPS-only first-party traffic (OpenLibrary, CloudKit, catalog
         # lookups) — qualifies for the standard encryption exemption.
         ITSAppUsesNonExemptEncryption: false

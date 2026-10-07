@@ -211,7 +211,11 @@ struct WelcomeView: View {
         // persists its credential. The welcome completes; sync begins.
         // A NEW library from welcome = a NEW identity. Never restore an
         // old session silently — that was the cross-device leak.
-        PearsSyncEngine.shared.start(libraryID: library.id, memberName: trimmedName, fresh: true)
+        // createLibrary delegates to start(.create): boot → init → create.
+        PearsSyncEngine.shared.createLibrary(name: chosenName,
+                                             libraryID: library.id,
+                                             memberName: trimmedName,
+                                             fresh: true)
         onComplete()
     }
 

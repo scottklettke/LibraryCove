@@ -45,6 +45,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>LibraryCove uses the camera to scan book barcodes so you can add books to your library.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>LibraryCove uses Face ID to confirm device linking, which grants access to your entire library.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

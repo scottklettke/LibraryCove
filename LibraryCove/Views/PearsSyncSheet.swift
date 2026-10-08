@@ -24,6 +24,8 @@ struct PearsSyncSheet: View {
     @State private var qrImage: UIImage?
     @State private var showQR = false
     @State private var qrPayload: String = ""
+    @State private var showIdentityJoin = false
+    @State private var identityJoinInput = ""
     @State private var identityUnlocked = false
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -108,6 +110,11 @@ struct PearsSyncSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Button {
+                showIdentityJoin = true
+            } label: {
+                Label("Link another identity (two-way sync)", systemImage: "person.2.wave.2")
+            }
             }
         } header: {
             Text("Connect my devices")
@@ -188,6 +195,36 @@ struct PearsSyncSheet: View {
                     .padding(24)
                     .presentationDetents([.medium])
                 }
+        .sheet(isPresented: $showIdentityJoin) {
+            // Two-way identity link: the other identity owner shares THEIR
+            // device-link invite; both sides end up in each other's
+            // drives. Uses the same join machinery — the invite exchange
+            // is symmetric.
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField("Their device-link invite (lc1.…)", text: $identityJoinInput)
+                            .font(.system(size: 12, design: .monospaced))
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        Button {
+                            engine.joinWithKey(identityJoinInput, memberName: memberName)
+                            showIdentityJoin = false
+                        } label: {
+                            Label("Link identities", systemImage: "person.2.wave.2")
+                        }
+                        .disabled(identityJoinInput.isEmpty)
+                    } header: {
+                        Text("Link an identity")
+                    } footer: {
+                        Text("Both libraries' books and settings sync both ways — nothing on either device is lost. Ask the other person to link back with YOUR invite (Device Sync & Sharing → Link another identity) to complete the two-way connection.")
+                    }
+                }
+                .navigationTitle("Link Identity")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+            .presentationDetents([.medium])
+        }
             } header: {
                 Text("Send this - works once")
             } footer: {
@@ -297,7 +334,7 @@ struct PearsSyncSheet: View {
         } header: {
             Text("Connect to a shared library")
         } footer: {
-            Text("Ask the owner to create a join link and send it. The owner needs to be online when you join. If the link was already used or revoked, you will see this library read-only or nothing at all.")
+            Text("Ask the owner to create a join link and send it. The owner needs to be online when you join. If the link was already used or revoked, you will see this library read-only or nothing at all. If you already have libraries, link from the P2P page instead - both sides keep their libraries and sync two-way.")
         }
 
         if let error = engine.lastError {

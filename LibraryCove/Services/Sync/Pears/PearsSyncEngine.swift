@@ -78,7 +78,8 @@ final class PearsSyncEngine: ObservableObject {
         // Delegates to start(.create): the worklet must BOOT and receive
         // init before the create command — sending early dropped it on
         // the floor (the "drive key —" / silent-buttons report).
-        start(libraryID: libraryID, memberName: memberName, fresh: fresh, mode: .create)
+        start(libraryID: libraryID, memberName: memberName, fresh: fresh, mode: .create,
+              libraryName: name)
     }
 
     /// Boot the worklet and either restore an existing session or wait
@@ -87,7 +88,7 @@ final class PearsSyncEngine: ObservableObject {
     /// worklet booted and before init, so the command vanished ("pears
     /// ready — storage: ." with drive key "—" was that bug).
     enum BootMode { case restore, create }
-    func start(libraryID: String, memberName: String, fresh: Bool = false, mode: BootMode = .restore) {
+    func start(libraryID: String, memberName: String, fresh: Bool = false, mode: BootMode = .restore, libraryName: String? = nil) {
         guard !isRunning else { return }
         if fresh { Self.wipeAllLocalState() }
         activeLibraryID = libraryID
@@ -121,7 +122,7 @@ final class PearsSyncEngine: ObservableObject {
                 case .create:
                     self.role = .writer
                     self.isIdentityOriginator = true
-                    self.send(json: ["cmd": "create", "library": libraryID])
+                    self.send(json: ["cmd": "create", "library": libraryName ?? libraryID])
                 }
             }
         } catch {

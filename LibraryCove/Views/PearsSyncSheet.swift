@@ -82,12 +82,18 @@ struct PearsSyncSheet: View {
                 }
             }
             if identityUnlocked {
-            LabeledContent("Your identity key", value: engine.currentDriveKey ?? "—")
+            LabeledContent("Identity key (not the invite)", value: engine.currentDriveKey ?? "—")
                 .font(.system(size: 11, design: .monospaced))
                 .textSelection(.enabled)
             Button {
-                if let key = engine.currentDriveKey {
-                    UIPasteboard.general.string = "lc1.\(key)." + (engine.joinKeys.first(where: { $0.state == .pending })?.code ?? "")
+                // Auto-issue a pending token if none exists, so this
+                // button ALWAYS produces a usable device-link invite.
+                if !engine.joinKeys.contains(where: { $0.state == .pending }) {
+                    _ = engine.generateJoinKey(role: .admin)
+                }
+                if let key = engine.currentDriveKey,
+                   let pending = engine.joinKeys.first(where: { $0.state == .pending }) {
+                    UIPasteboard.general.string = "lc1.\(key).\(pending.code)"
                 }
             } label: {
                 Label("Copy device-link invite", systemImage: "link")
@@ -217,7 +223,10 @@ struct PearsSyncSheet: View {
                     } header: {
                         Text("Link an identity")
                     } footer: {
-                        Text("Both libraries' books and settings sync both ways — nothing on either device is lost. Ask the other person to link back with YOUR invite (Device Sync & Sharing → Link another identity) to complete the two-way connection.")
+                        Text("Both libraries' books and settings sync both ways — nothing on either device is lost. Ask the other person to link back with YOUR invite (Device Sync & Sharing → Link another identity) to complete the two-way connection. The invite is the FULL string from their 'Create join link' — not the bare identity key.")
+                    }
+                    if let error = engine.lastError {
+                        Text(error).font(.caption).foregroundStyle(.red)
                     }
                 }
                 .navigationTitle("Link Identity")
